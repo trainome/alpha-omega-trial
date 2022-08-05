@@ -1,0 +1,115 @@
+---
+title: "Preliminary Analyses Alpha Omega"
+author: "Daniel Hammarström, Håvard Hamarsland"
+format: html
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r lib-functions}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+library(tidyverse); library(AOData); library(nlme); library(emmeans); library(ggtext)
+
+
+data("glucose"); data("idkeys")
+
+
+glucose_dat <- glucose %>%
+  inner_join(idkeys) %>%
+  filter(!is.na(HOMA2B), 
+         min == 0) %>%
+ # filter(time != "T1") %>%
+  
+# filter(round != 3) %>%
+  
+  
+  dplyr::select(participant, time,sex, treat,round,bmi, HOMA2S) %>%
+  pivot_wider(names_from = time, values_from = HOMA2S) %>%
+  print()
+  
+
+ m <- lm(T4 - T1 ~ T1 + sex + bmi, data = glucose_dat) 
+
+
+ summary(m)
+
+
+
+sig_lab <- paste0("p = ", round(coef(summary(m))[4, 4], 3))
+
+
+
+group_comp <- emmeans(m, specs = ~ treat|round) %>%
+  data.frame() %>%
+  ggplot(aes(treat, emmean, fill = treat)) + 
+ 
+  geom_point(data =  mutate(glucose_dat, homa_change = T4 - T2), 
+             aes(treat, homa_change), 
+             shape = 21, 
+             alpha = 0.4,
+             size = 1.5,
+             position = position_jitter(width = 0.1)) +
+  
+  
+   geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), 
+                width = 0.1) +
+  geom_point(shape = 21, size = 3) +
+  theme_minimal() +
+  
+  facet_wrap(~ round) +
+  
+  labs(y = "HOMA2 %S<sub>wk20</sub> - HOMA2 %S<sub>wk7</sub> (95% CI)") +
+
+  annotate("segment", x = c(1, 1, 2), 
+           xend = c(2, 1, 2),
+           y = c(39, 39, 39), 
+           yend = c(39, 32, 37)) +
+  
+  annotate("text", x = 1.5, y = 42.5, label = sig_lab, size = 2.7) +
+  
+  scale_y_continuous(limits = c(-30, 45), expand = c(0,0), 
+                     breaks = c(-20,  -10,  0,  10,  20,  30,  40, 45), 
+                     labels = c(-20,  -10,  0, 10,  20,  30,  40, "")) +
+
+
+  
+  theme_bw() +
+  
+  theme(axis.title.y = element_markdown(size = 8, color = "black"), 
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.text.x = element_text(size = 8, color = "black", angle = 45, hjust = 1),
+        
+        axis.line = element_line(color = "black"),
+        axis.title.x = element_blank(),
+        panel.border = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.title = element_blank(),
+        legend.position = "none")
+  
+  
+
+glucose_dat <- glucose %>%
+  inner_join(idkeys) %>%
+  filter(!is.na(HOMA2S), 
+         min == 0) %>%
+  dplyr::select(participant, time,sex, treat,round,bmi, HOMA2S) %>%
+
+  print()
+
+
+
+library(nlme)
+
+m <- lme(HOMA2S ~ time * treat + bmi + time:bmi, 
+         random = list(participant = ~ 1), 
+         data = glucose_dat)
+
+summary(m)
+
+```
+
