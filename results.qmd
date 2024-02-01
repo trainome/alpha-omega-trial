@@ -1,0 +1,371 @@
+---
+title: "Alpha Omega preliminary results"
+format: html
+execute: 
+  echo: false
+  message: false
+  warning: false
+code-fold: true
+editor_options: 
+  chunk_output_type: console
+---
+
+## Supplementation period
+
+
+```{r}
+
+library(AOData); library(tidyverse)
+
+
+
+```
+
+
+### Omega-3 supplementation
+
+```{r}
+#| fig-width: 4
+#| fig-height: 20
+
+
+
+idkeys <- AOData::idkeys %>%
+  select(participant, treat, sex, completed) %>%
+  filter(completed != "t1") %>%
+  select(-completed) 
+
+AOData::omega3  %>%
+  inner_join(idkeys) %>%
+  filter(time %in% c("T1", "T2")) %>%
+  select(participant, time, treat, C16:C226n3) %>%
+  pivot_longer(cols =  C16:C226n3, 
+               names_to = "fa", 
+               values_to = "value") %>%
+  
+  
+  ggplot(aes(time, value, color = treat, group = paste(participant, fa))) + 
+  geom_line() + facet_wrap(fa ~ treat, ncol = 2, scales = "free") + 
+  
+  labs(title = "Individual changes in EPA (C205n3) and DHA (226n3) by treatment group", 
+       y = "ug ml-1", 
+       x = "Time")
+  
+
+
+```
+
+
+
+```{r}
+
+library(gt)
+
+
+## ANCOVA 
+
+
+dat <- AOData::omega3  %>%
+  inner_join(idkeys) %>%
+  filter(time %in% c("T1", "T2")) %>%
+  select(participant, time, treat, C16:C226n3) %>%
+  pivot_longer(cols =  C16:C226n3, 
+               names_to = "fa", 
+               values_to = "value") %>%
+  pivot_wider(names_from = time, values_from = value) 
+  
+
+fas <- distinct(dat, fa) %>%
+  pull(fa)
+
+results <- data.frame(fa = rep(NA, length(fas)),
+                        estimate = rep(NA, length(fas)), 
+           se= rep(NA, length(fas)), 
+           t= rep(NA, length(fas)), 
+           p= rep(NA, length(fas)), 
+           lwr= rep(NA, length(fas)), 
+           upr= rep(NA, length(fas)))
+
+
+for(i in 1:length(fas)) {
+  
+  mod <- lm(T2 ~ T1 + treat, data = dat[dat$fa == fas[i],])
+  
+  results[i, 2] <- coef(summary(mod))[3,1]
+  results[i, 3] <- coef(summary(mod))[3,2]
+  results[i, 4] <- coef(summary(mod))[3,3]
+  results[i, 5] <- coef(summary(mod))[3,4]
+  results[i, 6] <- confint(mod)[3,1]
+  results[i, 7] <- confint(mod)[3,2]
+
+  results[i, 1] <- fas[i]
+  
+}
+
+
+AOData::omega3  %>%
+  inner_join(idkeys) %>%
+  filter(time %in% c("T1", "T2")) %>%
+  select(participant, time, treat, C16:C226n3) %>%
+  pivot_longer(cols =  C16:C226n3, 
+               names_to = "fa", 
+               values_to = "value") %>%
+  
+  group_by(time, treat, fa) %>%
+  
+  summarise(m = mean(value), 
+            s = sd(value), 
+            min = min(value), 
+            max = max(value)) %>%
+  arrange(fa, treat) %>%
+  
+  mutate(descriptives = paste0(round(m, 1), " (", round(s, 1), ")")) %>%
+  
+  select(time:fa, descriptives) %>%
+  pivot_wider(values_from = descriptives, names_from = time) %>%
+  
+  pivot_wider(values_from = c(T1, T2), names_from = treat) %>%
+  
+  inner_join(results) %>%
+  
+  gt() %>%
+  fmt_number(columns = estimate:upr, 
+             decimals = 3) 
+  
+           
+  
+
+
+
+
+```
+
+
+### Glucose metabolism
+
+
+```{r}
+#| label: tbl-glucose
+#| tbl-cap: "ANCOVA results Omega-3 vs. CTRL (T2 ~ T1 + treat)"
+
+
+
+dat <- AOData::glucose %>%
+  filter(!(is.na(cpeptide)), 
+         time %in% c("T1", "T2")) %>%
+  inner_join(idkeys) %>%
+  
+  select(participant, treat, time, min, glucose:HOMA2IR) %>%
+  pivot_longer(cols = glucose:HOMA2IR) %>%
+  pivot_wider(values_from = value, 
+              names_from = time) %>%
+  mutate(min = if_else(min == 0, "baseline", "min60")) 
+
+
+
+analyte <- distinct(dat, name) %>% pull(name)
+results_list <- list()
+
+for(i in 1:length(analyte)) {
+  
+  
+  time_res <- list()
+  min <- c("baseline", "min60")
+  results <- data.frame(analyste = rep(NA, 2),
+                        min = rep(NA, 2),
+                        estimate = rep(NA, 2), 
+           se= rep(NA, 2),
+           t= rep(NA, 2),
+           p= rep(NA, 2), 
+           lwr= rep(NA, 2),
+           upr=rep(NA, 2))
+  
+  for(j in 1:2) {
+    
+    mod <- lm(T2 ~ T1 + treat, data = dat[dat$name == analyte[i] & dat$min == min[j],])
+    
+  results[j, 1] <- analyte[i]
+  results[j, 2] <- min[j]
+  results[j, 3] <- coef(summary(mod))[3,1]
+  results[j, 4] <- coef(summary(mod))[3,2]
+  results[j, 5] <- coef(summary(mod))[3,3]
+  results[j, 6] <- coef(summary(mod))[3,4]
+  results[j, 7] <- confint(mod)[3,1]
+  results[j, 8] <- confint(mod)[3,2]
+
+    
+  }
+  
+  
+ results_list[[i]] <- results
+  
+  
+}
+
+
+bind_rows(results_list) %>%
+  gt() %>%
+  fmt_number(decimals = 3)
+  
+  
+  
+  
+```
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 5
+#| fig-align: "center"
+
+
+dat %>%
+  
+  pivot_longer(cols = T1:T2, 
+               names_to = "time", 
+               values_to = "value") %>%
+
+  mutate(measurement = min) %>%
+  group_by(time, measurement, name, treat) %>%
+  
+  filter(!is.na(value)) %>%
+  
+  summarise(m = mean(value), 
+            s = sd(value), 
+            min = min(value), 
+            max = max(value), 
+            n = n()) %>%
+  arrange(name, treat) %>%
+  
+  mutate(descriptives = paste0(round(m, 1), " (", round(s, 1), "), n=", n)) %>%
+  
+  
+  ggplot(aes(treat, m, fill = time, shape = time)) +
+  
+  
+  geom_errorbar(aes(ymin = m - s, ymax = m + s),
+                width = 0,
+                 position = position_dodge(width = 0.2)) + 
+  
+  geom_point(position = position_dodge(width = 0.2)) + 
+  
+  scale_shape_manual(values = c(21, 22)) +
+  
+  facet_wrap(name ~ measurement, scales = "free", 
+             ncol = 2)
+  
+
+
+```
+
+
+
+```{r}
+#| label: tbl-maximal-glucose
+#| tbl-cap: "Maximal glucose during glucose tolerance test"
+
+### Peak glucose and glucose curves
+
+
+
+dat <- AOData::glucose %>%
+  filter(time %in% c("T1", "T2"), 
+         !is.na(glucose)) %>%
+  select(participant:glucose) %>%
+  
+  summarise(.by = c(participant, time), 
+            max.glucose = max(glucose) )  %>%
+  inner_join(idkeys) 
+  
+  
+dat %>%
+  group_by(time, treat) %>%
+  mutate(above10 = if_else(max.glucose >= 10, 1, 0), 
+         above11 = if_else(max.glucose >= 11, 1, 0)) %>%
+  summarise(Mean = mean(max.glucose), 
+            SD = sd(max.glucose),
+            Min = min(max.glucose), 
+            Max = max(max.glucose),
+            n_above10 = sum(above10), 
+            n_above11 = sum(above11),
+            n = n()) %>%
+  
+  gt() %>%
+  fmt_number(columns = c(Mean, SD, Min, Max), 
+             decimals = 2)
+
+
+
+
+
+```
+
+
+```{r}
+#| fig-cap: "Peak glucose from glucose tolerance test"
+
+
+dat %>%
+  ggplot(aes(time, max.glucose, fill = treat)) + geom_boxplot() + 
+  geom_point(shape = 21, position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.75 ))
+
+```
+
+
+
+
+```{r}
+#| label: tbl-resting-glucose
+#| tbl-cap: "Resting and 2-h glucose from glucose tolerance test"
+
+### Peak glucose and glucose curves
+
+
+
+dat <- AOData::glucose %>%
+  filter(time %in% c("T1", "T2"), 
+         !is.na(glucose)) %>%
+  select(participant:glucose) %>%
+  filter(min %in% c(0, 120)) %>%
+  summarise(.by = c(participant, time, min), 
+            glucose = glucose)  %>%
+  inner_join(idkeys) 
+  
+  
+dat %>%
+  group_by(time, treat, min) %>%
+  mutate(above7 = if_else(glucose >= 7, 1, 0), 
+         above11 = if_else(glucose >= 11, 1, 0)) %>%
+  summarise(Mean = mean(glucose), 
+            SD = sd(glucose),
+            Min = min(glucose), 
+            Max = max(glucose),
+            n_above7 = sum(above7), 
+            n_above11 = sum(above11),
+            n = n()) %>%
+  
+  gt() %>%
+  fmt_number(columns = c(Mean, SD, Min, Max), 
+             decimals = 2)
+
+
+
+
+```
+
+
+```{r}
+#| fig-cap: "Resting glucose from glucose tolerance test"
+
+
+dat %>%
+  ggplot(aes(time, glucose, fill = treat)) + geom_boxplot() + 
+  geom_point(shape = 21, position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.75 )) + 
+  facet_wrap(~ min)
+
+```
+
+
+
+
+
