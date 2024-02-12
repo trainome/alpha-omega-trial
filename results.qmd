@@ -369,3 +369,146 @@ dat %>%
 
 
 
+
+
+
+
+### ECSS abstract: Relative fat mass is not associated with muscle adaptations to resistance training
+
+
+
+
+
+```{r}
+#| tbl-cap: "Descriptive statistics Vastus lateralis thickness (VL) at time 2 and 4 (T) and relative fat mass at T2"
+
+library(AOData); library(tidyverse); library(lme4); library(gt)
+
+
+part <- AOData::idkeys %>%
+  filter(completed == "t4") 
+
+
+dat_fm <- AOData::bodycomp %>%
+  
+  inner_join(mutate(part, participant = as.character(participant))) %>%
+  
+  mutate(rel.fm = 100 * (fat.legs / (fat.legs + lean.legs + BMC.legs))) %>%
+  select(participant, time, sex, bmi, rel.fm) %>%
+  inner_join(mutate(AOData::thickness, participant = as.character(participant))) %>%
+  
+  select(-VIthick) %>%
+
+  pivot_wider(names_from = time, values_from = c(VLthick, rel.fm), 
+              values_fn = mean) 
+  
+  
+
+dat_fm %>%
+  group_by(participant, sex) %>%
+  summarise(rel.fmT2 = mean(rel.fm_T2, na.rm = TRUE), 
+            VLT2 = mean(VLthick_T2, na.rm = TRUE), 
+             VLT4 = mean(VLthick_T4, na.rm = TRUE)) %>%
+  
+  pivot_longer(names_to = "var", values_to = "val", cols = rel.fmT2:VLT4) %>%
+  group_by(sex, var) %>%
+  summarise(m = mean(val, na.rm = TRUE), 
+            s = sd(val, na.rm = TRUE), 
+            n = n()) %>%
+  
+  
+  
+  gt() %>%
+  fmt_auto()
+```
+
+
+```{r}
+#| tbl-cap: "Model results T4 vastus lateralis thickness explained by baseline thickness (VLthick_T2), sex and relative fat mass (%) at time 2 (rel.fm_T2). For every % change in relative fat mass, vastus lateralis changes ~ 0.03 mm."
+
+
+m1 <- lmerTest::lmer(VLthick_T4 ~ VLthick_T2 + rel.fm_T2 + sex + (1|participant), 
+           data = dat_fm) 
+
+
+coef(summary(m1)) %>%
+   data.frame() %>%
+  rownames_to_column() %>%
+  
+  gt() %>%
+  fmt_auto()
+```
+
+
+```{r}
+#| tbl-cap: "Model results T4 lean mass explained by baseline lean mass (lean_T2), sex and relative fat mass (%) at time 2 (rel.fm_T2). For every % change in relative fat mass, lean mass changes ~ 3 g."
+
+
+##### Lean body mass #################
+
+dat_lean <- AOData::bodycomp %>%
+  
+  inner_join(mutate(part, participant = as.character(participant))) %>%
+  
+  mutate(rel.fm = 100 * (fat.whole / (fat.whole + lean.whole + BMC.whole))) %>%
+  
+  select(participant, time, sex, bmi, lean = lean.legs, rel.fm)  %>%
+
+  
+  pivot_wider(names_from = time, values_from = c(lean, rel.fm), 
+              values_fn = mean) 
+  
+
+
+m2 <- lm(lean_T4 ~ lean_T2 + rel.fm_T2 + sex, 
+           data = dat_lean)  
+
+
+
+
+coef(summary(m2)) %>%
+   data.frame() %>%
+  rownames_to_column() %>%
+  
+  gt() %>%
+  fmt_auto()
+
+```
+
+
+```{r}
+#| tbl-cap: "Model results T4 legpress 1RM explained by baseline leg press (T2), sex and relative fat mass (%) at time 2 (rel.fm). For every % change in relative fat mass, lean mass changes ~ 0.2 kg."
+
+
+str_dat<- AOData::strength %>%
+  
+  mutate(participant = as.character(participant)) %>%
+  filter(exercise == "legpress") %>%
+  
+  select(participant:mag) %>%
+  inner_join(mutate(part, participant = as.character(participant))) %>%
+  
+  inner_join(dat_lean %>% select(participant, rel.fm = rel.fm_T2) ) %>%
+  
+  pivot_wider(values_from = mag, names_from = time, values_fn = mean) %>%
+  filter(T4 > 0) 
+
+
+
+m3 <- lmerTest::lmer(T4 ~ T2 + rel.fm + sex + (1|participant), 
+           data = str_dat)  
+
+
+coef(summary(m3)) %>%
+   data.frame() %>%
+  rownames_to_column() %>%
+  
+  gt() %>%
+  fmt_auto()
+
+```
+
+
+
+
+
