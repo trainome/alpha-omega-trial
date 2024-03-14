@@ -1,6 +1,8 @@
 ---
 title: "Alpha Omega preliminary results"
-format: html
+format:
+  html:
+    embed-resources: true
 execute: 
   echo: false
   message: false
@@ -208,9 +210,11 @@ bind_rows(results_list) %>%
   fmt_number(decimals = 3)
   
   
-  
+
   
 ```
+
+
 
 
 ```{r}
@@ -371,11 +375,125 @@ dat %>%
 
 
 
+### Blood variables
+
+See @fig-analytefacet for descriptive effects across time-points.
+
+```{r}
+#| fig-cap: "Tendencies over time per blood analyte separated by treatment and sex."
+#| label: fig-analytefacet
 
 
-### ECSS abstract: Relative fat mass is not associated with muscle adaptations to resistance training
+library(gt)
+
+AOData::bloodvar %>%
+  inner_join(AOData::idkeys) %>%
+  
+  summarise(.by = c(time, analyte, treat, sex), 
+            m = mean(value, na.rm = TRUE), 
+            s = sd(value, na.rm = TRUE), 
+            min = min(value, na.rm = TRUE), 
+            max = max(value, na.rm = TRUE)) %>%
+  
+  ggplot(aes(time, m, group = paste(sex, treat), lty = sex, color = treat)) + geom_line() +
+  facet_wrap(~ analyte, scales = "free_y")
+  
+
+  
 
 
+```
+
+
+Modelling effects of treatment over the supplementation period.
+
+```{r}
+#| label: tbl-bloodvarmodels
+#| tbl-cap: "Effects of TREATMENT on blood variables at T2. Controlling for sex and T1 values."
+
+
+dat <- AOData::bloodvar %>%
+  filter(time %in% c("T1", "T2")) %>%
+  inner_join(idkeys) %>%
+  pivot_wider(names_from = time, values_from = value)
+  
+
+analyte <- distinct(dat, analyte) %>% pull(analyte)
+results_list <- list()
+
+
+for(i in 1:length(analyte)) {
+  
+  
+  results <- data.frame(analyste = rep(NA, 1),
+                        estimate = rep(NA, 1), 
+           se= rep(NA, 1),
+           t= rep(NA, 1),
+           p= rep(NA, 1), 
+           lwr= rep(NA, 1),
+           upr=rep(NA, 1))
+  
+    mod <- lm(T2 ~ T1 + sex + treat, data = dat[dat$analyte == analyte[i],])
+    
+  results[1, 1] <- analyte[i]
+  results[1, 2] <- coef(summary(mod))[4,1]
+  results[1, 3] <- coef(summary(mod))[4,2]
+  results[1, 4] <- coef(summary(mod))[4,3]
+  results[1, 5] <- coef(summary(mod))[4,4]
+  results[1, 6] <- confint(mod)[4,1]
+  results[1, 7] <- confint(mod)[4,2]
+
+
+ results_list[[i]] <- results
+  
+  
+}
+
+plot(mod)
+
+bind_rows(results_list) %>%
+  gt() %>%
+  fmt_number(decimals = 3)
+
+```
+
+
+Very preliminary modelling of interaction between T1 and treatment. Is this a valid model?
+
+
+```{r}
+
+
+AOData::bloodvar %>%
+  filter(analyte == "CRP") %>%
+  inner_join(AOData::idkeys) %>%
+
+  ggplot(aes(time, value, color = treat, shape = sex)) + geom_point()
+  
+d <- dat[dat$analyte == "HbA1c",] %>%
+  pivot_longer(names_to = "time", values_to = "value", cols = T1:T2) %>%
+  mutate(mcval = (value - mean(value, na.rm = TRUE)) / sd(value, na.rm = TRUE)) %>%
+  select(-value) %>%
+  pivot_wider(names_from = time, values_from = mcval)
+
+m1 <- lm(T2 ~ T1 + treat + sex, data = d)
+
+m2 <- lm(T2 ~ T1 + treat:T1 + sex, data = d)
+
+summary(m2)
+summary(m1)
+
+
+```
+
+
+
+
+
+
+### ECSS abstract: Relative fat mass is not negatively associated with muscle adaptations to resistance training
+
+RM-condition was not associated with changes in lean mass/thickness (when controlling for relative fat mass). Relative fat mass was not associated with lean mass/thickness. The 30RM condition is associated with lower increase in maximal strength. A relationship that is partly reversed with increased fat mass (not significant).  
 
 
 
@@ -394,6 +512,7 @@ dat_fm <- AOData::bodycomp %>%
   inner_join(mutate(part, participant = as.character(participant))) %>%
   
   mutate(rel.fm = 100 * (fat.legs / (fat.legs + lean.legs + BMC.legs))) %>%
+
   select(participant, time, sex, bmi, rel.fm) %>%
   inner_join(mutate(AOData::thickness, participant = as.character(participant))) %>%
   
@@ -441,6 +560,49 @@ coef(summary(m1)) %>%
 
 
 ```{r}
+#| tbl-cap: "Model results T4 vastus lateralis thickness explained by baseline thickness (VLthick_T2), sex, condition and relative fat mass (%) at time 2 (rel.fm_T2). For every % change in relative fat mass, vastus lateralis changes ~ 0.03 mm."
+
+
+
+m1b <- lmerTest::lmer(VLthick_T4 ~ VLthick_T2 + rel.fm_T2 + condition + sex + (1|participant), 
+           data = dat_fm) 
+
+
+coef(summary(m1b)) %>%
+   data.frame() %>%
+  rownames_to_column() %>%
+  
+  gt() %>%
+  fmt_auto()
+
+
+
+```
+
+
+```{r}
+#| tbl-cap: "Model results T4 vastus lateralis thickness explained by baseline thickness (VLthick_T2), sex, condition and relative fat mass (%) at time 2 (rel.fm_T2), and their interaction. For every % change in relative fat mass, vastus lateralis changes ~ 0.03 mm."
+
+
+
+m1c <- lmerTest::lmer(VLthick_T4 ~ VLthick_T2 + rel.fm_T2 * condition + sex + (1|participant), 
+           data = dat_fm) 
+
+
+coef(summary(m1c)) %>%
+   data.frame() %>%
+  rownames_to_column() %>%
+  
+  gt() %>%
+  fmt_auto()
+
+
+
+```
+
+
+
+```{r}
 #| tbl-cap: "Model results T4 lean mass explained by baseline lean mass (lean_T2), sex and relative fat mass (%) at time 2 (rel.fm_T2). For every % change in relative fat mass, lean mass changes ~ 3 g."
 
 
@@ -452,7 +614,7 @@ dat_lean <- AOData::bodycomp %>%
   
   mutate(rel.fm = 100 * (fat.whole / (fat.whole + lean.whole + BMC.whole))) %>%
   
-  select(participant, time, sex, bmi, lean = lean.legs, rel.fm)  %>%
+  select(participant, time,  sex, bmi, lean = lean.legs, rel.fm)  %>%
 
   
   pivot_wider(names_from = time, values_from = c(lean, rel.fm), 
@@ -491,7 +653,9 @@ str_dat<- AOData::strength %>%
   inner_join(dat_lean %>% select(participant, rel.fm = rel.fm_T2) ) %>%
   
   pivot_wider(values_from = mag, names_from = time, values_fn = mean) %>%
-  filter(T4 > 0) 
+  filter(T4 > 0, 
+         T2 > 0) %>%
+  filter(condition %in% c("RM10", "RM30")) 
 
 
 
@@ -511,4 +675,556 @@ coef(summary(m3)) %>%
 
 
 
+```{r}
+#| tbl-cap: "Model results T4 legpress 1RM explained by baseline leg press (T2), sex and relative fat mass (%) at time 2 (rel.fm) and condition."
+
+
+str_dat<- AOData::strength %>%
+  
+  mutate(participant = as.character(participant)) %>%
+  filter(exercise == "legpress") %>%
+  
+  select(participant:mag) %>%
+  inner_join(mutate(part, participant = as.character(participant))) %>%
+  
+  inner_join(dat_lean %>% select(participant, rel.fm = rel.fm_T2) ) %>%
+  
+  pivot_wider(values_from = mag, names_from = time, values_fn = mean) %>%
+  filter(T4 > 0, 
+         T2 > 0) %>%
+  filter(condition %in% c("RM10", "RM30")) 
+
+
+
+
+m3b <- lmerTest::lmer(T4 ~ T2 + rel.fm + condition + sex + (1|participant), 
+           data = str_dat)  
+
+
+coef(summary(m3b)) %>%
+   data.frame() %>%
+  rownames_to_column() %>%
+  
+  gt() %>%
+  fmt_auto()
+
+```
+
+
+
+```{r}
+#| tbl-cap: "Model results T4 legpress 1RM explained by baseline leg press (T2), sex and relative fat mass (%) at time 2 (rel.fm) and condition, and their interaction."
+
+
+str_dat<- AOData::strength %>%
+  
+  mutate(participant = as.character(participant)) %>%
+  filter(exercise == "legpress") %>%
+  select(participant:mag) %>%
+  inner_join(mutate(part, participant = as.character(participant))) %>%
+  
+  inner_join(dat_lean %>% select(participant, rel.fm = rel.fm_T2) ) %>%
+  
+  pivot_wider(values_from = mag, names_from = time, values_fn = mean) %>%
+  filter(T4 > 0, 
+         T2 > 0) %>%
+  filter(condition %in% c("RM10", "RM30")) 
+
+
+m3c <- lmerTest::lmer(T4 ~ T2 + rel.fm * condition + sex + (1|participant), 
+           data = str_dat)  
+
+
+
+coef(summary(m3c)) %>%
+   data.frame() %>%
+  rownames_to_column() %>%
+  
+  gt() %>%
+  fmt_auto()
+
+```
+
+
+
+
+
+```{r}
+#| tbl-cap: "Mean and SD (m, s) relative (%) and absolute (kg) change per condition in legpress strength from T2 to T4."
+
+str_dat %>%
+  mutate(rel_change = 100 * ((T4-T2)/T2), 
+         abs_change = T4 - T2) %>%
+  filter(T4 > 0, 
+         T2 > 0) %>%
+  select(participant, condition, sex, rel_change, abs_change) %>%
+  
+  pivot_longer(names_to = "change", 
+               values_to = "mag", cols = rel_change:abs_change) %>%
+
+  summarise(.by = c(condition, change),  
+            m = mean(mag, na.rm = TRUE), 
+            s = sd(mag, na.rm = TRUE)) %>%
+  arrange(change) %>%
+  gt()
+```
+
+
+```{r}
+#| tbl-cap: "Mean and SD (m, s) relative (%) and absolute (g) change lean mass (total) from T2 to T4"
+
+dat_lean %>%
+    mutate(rel_change = 100 * ((lean_T4-lean_T2)/lean_T2), 
+           abs_change = lean_T4 - lean_T2) %>%
+  
+    pivot_longer(names_to = "change", 
+               values_to = "mag", cols = rel_change:abs_change) %>%
+
+  summarise(.by = c(change),  
+            m = mean(mag, na.rm = TRUE), 
+            s = sd(mag, na.rm = TRUE)) %>%
+  arrange(change) %>%
+  gt() %>%
+  fmt_auto()
+```
+
+
+```{r}
+#| tbl-cap: "Mean and SD (m, s) relative (%) and absolute (mm) change in vastus lateralis thickness per condition from T2 to T4."
+
+
+dat_fm %>%
+   mutate(rel_change = 100 * ((VLthick_T4-VLthick_T2)/VLthick_T2), 
+         abs_change = VLthick_T4 - VLthick_T2) %>%
+  filter(VLthick_T4 > 0, 
+         VLthick_T2 > 0) %>%
+  select(participant, condition, sex, rel_change, abs_change) %>%
+  
+  pivot_longer(names_to = "change", 
+               values_to = "mag", cols = rel_change:abs_change) %>%
+
+  summarise(.by = c(condition, change),  
+            m = mean(mag, na.rm = TRUE), 
+            s = sd(mag, na.rm = TRUE)) %>%
+  arrange(change) %>%
+  gt() %>%
+  fmt_auto()
+
+```
+
+## Precision nutrition and metabolism (Abstract)
+
+```{r participants}
+
+id <- AOData::idkeys %>%
+  select(participant, treat, age, sex, round) 
+
+
+## Included participants in analysis ->  95 completed to t4 
+
+participants <- AOData::idkeys %>%
+  filter(completed %in% c("t4")) %>%
+  distinct(participant) %>%
+  pull(participant)
+
+
+
+## Relative fat mass 
+
+fat_dat <-  AOData::bodycomp %>%
+  mutate(rel.fat = fat.whole / (fat.whole + lean.whole + BMC.whole)) %>%
+  
+  filter(participant %in% participants, 
+         time == "T1") %>%
+  
+  select(participant, rel.fat)
+
+### Participant characteristics
+
+npart <- AOData::idkeys %>%
+  filter(participant %in% participants) %>%
+  inner_join(fat_dat %>%
+               mutate(participant = as.numeric(participant))) %>%
+  mutate(rel.fat = 100 * rel.fat) %>%
+  
+  summarise(.by = sex, 
+            n = n()) 
+
+
+average_part <- AOData::idkeys %>%
+  filter(participant %in% participants) %>%
+  inner_join(fat_dat %>%
+               mutate(participant = as.numeric(participant))) %>%
+  mutate(rel.fat = 100 * rel.fat) %>%
+  
+  summarise(age.m = mean(age), 
+            age.s = sd(age), 
+            fat.min = min(rel.fat), 
+            fat.max = max(rel.fat)) 
+  
+
+
+
+### Omega 3 acids (n3) ###############################
+
+n3sum <- AOData::omega3 %>%
+  
+  ## Filter to the same set of participants 
+  filter(participant %in% participants) %>%
+  
+  select(participant, time, contains("n3"), -contains("_rel")) %>%
+  
+  mutate(n3sum = C183n3 + C205n3  + C225n3 +  C226n3) %>%
+  select(participant, time, n3sum) %>%
+  inner_join(id) %>%
+  
+  mutate(TREAT = if_else(treat == "omega", 1, 0), 
+         TREAT = if_else(time == "T1", 0, TREAT)) 
+
+## This model is a Multilevel ANCOVA model, equivalent to simple ANCOVA but extendenden to include both 
+# time-points. The model is rank deficient, but that is OK (no group effect is estimated at baseline due to the TREAT coding, see above)
+n3sum.m1 <- lmer(log(n3sum) ~ time + time:TREAT + (1|participant), data = n3sum)
+
+# plot(n3sum.m1)
+# summary(n3sum.m1)
+
+n3sum_results <- cbind(coef(summary(n3sum.m1)), confint(n3sum.m1)[3:7,])
+
+
+treat_vs_ctrl_omega_w7 <- paste0(round(100 * (exp(n3sum_results[4,1])-1), 0), 
+                                "% (95% CI:[", 
+                                round(100 * (exp(n3sum_results[4,4])-1), 0), 
+                                ", ",
+                                round(100 * (exp(n3sum_results[4,5])-1), 0),
+                                "])")
+
+treat_vs_ctrl_omega_w20 <- paste0(round(100 * (exp(n3sum_results[5,1])-1), 0), 
+                                "% [", 
+                                round(100 * (exp(n3sum_results[5,4])-1), 0), 
+                                ", ",
+                                round(100 * (exp(n3sum_results[5,5])-1), 0),
+                                "]")
+
+
+
+
+
+
+```
+
+
+
+```{r bodycomp}
+
+## Effects of supplementation on lean whole ##
+
+
+dxa <- AOData::bodycomp %>%
+  mutate(rel.fat = fat.whole / (fat.whole + lean.whole + BMC.whole)) %>%
+  
+  select(participant, time, lean.whole) %>%
+  
+    ## Filter to the same set of participants 
+  filter(participant %in% participants) %>%
+  
+  filter(time != "T3") %>%
+  filter(participant != "673") %>%
+
+#  mutate(participant = as.numeric(participant)) %>%
+
+  inner_join(AOData::idkeys %>%
+  select(participant, treat) %>%
+    mutate(participant = as.character(participant))) %>%
+  
+  ## TREAT variable to allow to multilevel ANCOVA
+  mutate(TREAT = if_else(treat == "omega", 1, 0), 
+         TREAT = if_else(time == "T1", 0, TREAT)) 
+
+
+## DXA main model 
+lean.m1 <- lmer(log(lean.whole) ~ time + time:TREAT + (1|participant), data = dxa)
+
+lean_results <- cbind(coef(summary(lean.m1)), confint(lean.m1)[3:7,])
+
+average_lean <- confint(pairs(emmeans::emmeans(lean.m1, specs = ~ time), reverse = TRUE), adjust = "none")
+
+
+lean_w7 <- paste0(sprintf("%.1f", round(100 * (exp(average_lean[1,2])-1), 1)), 
+                                "% [", 
+                                sprintf("%.1f", round(100 * (exp(average_lean[1,5])-1), 1)), 
+                                ", ",
+                                sprintf("%.1f", round(100 * (exp(average_lean[1,6])-1), 1)),
+                                "])")
+lean_w20 <- paste0(sprintf("%.1f",round(100 * (exp(average_lean[2,2])-1), 1)), 
+                                "% [", 
+                                sprintf("%.1f",round(100 * (exp(average_lean[2,5])-1), 1)), 
+                                ", ",
+                                sprintf("%.1f", round(100 * (exp(average_lean[2,6])-1), 1)),
+                                "])")
+
+
+treat_vs_ctrl_lean_w7 <- paste0(round(100 * (exp(lean_results[4,1])-1), 1), 
+                                "% [", 
+                                round(100 * (exp(lean_results[4,4])-1), 1), 
+                                ", ",
+                                round(100 * (exp(lean_results[4,5])-1), 1),
+                                "])")
+
+treat_vs_ctrl_lean_w20 <- paste0(round(100 * (exp(lean_results[5,1])-1), 1), 
+                                "% [", 
+                                round(100 * (exp(lean_results[5,4])-1), 1), 
+                                ", ",
+                                round(100 * (exp(lean_results[5,5])-1), 1),
+                                "]")
+
+
+### Effects of baseline fat mass on treatment effect
+
+
+dxa_fat <- dxa %>%
+  inner_join(fat_dat) 
+
+lean.m2 <- lmer(log(lean.whole) ~ time + time:TREAT + time:TREAT:rel.fat + (1|participant), data = dxa_fat)
+
+# summary(lean.m2) no interaction
+
+
+### Thickness 
+
+thick <- AOData::thickness %>%
+  
+  filter(participant %in% participants) %>%
+
+  filter(condition != "RMNA") %>%
+  select(participant, leg, time, VLthick) %>%
+
+  inner_join(AOData::idkeys %>%
+  select(participant, treat)) %>%
+  
+  filter(time != "T3") %>%
+  
+  ## TREAT variable to allow to multilevel ANCOVA
+  mutate(TREAT = if_else(treat == "omega", 1, 0), 
+         TREAT = if_else(time == "T1", 0, TREAT), 
+         thick = VLthick) 
+
+
+## Thickness main model 
+thick.m1 <- lmer(log(thick) ~ time + time:TREAT + (1|participant), data = thick)
+
+# summary(thick.m1) no interaction
+
+
+thick_results <- cbind(coef(summary(thick.m1)), confint(thick.m1)[3:7,])
+
+average_thick <- confint(pairs(emmeans::emmeans(thick.m1, specs = ~ time), reverse = TRUE), adjust = "none")
+
+
+thick_w7 <- paste0(sprintf("%.1f", round(100 * (exp(average_thick[1,2])-1), 1)), 
+                                "% [", 
+                                sprintf("%.1f", round(100 * (exp(average_thick[1,5])-1), 1)), 
+                                ", ",
+                                sprintf("%.1f", round(100 * (exp(average_thick[1,6])-1), 1)),
+                                "])")
+thick_w20 <- paste0(sprintf("%.1f",round(100 * (exp(average_thick[2,2])-1), 1)), 
+                                "% [", 
+                                sprintf("%.1f",round(100 * (exp(average_thick[2,5])-1), 1)), 
+                                ", ",
+                                sprintf("%.1f", round(100 * (exp(average_thick[2,6])-1), 1)),
+                                "])")
+
+
+treat_vs_ctrl_thick_w7 <- paste0(round(100 * (exp(thick_results[4,1])-1), 1), 
+                                "% [", 
+                                round(100 * (exp(thick_results[4,4])-1), 1), 
+                                ", ",
+                                round(100 * (exp(thick_results[4,5])-1), 1),
+                                "])")
+
+treat_vs_ctrl_thick_w20 <- paste0(round(100 * (exp(thick_results[5,1])-1), 1), 
+                                "% [", 
+                                round(100 * (exp(thick_results[5,4])-1), 1), 
+                                ", ",
+                                round(100 * (exp(thick_results[5,5])-1), 1),
+                                "]")
+
+
+### Effects of baseline relative fat 
+
+thick_fat <- thick %>%
+    inner_join(fat_dat %>%
+                 mutate(participant = as.numeric(participant))) 
+
+
+thick.m2 <- lmer(log(thick) ~ time + time:TREAT +  time:TREAT:rel.fat + (1|participant), data = thick_fat)
+
+## No interaction summary(thick.m2)
+
+```
+
+
+
+```{r strength}
+
+## Effects of supplementation on average strength
+
+# Using the same participants as in the blood-variable data set 
+
+
+## Combine over all variables
+
+str <- AOData::strength %>%
+  
+  ## Using the same set of participants
+  filter(participant %in% participants) %>%
+  filter(condition != "RMNA", participant != 619) %>%
+  group_by(exercise) %>%
+
+  mutate(mag.norm = mag / max(mag, na.rm = TRUE), 
+         log.mag = log(mag.norm)) %>%
+  
+  ungroup() %>%
+  select(participant:exercise,mag.norm, log.mag) %>%
+  
+  
+  inner_join(AOData::idkeys %>%
+  select(participant, treat)) %>%
+  
+  mutate(TREAT = if_else(treat == "omega", 1, 0), 
+         TREAT = if_else(time == "T1", 0, TREAT))  %>%
+  filter(time != "T3") %>%
+  filter(mag.norm > 0) 
+  
+
+
+## A model for average strength 
+# This is also a multilevel model - including all observations, exercise are given a random intercept
+str.m1 <- lmer(log.mag ~ time + time:TREAT + (1|participant) + (1|exercise), data = str)
+
+
+str_results <- cbind(coef(summary(str.m1)), confint(str.m1)[4:8,])
+
+average_str <- confint(pairs(emmeans::emmeans(str.m1, specs = ~ time), reverse = TRUE), adjust = "none")
+
+
+str_w7 <- paste0(round(100 * (exp(average_str[1,2])-1), 1), 
+                                "% [", 
+                                round(100 * (exp(average_str[1,5])-1), 1), 
+                                ", ",
+                                round(100 * (exp(average_str[1,6])-1), 1),
+                                "])")
+str_w20 <- paste0(round(100 * (exp(average_str[2,2])-1), 0), 
+                                "% [", 
+                                round(100 * (exp(average_str[2,5])-1), 0), 
+                                ", ",
+                                round(100 * (exp(average_str[2,6])-1), 0),
+                                "])")
+
+
+treat_vs_ctrl_str_w7 <- paste0(round(100 * (exp(str_results[4,1])-1), 1), 
+                                "% [", 
+                                round(100 * (exp(str_results[4,4])-1), 1), 
+                                ", ",
+                                round(100 * (exp(str_results[4,5])-1), 1),
+                                "])")
+
+treat_vs_ctrl_str_w20 <- paste0(round(100 * (exp(str_results[5,1])-1), 1), 
+                                "% [", 
+                                round(100 * (exp(str_results[5,4])-1), 1), 
+                                ", ",
+                                round(100 * (exp(str_results[5,5])-1), 1),
+                                "]")
+
+
+### Relative fat
+
+str_fat <- str %>%
+    inner_join(fat_dat %>%
+                 mutate(participant = as.numeric(participant))) 
+
+str.m2 <- lmer(log.mag ~ time + time:TREAT +  time:TREAT:rel.fat + (1|participant) + (1|exercise), data = str_fat)
+
+## No interaction  summary(str.m2)
+
+
+```
+
+
+```{r homa}
+
+homa <- AOData::glucose %>%
+  filter(min %in% c(0)) %>%
+  select(participant, min, time, HOMA2IR) %>%
+  
+  ## Keep t4 participants 
+  filter(participant %in% participants) %>%
+  filter(!is.na(HOMA2IR)) %>%
+  
+  inner_join(AOData::idkeys %>%
+  select(participant, treat, sex)) %>%
+  
+    ## TREAT variable to allow to multilevel ANCOVA
+  mutate(TREAT = if_else(treat == "omega", 1, 0), 
+         TREAT = if_else(time == "T1", 0, TREAT))
+
+
+## HOMA main model 
+homa.m1 <- lmer(log(HOMA2IR) ~ time + time:TREAT + (1|participant), data = homa)
+
+
+
+
+
+
+homa_results <- cbind(coef(summary(homa.m1)), confint(homa.m1)[3:7,])
+
+average_homa <- confint(pairs(emmeans::emmeans(homa.m1, specs = ~ time), reverse = TRUE), adjust = "none")
+
+
+homa_w7 <- paste0(sprintf("%.1f", round(100 * (exp(average_homa[1,2])-1), 1)), 
+                                "% [", 
+                                sprintf("%.1f", round(100 * (exp(average_homa[1,5])-1), 1)), 
+                                ", ",
+                                sprintf("%.1f", round(100 * (exp(average_homa[1,6])-1), 1)),
+                                "])")
+homa_w20 <- paste0(sprintf("%.1f",round(100 * (exp(average_homa[2,2])-1), 1)), 
+                                "% [", 
+                                sprintf("%.1f",round(100 * (exp(average_homa[2,5])-1), 1)), 
+                                ", ",
+                                sprintf("%.1f", round(100 * (exp(average_homa[2,6])-1), 1)),
+                                "])")
+
+
+treat_vs_ctrl_homa_w7 <- paste0(sprintf("%.1f",round(100 * (exp(homa_results[4,1])-1), 1)), 
+                                "% [", 
+                                sprintf("%.1f",round(100 * (exp(homa_results[4,4])-1), 1)), 
+                                ", ",
+                                sprintf("%.1f",round(100 * (exp(homa_results[4,5])-1), 1)),
+                                "])")
+
+treat_vs_ctrl_homa_w20 <- paste0(sprintf("%.1f",round(100 * (exp(homa_results[5,1])-1), 1)), 
+                                "% [", 
+                                sprintf("%.1f",round(100 * (exp(homa_results[5,4])-1), 1)), 
+                                ", ",
+                                sprintf("%.1f",round(100 * (exp(homa_results[5,5])-1), 1)),
+                                "]")
+homa_fat <- homa %>%
+    inner_join(fat_dat %>%
+                 mutate(participant = as.numeric(participant))) 
+
+
+homa.m2 <- lmer(log(HOMA2IR) ~ time + time:TREAT +  time:TREAT:rel.fat + (1|participant), data = homa_fat)
+
+## No interaction summary(homa.m2)
+
+```
+
+
+Introduction: Omega-3 fatty acids (n-3 FAs) have received considerable attention for their potential health benefits, including improvements in muscle mass and function during disuse and disease and in the elderly. Obesity is associated with several conditions potentially alleviated by n-3FAs, such as inactivity/disuse, anabolic resistance and inflammation. Resistance exercise (RE) is a well-established intervention for promoting muscle hypertrophy, muscle function, and metabolic health. This study aimed to investigate the individual and combined effects of n-3 FAs and RE on muscle hypertrophy, function and glucose metabolism in healthy middle-aged, inactive individuals across a wide BMI-range. 
+
+Methods: 95 (&#x2642;: `r npart[1,2]`, &#x2640;: `r npart[2,2]`, age: `r round(average_part[1,1], 1)` (SD:`r round(average_part[1,2], 1)`)  years, fat-% range: `r round(average_part[1,3], 1)`-`r round(average_part[1,4], 1)`) healthy, untrained participants completed 7 weeks of daily supplementation with a placebo or 500mg EPA and 270mg DHA, and 13 weeks of bi-weekly supervised heavy progressive resistance exercise with continued supplementation. Exercises were leg press, knee extension, knee flexion, bench press and dumbell row. Upper body exercises were performed to failure with three sets of 10 repetitions to failure (RM). For legs, the training was unilateral, with each leg randomly assigned to three sets of 10RM or three sets of 30RM to failure. Dual-energy X-ray absorptiometry and ultrasound of the thigh were completed at baseline and after the intervention to measure total lean body mass and vastus lateralis thickness, respectively. Blood glucose (0, 15,30, 45, 60, 90 and 120 min) and c-peptide (0 and 60 min) were measured after ingestion of 75 grams of glucose. After a familiarisation session, leg press 1RM was performed before and after the intervention.
+
+Results: Blood levels of n-3 FAs increased to `r treat_vs_ctrl_omega_w7` by week 7 and `r treat_vs_ctrl_omega_w20` at week 20 in the supplementation group compared to the control group. Across groups, average strength changed by `r str_w7` and `r str_w20`, lean mass by `r lean_w7` and `r lean_w7`, vastus lateralis thickness by `r thick_w7` and `r thick_w20` HOMA-IR by `r homa_w7` and `r `homa_w20` from baseline to week 7 and 20, respectively. We observed no differences between groups (*p* > 0.05), except for vastus lateralis thickness that was `r treat_vs_ctrl_thick_w20` in supplementation compared to control at week 20. The effects of n-3 FAs were not altered by adjusting for relative fat mass. 
+
+Conclusion: Supplementation with n-3 FAs did not alter the effects of heavy progressive resistance training on muscle growth, muscle strength or glucose metabolism in healthy, inactive middle-aged individuals.
 
