@@ -1,0 +1,119 @@
+---
+title: "Glucose paper"
+format: html
+editor: visual
+---
+
+# Abstract
+
+# Introduction
+
+# Methods
+
+## Participants
+Participants were randomized into two intervention groups, receiving supplementation containing either 1000 mg n-3 fatty acids or 1000 mg high-oleic sunflower oil.
+
+## Design
+
+## Measurements
+
+Homeostatic model assessment (HOMA). Insulin resistance (IR). Which formula?  HOMA2-IR for general population? HOMA2-B for beta cell function? HOMA2-S for insulin sensitivity? Can someone give me the details? 
+
+General blood values where analysed at Sykehuset Innlandet lab. 
+
+Fatty acid profile - where? method?
+
+Glucose tolerance test; local capillary tests combined with venous test? Can someone elaborate? Did we use two different methods? Are they comparable? Perhaps not worth a discussion? Might have an impact on algorithms , but for the different time points 0 and 2h with their clinical cut-offs, resp, it shouldnt interfere.
+
+C-peptid and adiponectin at Hormonlab . 
+HbA1c? Where was that performed?
+
+## Statistical analyses
+We used Daniel. 
+
+# Results
+
+## Participant characteristics, blood parameters and dietary overview
+Table 1: Descriptive data (weight, gender, age, BMI, LBM, fat%, waist circ, BP - T1 and T2) and diet (macro)
+
+
+General blood values at T1 (in table 1??): Alb, ALT, AST, CA, CCA, CK, CRP, FE, FERR, FT3, FT4, HbA1c, HDL, iPTH, KREA, LDL, SHBG, TBIC, TESTO, TG, TRAN, TSAT, TSH, VITDT. 
+
+What where the avg levels? How are they compared to the referance intervals of the different tests? 
+
+HbA1c? Did not reveal any significant change. What was avg value, min-max?
+
+CRP? Did not reveal any significant change. What was avg value, min-max? Of those who had CRP above 5, what was their Ferritin levels? (Ferritin is also an acute phase marker).
+
+iPTH - må sees i sammenheng med Ca og VitD - allerhelst iCa.iPTH increases in both groups, both genders, and vitD drops. 
+
+The reference intervals are as follows:
+Alb (19-39 år 36-48, 40-69år 36-45, 70 og over 34-45), ALT (females: 10-45, males: 10-70), AST (females: 15-35, males: 10-45), CA (2,15-2,51), CCA (0-49år: 2,17-2,47, >50år: 2,17-2,53), CK (kvinner: 35-210, menn <50år: 50-400, >50år 40-280), CRP (<5), FE (9,0-34,0) , FERR (kvinner 10-170, menn 30-400), FT3 (2,6-5,7), FT4 (9-19), HbA1c (20-42), HDL (kvinner 1,0-2,7, menn 0,8-2,1), iPTH (18-64år: 1,5-7,0, >65år: 1,4-8,6), KREA (kvinner 45-90, menn 60-105), LDL (18-29 år 1,2-4,3, 30-48 år 1,4-4,7, 49 og over: 2,0-5,3), SHBG (menn 18-60år 8-60, >60år 15-90, kvinner 23-100), TIBC (49-83), TESTO(kvinner 19-49år 0,49-1,84, 50 og over 0,42-1,25, menn 19-49år 8,32-30,2, 50 og over 7,66-24,82), TG (0,45-2,6), TRAN (1,9-3,3), TSAT (kvinner 18-48år 11-50, 49 og over 14-50, menn 16-57), TSH (0,35-3,6), VITDT (50-150).
+
+Info about the diets - should I perhaps go through the questionaries?He
+
+## Fatty acid profile
+
+The analysis of participant's blood profiles following n-3 fatty acid supplementation revealed a significant increase in various n-3 fatty acids. This observervation provides evidence of successful uptake and compliance.
+
+Increased amount of Eicosapentaenoic acid (EPA) (C20:5 n-3) (29,6 enheter, p<0,001), Docosapentaenoic acid (DPA) (C22:5 n-3) (4,5, p<0,001) and Docosahexaenoic acid (DHA) (C22:5 n-3 (18, p<0,001)): gjennomsnittlig endring i T2 korrigert for T1.
+
+The analysis also showed a reduced amount of various n-6 fatty acids. What is worth to mention about this?
+
+Reduced amount of Oleic acid (??) (C18:1 c-9) (-33,3, p=0,042), gamma-linolenic (C18:3 n-6), Dihomo-γ-linolenic acid (C20:3 n-6) (-5,8, p<0,001) and Arachidonic acid	(C20:4 n-6) (-17, p<0,001)
+
+As shown in figure 1 (add figure)
+
+## Metabolic syndrome
+Insulin restistance
+Abdominal circumference (kvinner 80, menn 94)
+Blood pressure
+Lipids (TG high, cholesterol, low HDL)
+
+Perhaps stick to the criterias from the international diabetes federation?
+Waist females 80 and above, male 94 and above
+Two of the following:
+TG >1,7, treatment for lipid abn
+Reduced HDL
+High BP
+Elevated fasting glucose levelse (5,6) - how many?
+
+## Glucose metabolism assessment
+
+To evaluate glucose metabolism, serum concentrations of glucose, c-peptide and adiponectin were measured. Assessments were conducted under fasting conditions as well as following (2 hours) the ingestion of a standardized amount of glucose (75 g of ??), ie. glucose tolerance test. Additional testing was perfomed one hour to detect any noteworthy peaks of interest. Notably, none of the test, including HOMA2, the glucose tolerance test, or c-peptide, revelead significant differences between the control and intervention groups.
+
+Homeostatic model assessment (HOMA): What were the absoulute numbers in the different groups? This in regards to the cut off levels, ie how many had IR? What was their HbA1c-levels?
+
+The diagnosis of diabetes in established when one or more of the following criterias are met: HbA1c >= 48 mmol/mol, fasting plasma glucose >= 7,0 mmol/L and/or glucose consentrations >= 11,1 two hours after a glucose tolerance test. If a patient presents with random plasma glucose >= 11,1 along with symptoms of diabetes, there is no neded for a repeat test before confirming the diagnosis. Our baseline data indicated that 10 out of 66 participants in the control group and 6 out of 61 participants in the omega-3 group had glucoe levels exceeding 11. Subsequent analaysis after 7 weeks of supplementation revealed about the same levels; 11 out of 65 and 7 out of 60, resp. Potential significance?
+
+The mean serum glucose levels at baseline, before the supplementation period, were 4,4 mmol/L in the control group and 4,4 mmol/L in the intervention group. The average 2-hour values were 6,4 and 6,2, respectively. Following 7 weeks of supplementation, the baseline values were 4,7 mmol/L in the control group and 4,5 in the omega-3 group. The corresponding 2-hour values were 6,0 and 5,7, respectively. At the baseline time point, 2 out of 65 participants in the controll group had a higher glucose concentration higher than 11,0 mmol/L after 2 hours, ie. diabetes, while the omega-3 group has 1 out of 60. After 7 weeks, these numbers changed to 2 and 0, respectively.
+
+HOMA2 fasting
+HOMA2 2h
+
+Glucose tolerance test
+AUC Glucose
+Peak
+2h
+
+Glucose + c-peptide fasting, how many had c-peptide > 1480 pmol/l? WHat was their fasting glucose levels? HbA1c? Glucose tolerance test? Did anyone have c-peptide < 375 pmol/l?
+
+C-peptide 1h ??
+
+Adiponectin - do we have any information from Hormonlab in regards to reference values? If not, we should gather such information, I will speak to Hormonlab in that case."Referanseområdet for adiponektin er for voksne over 18 år: 153-1042 nmol/l (4,6-31,3 mg/l). Referansegrensene er beregnet ut fra analyse av prøver fra antatt friske personer både kvinner og menn, fra et tidligere prosjekt (2007). 
+Adiponektin er en manuell RIA- metode basert på analysekit fra Millipore."
+
+Figure    2a HOMA2
+          2b Forrest plot ??
+          
+# Discussion
+
+n-3 : n-6 ratio?
+
+What about those exceeding 11,1 mmol/L during glucose tolerance test? Doesn't that reveal insulin resistance? Maximal glucose during glucose tolerance test
+
+HbA1c - not enough time to detect a significant change
+
+CRP: The test method is not high sensitive , perhaps the method we used is not good enoug to detect the possible differences we're looking for? Where they all healthy? How was that checked?
+
+HOMA score, insulin-based vs c-peptide based? HOMA 2 vs 1? 
