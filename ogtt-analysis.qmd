@@ -1,0 +1,1346 @@
+---
+title: "Oral glucose tolerance test - Effects of Omega-3 supplementation"
+author: "Daniel Hammarström, Magnus Husøy, Håvard Hamarsland"
+format: html
+editor_options: 
+  chunk_output_type: console
+---
+
+## Introduction
+
+
+
+
+## Data preparations
+
+```{r}
+
+# Libraries
+library(AOData)
+library(tidyverse)
+library(brms)
+library(marginaleffects)
+
+# Data sets
+
+# Glucose
+glucose_dat <- AOData::glucose %>%
+  select(participant:glucose) %>%
+  print()
+
+# Grouping
+AOData::idkeys %>%
+  select(participant, treat) %>%
+  print()
+
+
+```
+
+
+
+## Preliminary models
+
+### Baseline model with group-level effects (participants)
+
+
+
+```{r}
+
+# Use a complete data set (no missing data) at time 1 to set up models
+pre_dat <- glucose_dat %>%
+  filter(time == "T1") %>%
+  filter(!(is.na(glucose))) %>%
+  mutate(stglucose = (glucose - mean(glucose)) / sd(glucose), 
+         participant = as.factor(participant)) %>%
+  # To avoid problems, dropping participants with less than 7 
+  # measurements
+  mutate(.by = participant, 
+         n = n()) %>%
+  filter(n == 7)
+  
+
+
+
+pre_dat %>%
+  group_by(participant) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  summarise(n.participants = n(), 
+            avg.samples = mean(n), 
+            min.samples = min(n)) 
+
+
+
+```
+
+
+
+
+```{r}
+
+# Get priors 
+f1 <- bf(stglucose ~ 1 + s(min, bs = "tp", k = 7) + 
+            s(min, by = participant, m = 1, bs = "tp", k = 7) + 
+            (1 | participant))
+
+
+get_prior(f1, 
+          family = gaussian(),
+          data = pre_dat)
+
+# Set priors
+
+p1 <- c(prior(normal(-1, 1.5), class = Intercept), 
+        prior(normal(0, 1), class = b, coef = "smin:participant_1"), 
+        prior(normal(0, 1), class = b, coef = "smin_1"), 
+        prior(exponential(1), class = sd),
+        prior(normal(2, 2), class = sds, lb = 0), 
+        prior(exponential(1), class = sigma))
+
+validate_prior(p1, formula = f1, data = pre_dat)
+
+# Prior predictive simulation
+
+m1_pp <- brm(stglucose ~ 1 + s(min, bs = "tp", k = 7) + 
+            s(min, by = participant, m = 1, bs = "tp", k = 7) + 
+            (1 | participant),
+              prior = p1, 
+             file = "fits/ogtt-analysis/m1_pp", # Save the model
+             sample_prior = "only", # Sample only from the prior
+             data = pre_dat, 
+             family = gaussian(),
+             iter = 2000, 
+             warmup = 1000, 
+             control = list(adapt_delta = 0.95))
+
+
+conditional_smooths(m1_pp)
+
+```
+
+
+
+```{r}
+
+
+
+
+preds_prior <- predictions(m1_pp, 
+                           newdata = expand_grid(min = seq(0, 120, 5), 
+                                                 participant = c(1, 2, 3)), 
+            allow_new_levels = TRUE)
+
+posterior_draws(preds_prior) %>%
+  filter(drawid %in% 1:500) %>%
+  ggplot(aes(min, 
+             draw, 
+             group = paste(drawid, participant), 
+             color = as.factor(participant))) + 
+  geom_line(alpha = 0.1) + 
+
+  labs(title = "Prior predictive simulation",
+       x = "Sample time",
+       y = "Glucose (standardized)") 
+
+
+
+```
+
+
+
+```{r}
+
+
+## Fitting model 1
+
+m1 <- update(m1_pp, 
+             newdata = pre_dat, 
+             sample_prior = "no", # Sample from the posterior
+             file = "fits/ogtt-analysis/m1", 
+             iter = 2000, 
+             warmup = 1000, 
+             control = list(adapt_delta = 0.95))
+
+
+
+plot(m1)
+print(m1)
+
+```
+
+
+
+```{r}
+
+nd <- expand_grid(min = seq(0, 120, 5), 
+                  participant = pull(distinct(pre_dat,participant), participant)) 
+
+
+preds <- predictions(m1, newdata = nd) 
+
+
+posterior_draws(preds) %>%
+  filter(drawid %in% 1:500) %>%
+  filter(participant %in% c("501", "503", "504", "506")) %>%
+  ggplot(aes(min, draw, group = paste0(participant,drawid))) + 
+  
+  
+  geom_line(alpha = 0.1, aes(color = as.factor(participant))) + 
+  
+  geom_point(data = filter(pre_dat, participant %in% c("501", "503", "504", "506")), 
+             aes(min, stglucose, group = NULL, 
+                 fill = as.factor(participant)), 
+             alpha = 1, shape = 21, size = 2) +
+  
+  geom_smooth(method="lm", se=FALSE, color = "black", linetype = "dashed",
+              aes(min, stglucose, group = participant),
+             data = filter(pre_dat, participant %in% c("501", "503", "504", "506")), 
+   formula =  y ~ splines::bs(x, df = 4)) +
+  
+  
+  labs(title = "Posterior predictive simulation (Global and participant specific smooths)",
+       subtitle = "Posterior draws as lines per participant, data as points",
+       x = "Sample time (min)",
+       y = "Glucose (Standardized units)") + 
+  theme_classic()  +  facet_wrap(~ participant)
+
+```
+
+
+
+### Non-penalized splines
+
+```{r}
+library(splines)
+
+get_prior(stglucose ~ 1 + bs(min, df = 4) + (1 + bs(min, df = 4) | participant), 
+                     data = pre_dat, 
+                     family = gaussian())
+
+
+
+p2 <- c(
+  
+               prior(normal(-1, 1.5), class = Intercept),  
+               
+               prior(normal(1, 1.5), class = b, coef = "bsmindfEQ41"),
+               prior(normal(0.5, 1.5), class = b, coef = "bsmindfEQ42"),
+               prior(normal(-1, 1.5), class = b, coef = "bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "bsmindfEQ44"),
+  
+            # The prior for the correlations between participant level regression parameters
+               prior(lkj(1), class = cor),
+               # The wigglyness SD, wigglyness is sampled from a exponential distribution
+               prior(exponential(2), class = sd),
+               # The prior for the residual variation
+               prior(exponential(1), class = sigma)
+               
+               
+  
+) 
+
+
+validate_prior(p2,
+               formula = stglucose ~ 1 + bs(min, df = 4) + 
+                 (1 + bs(min, df = 4) | participant),
+               data = pre_dat, 
+               family = gaussian())
+
+
+m2_pp <- brm(stglucose ~ 1 + bs(min, df = 4) + 
+                 (1 + bs(min, df = 4) | participant),
+             # Priors (including comments)
+             prior = p2,
+             file = "fits/ogtt-analysis/m2_pp", # Save the model
+             sample_prior = "only", # Sample only from the prior
+             data = pre_dat, 
+             family = gaussian(),
+             chains = 4, 
+             iter = 2000, 
+             warmup = 1000, 
+             control = list(adapt_delta = 0.95))
+
+preds_prior <- predictions(m2_pp, newdata = expand_grid(min = seq(0, 120, 10), 
+                                                       participant = c(1, 2, 3, 4)), 
+                           allow_new_levels = TRUE)
+
+
+posterior_draws(preds_prior) %>%
+  filter(drawid %in% 1:500) %>%
+  ggplot(aes(min, draw, group = paste(participant, drawid))) + 
+  geom_line(alpha = 0.1) + 
+  
+  facet_wrap(~ participant) +
+  
+  labs(title = "Prior predictive simulation",
+       x = "Sample time",
+       y = "Glucose (standardized)") 
+
+
+```
+
+
+```{r}
+
+
+
+m2 <- update(m2_pp, 
+             newdata = pre_dat, 
+             sample_prior = "no", # Sample from the posterior
+             file = "fits/ogtt-analysis/m2", 
+             iter = 4000, 
+             warmup = 1000, 
+             save_pars = save_pars(all = TRUE),
+             cores = 4,
+             control = list(adapt_delta = 0.95))
+
+
+
+plot(m2)
+print(m2)
+
+
+
+```
+
+
+```{r}
+
+nd <- expand_grid(min = seq(0, 120, 5), 
+                  participant = pull(distinct(pre_dat,participant), participant)) 
+
+
+preds <- predictions(m2, newdata = nd, allow_new_levels = TRUE) 
+
+
+posterior_draws(preds) %>%
+  filter(drawid %in% 1:500) %>%
+  filter(participant %in% c("501", "503", "504", "506")) %>%
+  ggplot(aes(min, draw, group = paste0(participant,drawid))) + 
+  
+  
+  geom_line(alpha = 0.1, aes(color = as.factor(participant))) + 
+  
+  geom_point(data = filter(pre_dat, participant %in% c("501", "503", "504", "506")), 
+             aes(min, stglucose, group = NULL, 
+                 fill = as.factor(participant)), 
+             alpha = 1, shape = 21, size = 2) +
+  
+  geom_smooth(method="lm", se=FALSE, color = "black", linetype = "dashed",
+              aes(min, stglucose, group = participant),
+             data = filter(pre_dat, participant %in% c("501", "503", "504", "506")), 
+   formula =  y ~ splines::bs(x, df = 4)) +
+  
+  
+  labs(title = "Posterior predictive simulation (Global and participant specific smooths)",
+       subtitle = "Posterior draws as lines per participant, data as points",
+       x = "Sample time (min)",
+       y = "Glucose (Standardized units)") + 
+  theme_classic()  +  facet_wrap(~ participant)
+
+
+
+
+```
+ 
+
+
+
+```{r}
+
+# m1 <- add_criterion(m1, "loo", moment_match = TRUE)
+# m2 <- add_criterion(m2, "loo", moment_match = TRUE)
+
+
+# loo_compare(m1, m2)
+
+
+
+```
+
+
+## Pre- to post-intervention data, two groups
+
+```{r}
+
+part_t2 <- AOData::idkeys %>%
+  filter(completed != "t1") %>%
+  pull(participant)
+
+
+
+compl_dat <- glucose_dat %>%
+  # Keep data only from time 1 and 2
+  filter(time %in% c("T1", "T2")) %>%
+  # Filter participants who have completed T2
+  filter(participant %in% part_t2) %>%
+  # Remove NAs -- might update this to allow for not completly missing data 
+  # to be imputed
+  filter(!is.na(glucose)) %>%
+  # Standardize glucose measurements
+  mutate(stglucose = (glucose - mean(glucose)) /sd(glucose)) %>%
+  ## Add treatment variable
+  inner_join(AOData::idkeys %>%
+  select(participant, treat)) %>%
+  ## Combine data into a single variable (time/treat)
+  mutate(tx = paste(time, treat, sep = "_")) %>%
+  print()
+
+
+
+```
+
+
+```{r}
+
+
+get_prior(stglucose ~ 0 + tx + 
+            bs(min, df = 4):tx + 
+            (1 + bs(min, df = 4):time | participant), 
+                     data = compl_dat, 
+                     family = gaussian())
+
+
+
+p3 <- c(
+  
+               prior(normal(-1, 1.5), class = b, coef = "txT1_ctrl"),  
+                prior(normal(-1, 1.5), class = b, coef = "txT1_omega"),  
+                prior(normal(-1, 1.5), class = b, coef = "txT2_ctrl"),  
+                prior(normal(-1, 1.5), class = b, coef = "txT2_omega"),  
+               
+               
+               # Group/time priors for the splines
+               prior(normal(1, 1.5),    class = b, coef = "txT1_ctrl:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT1_ctrl:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT1_ctrl:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT1_ctrl:bsmindfEQ44"),
+               
+                 prior(normal(1, 1.5),  class = b, coef = "txT1_omega:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT1_omega:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT1_omega:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT1_omega:bsmindfEQ44"),
+               
+                 prior(normal(1, 1.5),  class = b, coef = "txT2_ctrl:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT2_ctrl:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT2_ctrl:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT2_ctrl:bsmindfEQ44"),
+               
+                 prior(normal(1, 1.5),  class = b, coef = "txT2_omega:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT2_omega:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT2_omega:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT2_omega:bsmindfEQ44"),
+               # 
+               prior(lkj(1), class = cor),
+               # The wigglyness SD sampled from exponential distribution
+               prior(exponential(2), class = sd),
+               prior(exponential(1), class = sigma))
+               
+               
+               
+
+validate_prior(p3,
+               stglucose ~ 0 + tx + 
+            bs(min, df = 4):tx + 
+            (1 + bs(min, df = 4):time | participant), 
+                     data = compl_dat, 
+                     family = gaussian())
+
+
+m3_pp <- brm(stglucose ~ 0 + tx + 
+            bs(min, df = 4):tx + 
+            (1 + bs(min, df = 4):time | participant),
+             # Priors
+             prior = p3,
+             file = "fits/ogtt-analysis/m3_pp", # Save the model
+             sample_prior = "only", # Sample only from the prior
+             data = compl_dat, 
+             family = gaussian(),
+             chains = 4, 
+             iter = 2000, 
+             warmup = 1000, 
+             control = list(adapt_delta = 0.95))
+
+## New data 
+
+nd <- expand_grid(min = seq(0, 120, 10), 
+                  participant = c(1, 2, 3, 4),
+                  time = c("T1", "T2")) %>%
+  mutate(treat = if_else(participant %in% c(1, 2), "ctrl", "omega"), 
+         tx = paste(time, treat, sep = "_")) %>%
+  print()
+
+
+
+preds_prior <- predictions(m3_pp, newdata = nd, 
+                           allow_new_levels = TRUE)
+
+
+posterior_draws(preds_prior) %>%
+  filter(drawid %in% 1:500) %>%
+  ggplot(aes(min, draw,
+             color = tx,
+             group = paste(participant, drawid))) + 
+  geom_line(alpha = 0.1) + 
+  
+  facet_grid(time ~ participant) +
+  
+  labs(title = "Prior predictive simulation",
+       x = "Sample time",
+       y = "Glucose (standardized)") 
+
+
+
+```
+
+
+
+```{r}
+
+
+
+m3 <- update(m3_pp, 
+             newdata = compl_dat, 
+             sample_prior = "no", # Sample from the posterior
+             file = "fits/ogtt-analysis/m3", 
+             iter = 4000, 
+             warmup = 1000, 
+             cores = 4,
+             control = list(adapt_delta = 0.95))
+
+
+
+plot(m3)
+print(m2)
+
+
+
+
+
+
+```
+
+
+
+```{r}
+
+
+
+
+
+
+# Predictions
+
+nd <- expand_grid(min = seq(0, 120, 5), 
+                  time = c("T1", "T2"), 
+                  treat = c("ctrl", "omega"), 
+                  participant = NA) %>%
+  mutate(tx = paste(time, treat, sep = "_")) %>%
+  print()
+
+
+
+preds <- predictions(m3, newdata = nd, re_formula = NA) 
+
+
+
+comp_df <- posterior_draws(preds) %>%
+  filter(drawid %in% 1:2000) %>%
+  select(drawid, min, draw, tx, participant) %>%
+  pivot_wider(names_from = tx, values_from = draw) %>%
+  
+  # Compare "groups" as within group differences between time points
+  # Compare differences over time between groups (tx_contrast)
+  mutate(ctrl = T2_ctrl - T1_ctrl, 
+         omega = T2_omega - T1_omega, 
+         tx_contrast = omega - ctrl) %>%
+  
+  pivot_longer(cols = T1_ctrl:tx_contrast) %>%
+   
+  print()
+
+  
+# Using the data we can calculate 95% credible intervals for the differences between groups.
+  
+m3_comp <- comp_df %>%  
+  # Group the data frame by sample time
+  group_by(min, name) %>%
+  # ... and calculate summary statistics for the differences
+  summarise(m = median(value, na.rm = TRUE), 
+            l95 = quantile(value, 0.025, na.rm = TRUE), 
+            u95 = quantile(value, 0.975, na.rm = TRUE), 
+            l50 = quantile(value, 0.25, na.rm = TRUE), 
+            u50 = quantile(value, 0.75, na.rm = TRUE)) 
+
+  
+m3_comp %>%
+  
+  filter(name %in% c("T1_ctrl", "T1_omega", "T2_ctrl", "T2_omega")) %>%
+  
+  separate(name, into = c("time", "treat")) %>%
+
+  ggplot(aes(min, m, fill = time)) + 
+  geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2) +
+   geom_ribbon(aes(ymin = l50, ymax = u50), alpha = 0.2) +
+  geom_line() + 
+  labs(x = "Sample time", y = "Blood glucose (standardized values)", 
+       title = "Comparisons") + 
+  facet_wrap(~ treat)
+
+
+m3_comp %>%
+  
+  filter(name %in% c("ctrl", "omega")) %>%
+  
+
+  ggplot(aes(min, m, fill = name)) + 
+  geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2) +
+   geom_ribbon(aes(ymin = l50, ymax = u50), alpha = 0.2) +
+  geom_line() + 
+  geom_hline(yintercept = 0, lty = 2) +
+  labs(x = "Sample time", y = "Blood glucose (standardized values)", 
+       title = "Comparisons")
+
+
+m3_comp %>%
+  
+  filter(name %in% c("tx_contrast")) %>%
+  
+
+  ggplot(aes(min, m)) + 
+  geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2, fill = "orchid1") +
+   geom_ribbon(aes(ymin = l50, ymax = u50), alpha = 0.2, fill = "orchid1") +
+  geom_line() + 
+  geom_hline(yintercept = 0, lty = 2) +
+  labs(x = "Sample time", y = "Blood glucose (standardized values)", 
+       title = "Comparisons")
+
+
+```
+
+
+### Effects of supplementation and training
+
+```{r}
+# Data set 
+
+part_t4 <- AOData::idkeys %>%
+  filter(completed == "t4") %>%
+  pull(participant)
+
+
+
+compl_train_dat <- glucose_dat %>%
+  # Keep data only from time 1 and 2
+  filter(time %in% c("T2", "T4")) %>%
+  # Filter participants who have completed T2
+  filter(participant %in% part_t4) %>%
+  # Remove NAs -- might update this to allow for not completly missing data 
+  # to be imputed
+  filter(!is.na(glucose)) %>%
+  # Standardize glucose measurements
+  mutate(stglucose = (glucose - mean(glucose)) /sd(glucose)) %>%
+  ## Add treatment variable
+  inner_join(AOData::idkeys %>%
+  select(participant, treat)) %>%
+  ## Combine data into a single variable (time/treat)
+  mutate(tx = paste(time, treat, sep = "_")) %>%
+  print()
+
+
+
+
+
+
+```
+
+
+
+```{r}
+
+
+get_prior(stglucose ~ 0 + tx + 
+            bs(min, df = 4):tx + 
+            (1 + bs(min, df = 4):time | participant), 
+                     data = compl_train_dat, 
+                     family = gaussian())
+
+
+
+p4 <- c(
+  
+               prior(normal(-1, 1.5), class = b, coef = "txT2_ctrl"),  
+                prior(normal(-1, 1.5), class = b, coef = "txT2_omega"),  
+                prior(normal(-1, 1.5), class = b, coef = "txT4_ctrl"),  
+                prior(normal(-1, 1.5), class = b, coef = "txT4_omega"),  
+               
+               
+               # Group/time priors for the splines
+               prior(normal(1, 1.5),    class = b, coef = "txT2_ctrl:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT2_ctrl:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT2_ctrl:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT2_ctrl:bsmindfEQ44"),
+               
+                 prior(normal(1, 1.5),  class = b, coef = "txT2_omega:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT2_omega:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT2_omega:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT2_omega:bsmindfEQ44"),
+               
+                 prior(normal(1, 1.5),  class = b, coef = "txT4_ctrl:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT4_ctrl:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT4_ctrl:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT4_ctrl:bsmindfEQ44"),
+               
+                 prior(normal(1, 1.5),  class = b, coef = "txT4_omega:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT4_omega:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT4_omega:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT4_omega:bsmindfEQ44"),
+               # 
+               prior(lkj(1), class = cor),
+               # The wigglyness SD sampled from exponential distribution
+               prior(exponential(2), class = sd),
+               prior(exponential(1), class = sigma))
+               
+               
+               
+
+validate_prior(p4,
+               stglucose ~ 0 + tx + 
+            bs(min, df = 4):tx + 
+            (1 + bs(min, df = 4):time | participant), 
+                     data = compl_train_dat, 
+                     family = gaussian())
+
+
+m4_pp <- brm(stglucose ~ 0 + tx + 
+            bs(min, df = 4):tx + 
+            (1 + bs(min, df = 4):time | participant),
+             # Priors
+             prior = p4,
+             file = "fits/ogtt-analysis/m4_pp", # Save the model
+             sample_prior = "only", # Sample only from the prior
+             data = compl_train_dat, 
+             family = gaussian(),
+             chains = 4, 
+             iter = 2000, 
+             warmup = 1000, 
+             control = list(adapt_delta = 0.95))
+
+## New data 
+
+nd <- expand_grid(min = seq(0, 120, 10), 
+                  participant = c(1, 2, 3, 4),
+                  time = c("T2", "T4")) %>%
+  mutate(treat = if_else(participant %in% c(1, 2), "ctrl", "omega"), 
+         tx = paste(time, treat, sep = "_")) %>%
+  print()
+
+
+
+
+
+
+
+preds_prior <- predictions(m4_pp, newdata = nd, 
+                           allow_new_levels = TRUE)
+
+
+posterior_draws(preds_prior) %>%
+  filter(drawid %in% 1:500) %>%
+  ggplot(aes(min, draw,
+             color = tx,
+             group = paste(participant, drawid))) + 
+  geom_line(alpha = 0.1) + 
+  
+  facet_grid(time ~ participant) +
+  
+  labs(title = "Prior predictive simulation",
+       x = "Sample time",
+       y = "Glucose (standardized)") 
+
+
+
+```
+
+
+
+```{r}
+
+
+
+m4 <- update(m4_pp, 
+             newdata = compl_train_dat, 
+             sample_prior = "no", # Sample from the posterior
+             file = "fits/ogtt-analysis/m4", 
+             iter = 4000, 
+             warmup = 1000, 
+             cores = 4,
+             control = list(adapt_delta = 0.95))
+
+
+
+plot(m4)
+print(m4)
+
+
+
+
+
+
+```
+
+
+
+```{r}
+
+
+
+
+
+
+# Predictions
+
+nd <- expand_grid(min = seq(0, 120, 5), 
+                  time = c("T2", "T4"), 
+                  treat = c("ctrl", "omega"), 
+                  participant = NA) %>%
+  mutate(tx = paste(time, treat, sep = "_")) %>%
+  print()
+
+
+
+preds <- predictions(m4, newdata = nd, re_formula = NA) 
+
+
+
+comp_df <- posterior_draws(preds) %>%
+  filter(drawid %in% 1:2000) %>%
+  select(drawid, min, draw, tx, participant) %>%
+  pivot_wider(names_from = tx, values_from = draw) %>%
+  
+  # Compare "groups" as within group differences between time points
+  # Compare differences over time between groups (tx_contrast)
+  mutate(ctrl = T4_ctrl - T2_ctrl, 
+         omega = T4_omega - T2_omega, 
+         tx_contrast = omega - ctrl) %>%
+  
+  pivot_longer(cols = T2_ctrl:tx_contrast) %>%
+   
+  print()
+
+  
+# Using the data we can calculate 95% credible intervals for the differences between groups.
+  
+sum_comp <- comp_df %>%  
+  # Group the data frame by sample time
+  group_by(min, name) %>%
+  # ... and calculate summary statistics for the differences
+  summarise(m = median(value, na.rm = TRUE), 
+            l95 = quantile(value, 0.025, na.rm = TRUE), 
+            u95 = quantile(value, 0.975, na.rm = TRUE), 
+            l50 = quantile(value, 0.25, na.rm = TRUE), 
+            u50 = quantile(value, 0.75, na.rm = TRUE)) 
+  
+  
+sum_comp %>%
+  filter(name %in% c("T2_omega", 
+                   "T4_omega", 
+                   "T2_ctrl", 
+                   "T4_ctrl")) %>%
+  separate(name, into = c("time", "treat")) %>%
+
+  ggplot(aes(min, m, fill = time)) + 
+  geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2) +
+   geom_ribbon(aes(ymin = l50, ymax = u50), alpha = 0.2) +
+  geom_line(aes(color = time)) + 
+  labs(x = "Sample time", y = "Blood glucose (standardized values)") + 
+  facet_wrap(~ treat)
+
+
+sum_comp %>%
+  filter(name %in% c("omega", 
+                    
+                   "ctrl")) %>%
+
+  ggplot(aes(min, m, fill = name)) + 
+  geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2) +
+   geom_ribbon(aes(ymin = l50, ymax = u50), alpha = 0.2) +
+  geom_line(aes(color = name)) + 
+  labs(x = "Sample time", y = "Blood glucose (standardized values)") + 
+  geom_hline(yintercept = 0, lty = 2) +
+  facet_wrap(~ name)
+
+
+sum_comp %>%
+  filter(name %in% c("tx_contrast")) %>%
+  
+  
+  
+  ggplot(aes(min, m), fill = "limegreen") + 
+  geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2, fill = "limegreen") +
+   geom_ribbon(aes(ymin = l50, ymax = u50), alpha = 0.2, fill = "limegreen") +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_line() + 
+  labs(x = "Sample time", y = "Blood glucose (standardized values)") 
+
+```
+
+
+
+
+## All time points
+
+
+```{r}
+# Data set 
+
+part_t4 <- AOData::idkeys %>%
+  filter(completed == "t4") %>%
+  pull(participant)
+
+
+
+compl_train_dat <- glucose_dat %>%
+  # Keep data only from time 1 and 2
+  filter(time %in% c("T1", "T2", "T4")) %>%
+  # Filter participants who have completed T2
+  filter(participant %in% part_t4) %>%
+  # Remove NAs -- might update this to allow for not completly missing data 
+  # to be imputed
+  filter(!is.na(glucose)) %>%
+  # Standardize glucose measurements
+  mutate(stglucose = (glucose - mean(glucose)) /sd(glucose)) %>%
+  ## Add treatment variable
+  inner_join(AOData::idkeys %>%
+  select(participant, treat)) %>%
+  ## Combine data into a single variable (time/treat)
+  mutate(tx = paste(time, treat, sep = "_")) %>%
+  print()
+
+
+
+
+
+
+```
+
+
+
+```{r}
+
+
+get_prior(stglucose ~ 0 + tx + 
+            bs(min, df = 4):tx + 
+            (1 + bs(min, df = 4):time | participant), 
+                     data = compl_train_dat, 
+                     family = gaussian())
+
+
+
+p5 <- c(
+                prior(normal(-1, 1.5), class = b, coef = "txT1_ctrl"),  
+                prior(normal(-1, 1.5), class = b, coef = "txT1_omega"),  
+                prior(normal(-1, 1.5), class = b, coef = "txT2_ctrl"),  
+                prior(normal(-1, 1.5), class = b, coef = "txT2_omega"),  
+                prior(normal(-1, 1.5), class = b, coef = "txT4_ctrl"),  
+                prior(normal(-1, 1.5), class = b, coef = "txT4_omega"),  
+               
+               
+               # Group/time priors for the splines
+               
+               prior(normal(1, 1.5),    class = b, coef = "txT1_ctrl:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT1_ctrl:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT1_ctrl:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT1_ctrl:bsmindfEQ44"),
+               
+                 prior(normal(1, 1.5),  class = b, coef = "txT1_omega:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT1_omega:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT1_omega:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT1_omega:bsmindfEQ44"),
+               
+               
+               
+               prior(normal(1, 1.5),    class = b, coef = "txT2_ctrl:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT2_ctrl:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT2_ctrl:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT2_ctrl:bsmindfEQ44"),
+               
+                 prior(normal(1, 1.5),  class = b, coef = "txT2_omega:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT2_omega:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT2_omega:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT2_omega:bsmindfEQ44"),
+               
+                 prior(normal(1, 1.5),  class = b, coef = "txT4_ctrl:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT4_ctrl:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT4_ctrl:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT4_ctrl:bsmindfEQ44"),
+               
+                 prior(normal(1, 1.5),  class = b, coef = "txT4_omega:bsmindfEQ41"),
+               prior(normal(0.5, 1.5),  class = b, coef = "txT4_omega:bsmindfEQ42"),
+               prior(normal(-1, 1.5),   class = b, coef = "txT4_omega:bsmindfEQ43"),
+               prior(normal(-0.5, 1.5), class = b, coef = "txT4_omega:bsmindfEQ44"),
+               # 
+               prior(lkj(1), class = cor),
+               # The wigglyness SD sampled from exponential distribution
+               prior(exponential(2), class = sd),
+               prior(exponential(1), class = sigma))
+               
+               
+               
+
+validate_prior(p5,
+               stglucose ~ 0 + tx + 
+            bs(min, df = 4):tx + 
+            (1 + bs(min, df = 4):time | participant), 
+                     data = compl_train_dat, 
+                     family = gaussian())
+
+
+m5_pp <- brm(stglucose ~ 0 + tx + 
+            bs(min, df = 4):tx + 
+            (1 + bs(min, df = 4):time | participant),
+             # Priors
+             prior = p5,
+             file = "fits/ogtt-analysis/m5_pp", # Save the model
+             sample_prior = "only", # Sample only from the prior
+             data = compl_train_dat, 
+             family = gaussian(),
+             chains = 4, 
+             iter = 2000, 
+             warmup = 1000, 
+             control = list(adapt_delta = 0.95))
+
+## New data 
+
+nd <- expand_grid(min = seq(0, 120, 10), 
+                  participant = c(1, 2, 3, 4),
+                  time = c("T1", "T2", "T4")) %>%
+  mutate(treat = if_else(participant %in% c(1, 2), "ctrl", "omega"), 
+         tx = paste(time, treat, sep = "_")) %>%
+  print()
+
+
+
+
+
+
+
+preds_prior <- predictions(m5_pp, newdata = nd, 
+                           allow_new_levels = TRUE)
+
+
+posterior_draws(preds_prior) %>%
+  filter(drawid %in% 1:500) %>%
+  ggplot(aes(min, draw,
+             color = tx,
+             group = paste(participant, drawid))) + 
+  geom_line(alpha = 0.1) + 
+  
+  facet_grid(time ~ participant) +
+  
+  labs(title = "Prior predictive simulation",
+       x = "Sample time",
+       y = "Glucose (standardized)") 
+
+
+
+```
+
+
+
+```{r}
+
+
+
+m5 <- update(m5_pp, 
+             newdata = compl_train_dat, 
+             sample_prior = "no", # Sample from the posterior
+             file = "fits/ogtt-analysis/m5", 
+             iter = 4000, 
+             warmup = 1000, 
+             cores = 4,
+             control = list(adapt_delta = 0.95))
+
+
+
+plot(m5)
+print(m5)
+
+
+
+
+
+
+```
+
+
+
+```{r}
+
+
+
+
+
+
+# Predictions
+
+nd <- expand_grid(min = seq(0, 120, 5), 
+                  time = c("T1", "T2", "T4"), 
+                  treat = c("ctrl", "omega"), 
+                  participant = NA) %>%
+  mutate(tx = paste(time, treat, sep = "_")) %>%
+  print()
+
+
+
+preds <- predictions(m5, newdata = nd, re_formula = NA) 
+
+
+
+comp_df <- posterior_draws(preds) %>%
+  filter(drawid %in% 1:2000) %>%
+  select(drawid, min, draw, tx, participant) %>%
+  pivot_wider(names_from = tx, values_from = draw) %>%
+  
+  # Compare "groups" as within group differences between time points
+  # Compare differences over time between groups (tx_contrast)
+  mutate(ctrl_train = T4_ctrl - T2_ctrl, 
+         omega_train = T4_omega - T2_omega,
+         ctrl_suppl = T2_ctrl - T1_ctrl,
+         omega_suppl = T2_omega - T1_omega,
+         ctrl_suppl_train = T4_ctrl - T1_ctrl,
+         omega_suppl_train = T4_omega - T1_omega,
+         tx_suppl = omega_suppl - ctrl_suppl,
+         tx_train = omega_train - ctrl_train, 
+         tx_suppl_train = omega_suppl_train - ctrl_suppl_train) %>%
+  pivot_longer(cols = T1_ctrl:tx_suppl_train) %>%
+   
+  print()
+
+  
+# Using the data we can calculate 95% credible intervals for the differences between groups.
+  
+sum_comp <- comp_df %>%  
+  # Group the data frame by sample time
+  group_by(min, name) %>%
+  # ... and calculate summary statistics for the differences
+  summarise(m = median(value, na.rm = TRUE), 
+            l95 = quantile(value, 0.025, na.rm = TRUE), 
+            u95 = quantile(value, 0.975, na.rm = TRUE), 
+            l50 = quantile(value, 0.25, na.rm = TRUE), 
+            u50 = quantile(value, 0.75, na.rm = TRUE)) 
+  
+  
+sum_comp %>%
+  filter(name %in% c("T2_omega", 
+                   "T4_omega", 
+                   "T2_ctrl", 
+                   "T4_ctrl", 
+                   "T1_omega", 
+                   "T1_ctrl")) %>%
+  separate(name, into = c("time", "treat")) %>%
+
+  ggplot(aes(min, m, fill = time)) + 
+  geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2) +
+   geom_ribbon(aes(ymin = l50, ymax = u50), alpha = 0.2) +
+  geom_line(aes(color = time)) + 
+  labs(x = "Sample time", y = "Blood glucose (standardized values)") + 
+  facet_wrap(~ treat)
+
+
+sum_comp %>%
+  filter(name %in% c("omega_suppl_train", 
+                    
+                   "ctrl_suppl_train")) %>%
+
+  ggplot(aes(min, m, fill = name)) + 
+  geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2) +
+   geom_ribbon(aes(ymin = l50, ymax = u50), alpha = 0.2) +
+  geom_line(aes(color = name)) + 
+  labs(x = "Sample time", y = "Blood glucose (standardized values)") + 
+  geom_hline(yintercept = 0, lty = 2) +
+  facet_wrap(~ name)
+
+
+sum_comp %>%
+  filter(name %in% c("tx_suppl_train", "tx_suppl", "tx_train")) %>%
+  
+  
+  
+  ggplot(aes(min, m), fill = "limegreen") + 
+  geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2, fill = "limegreen") +
+   geom_ribbon(aes(ymin = l50, ymax = u50), alpha = 0.2, fill = "limegreen") +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_line() + 
+  labs(x = "Sample time", y = "Blood glucose (standardized values)") +
+  facet_wrap(~ name)
+
+```
+
+
+### BMI and glucose tolerance test
+
+
+```{r}
+library(splines)
+
+pre_dat <- glucose_dat %>%
+  filter(time == "T1") %>%
+  inner_join(AOData::idkeys) %>%
+  
+  select(participant:treat, sex, bmi) %>%
+  
+  filter(!is.na(glucose)) %>%
+  mutate(stglucose = (glucose - mean(glucose)) / sd(glucose)) %>%
+  
+  print()
+
+
+
+
+get_prior(stglucose ~ 1 + bs(min, df = 4):bmi + (1 + bs(min, df = 4) | participant), 
+                     data = pre_dat, 
+                     family = gaussian())
+
+
+
+p6 <- c(
+  
+               prior(normal(-1, 1.5), class = Intercept),  
+               
+               prior(normal(1, 1.5), class = b, coef = "bsmindfEQ41:bmi"),
+               prior(normal(0.5, 1.5), class = b, coef = "bsmindfEQ42:bmi"),
+               prior(normal(-1, 1.5), class = b, coef = "bsmindfEQ43:bmi"),
+               prior(normal(-0.5, 1.5), class = b, coef = "bsmindfEQ44:bmi"),
+  
+            # The prior for the correlations between participant level regression parameters
+               prior(lkj(1), class = cor),
+               # The wigglyness SD, wigglyness is sampled from a exponential distribution
+               prior(exponential(2), class = sd),
+               # The prior for the residual variation
+               prior(exponential(1), class = sigma)
+               
+               
+  
+) 
+
+
+validate_prior(p6,
+               formula = stglucose ~ 1 + bs(min, df = 4):bmi + (1 + bs(min, df = 4) | participant),
+               data = pre_dat, 
+               family = gaussian())
+
+
+m6_pp <- brm(stglucose ~ 1 + bs(min, df = 4):bmi + (1 + bs(min, df = 4) | participant),
+             # Priors (including comments)
+             prior = p6,
+             file = "fits/ogtt-analysis/m6_pp", # Save the model
+             sample_prior = "only", # Sample only from the prior
+             data = pre_dat, 
+             family = gaussian(),
+             chains = 4, 
+             iter = 2000, 
+             warmup = 1000, 
+             control = list(adapt_delta = 0.95))
+
+preds_prior <- predictions(m6_pp, newdata = expand_grid(min = seq(0, 120, 10),
+                                                        bmi = c(min(pre_dat$bmi), 
+                                                                max(pre_dat$bmi)),
+                                                       participant = c(1, 2, 3, 4)), 
+                           allow_new_levels = TRUE)
+
+
+posterior_draws(preds_prior) %>%
+  filter(drawid %in% 1:500) %>%
+  ggplot(aes(min, draw, group = paste(participant, drawid, bmi))) + 
+  geom_line(alpha = 0.1) + 
+  
+  facet_wrap(~ participant) +
+  
+  labs(title = "Prior predictive simulation",
+       x = "Sample time",
+       y = "Glucose (standardized)") 
+
+
+```
+
+
+```{r}
+
+
+
+m6 <- update(m6_pp, 
+             newdata = pre_dat, 
+             sample_prior = "no", # Sample from the posterior
+             file = "fits/ogtt-analysis/m6", 
+             iter = 4000, 
+             warmup = 1000, 
+             save_pars = save_pars(all = TRUE),
+             cores = 4,
+             control = list(adapt_delta = 0.95))
+
+
+
+plot(m2)
+print(m2)
+
+
+
+```
+
+
+```{r}
+
+nd <- expand_grid(min = seq(0, 120, 5), 
+                  participant = pull(distinct(pre_dat,participant), participant)) 
+
+
+preds <- predictions(m2, newdata = nd, allow_new_levels = TRUE) 
+
+
+posterior_draws(preds) %>%
+  filter(drawid %in% 1:500) %>%
+  filter(participant %in% c("501", "503", "504", "506")) %>%
+  ggplot(aes(min, draw, group = paste0(participant,drawid))) + 
+  
+  
+  geom_line(alpha = 0.1, aes(color = as.factor(participant))) + 
+  
+  geom_point(data = filter(pre_dat, participant %in% c("501", "503", "504", "506")), 
+             aes(min, stglucose, group = NULL, 
+                 fill = as.factor(participant)), 
+             alpha = 1, shape = 21, size = 2) +
+  
+  geom_smooth(method="lm", se=FALSE, color = "black", linetype = "dashed",
+              aes(min, stglucose, group = participant),
+             data = filter(pre_dat, participant %in% c("501", "503", "504", "506")), 
+   formula =  y ~ splines::bs(x, df = 4)) +
+  
+  
+  labs(title = "Posterior predictive simulation (Global and participant specific smooths)",
+       subtitle = "Posterior draws as lines per participant, data as points",
+       x = "Sample time (min)",
+       y = "Glucose (Standardized units)") + 
+  theme_classic()  +  facet_wrap(~ participant)
+
+
+
+
+```
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
