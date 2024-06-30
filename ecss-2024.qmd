@@ -1,0 +1,1795 @@
+---
+title: "ECSS 2024: Relative fat mass is not associated with muscle adaptations to resistance training"
+author: Hamarsland, Hammarström
+format:
+  html:
+    embed-resources: true
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r}
+#| include: false
+
+# Packages
+library(tidyverse)
+library(AOData)
+library(lme4)
+library(gt)
+library(marginaleffects)
+library(cowplot)
+library(ggtext)
+
+
+# Settings for figures
+
+colors <- c("#e66101", "#fdb863","#b2abd2","#5e3c99")
+basesize <- 18
+
+
+
+```
+
+
+
+
+## Participants
+
+```{r}
+#| label: "fig-fig1"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 8
+#| fig-cap: "Participants included in per protocol analysis (completed *T4*). Bars in the histogram are stacked."
+
+
+
+part <- AOData::idkeys %>%
+  filter(completed == "t4")
+
+
+## Descriptives data 
+
+dat <- AOData::bodycomp %>%
+  select(participant, time, lean.whole, BMC.whole, fat.whole)  %>%
+  mutate(weight = lean.whole + BMC.whole + fat.whole) %>%
+  inner_join(part %>% mutate(participant = as.character(participant))) %>%
+  filter(time == "T1") %>%
+  ## Calculate height based on weight (DXA) and BMI 
+  mutate(height = 100 * sqrt((weight/1000) / bmi)) %>%
+  ## Calculate relative lean and fat
+  mutate(lean.rel = 100 * (lean.whole / weight), 
+         fat.rel = 100 * (fat.whole/weight), 
+         # Weight in kg
+         weight = weight / 1000) %>%
+  select(participant, 
+         treat, 
+         completed, 
+         sex, 
+         age, 
+         height, 
+         weight, 
+         lean.rel, 
+         fat.rel, 
+         bmi) %>%
+  pivot_longer(cols = age:bmi)
+
+## Summarise descriptives
+dat_sum <- dat %>%
+  summarise(.by = c(sex, name), 
+            m = mean(value), 
+            s = sd(value), 
+            n = n()) %>%
+  mutate(stat = paste0(sprintf("%.1f", round(m, 1)), 
+                       " (", 
+                       sprintf("%.1f", round(s, 1)), 
+                       ")")) %>%
+  mutate(name = factor(name, levels = c("age", 
+                                        "height", 
+                                        "weight", 
+                                        "bmi", 
+                                        "lean.rel", 
+                                        "fat.rel"), 
+                       labels = c("Age (yrs)", 
+                                  "Stature (cm)", 
+                                  "Body mass (kg)", 
+                                  "Body mass index", 
+                                  "Lean mass (%)", 
+                                  "Fat mass (%)")), 
+         sex = factor(sex, levels = c("f", "m"), 
+                      labels = c("Female", "Male"))) %>%
+  mutate(.by = name, 
+         pos = mean(m) + 1 * mean(s)) %>%
+    mutate(.by = sex, 
+         sex_n = paste(sex, "n = ",mean(n)))
+
+
+
+
+p <- dat %>%
+   mutate(name = factor(name, levels = c("age", 
+                                        "height", 
+                                        "weight", 
+                                        "bmi", 
+                                        "lean.rel", 
+                                        "fat.rel"), 
+                       labels = c("Age (yrs)", 
+                                  "Stature (cm)", 
+                                  "Body mass (kg)", 
+                                  "Body mass index", 
+                                  "Lean mass (%)", 
+                                  "Fat mass (%)")), 
+         sex = factor(sex, levels = c("f", "m"), 
+                      labels = c("Female", "Male"))) %>%
+  mutate(.by = c(sex,name), 
+         sex_n = paste(sex, "n = ",n())) %>%
+  
+  
+  ggplot(aes(value, color = sex_n, fill = sex_n)) + 
+  geom_histogram(bins = 20, color = "gray10") + 
+  
+  geom_richtext(data = filter(dat_sum, sex == "Male"), 
+            aes(x = -Inf, y = Inf, color = sex_n, label = paste("&#9794;",stat)), 
+                hjust = -1.6, vjust = 1, 
+              show.legend = FALSE,
+                 fill = NA, label.color = NA, # remove background and outline
+    label.padding = grid::unit(rep(0, 4), "pt")) + # remove padding) +
+   geom_richtext(data = filter(dat_sum, sex == "Female"), 
+               aes(x = -Inf, y = Inf, color = sex_n, label = paste("&#9792;",stat)),
+               show.legend = FALSE,
+                hjust = -1.6, vjust = 2.5, 
+                 fill = NA, label.color = NA, # remove background and outline
+    label.padding = grid::unit(rep(0, 4), "pt")) + # remove padding) 
+  
+  
+  scale_color_manual(values = c(colors[1], colors[3])) + 
+ scale_fill_manual(values = c(colors[1], colors[3])) +  
+  
+  scale_y_continuous(limits = c(0, 26)) +
+  facet_wrap(~ name, scales = "free") + 
+  labs(y = "Count") +
+  
+  
+  theme_classic(base_size = basesize) + 
+  theme(strip.background = element_rect(color = "white"), 
+        strip.text = element_text(hjust = 0), 
+        legend.title = element_blank(), 
+        axis.title.x = element_blank(), 
+        legend.position = "bottom")
+  
+  p
+
+
+ggsave("ecss-2024-figures/fig1.pdf", 
+       p,
+       width = 24, 
+       device = cairo_pdf,
+       height = 16, units = "cm")
+
+```
+
+
+
+
+
+
+```{r}
+#| label: tbl-participants
+#| message: false
+#| warning: false
+#| echo: false
+#| tbl-cap: "Characteristics of participants completing T4. Data are presented as Mean (SD)."
+
+
+
+
+
+
+## Participants
+# Only from completed to T4
+part <- AOData::idkeys %>%
+  filter(completed == "t4")
+
+
+part %>%
+  select(participant:bmi) %>%
+  pivot_longer(cols = c(age, bmi)) %>%
+  
+  
+  summarise(.by = c(treat, sex, name),
+            m = mean(value), 
+            s = sd(value), 
+            n = n()) %>%
+  
+  pivot_wider(names_from = name, values_from = c(m,s,n)) %>%
+  select(-n_age) %>%
+  pivot_wider(values_from = m_age:n_bmi,
+              names_from = treat) %>%
+  mutate(sex = if_else(sex == "m", "Male", "Female")) %>%
+  
+
+  
+  
+  gt() %>%
+  
+  fmt_number(columns = starts_with("m"), decimals = 1) %>%
+  fmt_number(columns = starts_with("s"), decimals = 1) %>%
+  
+  cols_merge(columns = c("m_age_omega", "s_age_omega"), 
+             pattern = "<<{1}>> <<({2})>>") %>%
+    cols_merge(columns = c("m_bmi_omega", "s_bmi_omega"), 
+             pattern = "<<{1}>> <<({2})>>") %>%
+  
+    cols_merge(columns = c("m_age_ctrl", "s_age_ctrl"), 
+             pattern = "<<{1}>> <<({2})>>") %>%
+    cols_merge(columns = c("m_bmi_ctrl", "s_bmi_ctrl"), 
+             pattern = "<<{1}>> <<({2})>>") %>%
+  
+  
+  cols_move(m_bmi_ctrl, m_age_ctrl) %>%
+  cols_move(n_bmi_ctrl, m_bmi_ctrl) %>%
+  
+  cols_label(sex = "Sex") %>%
+  tab_spanner(label = "Placebo", 
+              columns = c(m_age_ctrl,m_bmi_ctrl,n_bmi_ctrl)) %>%
+    tab_spanner(label = "Omega-3", 
+              columns = c(m_age_omega,m_bmi_omega,n_bmi_omega)) %>%
+  cols_label(m_age_ctrl = "Age", 
+             m_bmi_ctrl = "BMI", 
+             n_bmi_ctrl = "n", 
+             m_age_omega = "Age", 
+             m_bmi_omega = "BMI", 
+             n_bmi_omega = "n" )
+  
+  
+            
+
+
+
+```
+
+
+
+```{r}
+#| label: tbl-participants-2
+#| message: false
+#| warning: false
+#| echo: false
+#| tbl-cap: "Characteristics of participants completing T4. Data are presented as Mean (SD)."
+
+
+part %>%
+  select(participant:bmi) %>%
+  pivot_longer(cols = c(age, bmi)) %>%
+  
+  
+  summarise(.by = c(sex, name),
+            m = mean(value), 
+            s = sd(value), 
+            n = n()) %>%
+  
+  pivot_wider(names_from = name, values_from = c(m,s,n)) %>%
+  select(-n_age) %>%
+
+  mutate(sex = if_else(sex == "m", "Male", "Female")) %>%
+  
+   gt() %>%
+  
+  fmt_number(columns = starts_with("m"), decimals = 1) %>%
+  fmt_number(columns = starts_with("s"), decimals = 1) %>%
+  
+  cols_merge(columns = c("m_age", "s_age"), 
+             pattern = "<<{1}>> <<({2})>>") %>%
+    cols_merge(columns = c("m_bmi", "s_bmi"), 
+             pattern = "<<{1}>> <<({2})>>") %>%
+
+
+
+  
+  cols_label(sex = "Sex") %>%
+
+
+  cols_label(m_age = "Age", 
+             m_bmi= "BMI", 
+             n_bmi = "n") 
+  
+  
+
+
+
+```
+
+
+```{r}
+#| include: false
+
+
+
+## Data preparation
+
+## Vastus lateralis data 
+dat_fm <-   part %>% 
+  mutate(participant = as.character(participant)) %>%
+  inner_join(AOData::bodycomp) %>%
+
+  
+  mutate(rel.fm = 100 * (fat.whole / (fat.whole + lean.whole + BMC.whole))) %>%
+  
+  select(participant, time, sex, bmi, rel.fm) %>%
+  inner_join(mutate(AOData::thickness, participant = as.character(participant))) %>%
+  
+  select(-VIthick) %>%
+  
+  pivot_wider(names_from = time, values_from = c(VLthick, rel.fm), 
+              values_fn = mean)
+
+
+
+
+
+
+
+
+```
+
+
+## Training conditions and outcome agreement 
+
+
+```{r}
+#| label: "fig-fig2"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 4
+#| fig-width: 9
+#| fig-cap: !expr 'glue::glue("Association between training-induced relative changes in response to 10RM and 30RM training conditions. Leg lean mass, {cres_lean}; Average unilateral strength, {cres_str}; Vastus lateralis thickness, {cres_vl}.")'
+
+
+# Vastus thickness
+dat_vl <- dat_fm %>%
+  
+  mutate(change = 100 * ((VLthick_T4 / VLthick_T2) -1)) %>%
+  filter(condition != "RMNA") %>%
+  
+  mutate() %>%
+  
+  
+  select(participant, condition, change) %>%
+  pivot_wider(names_from = condition, 
+              values_from = change)
+
+
+
+## (Average) Strength data 
+dat_str <- AOData::strength %>%
+  
+  inner_join(part) %>%
+  
+  select(participant:mag) %>%
+  filter(time %in% c("T2", "T4"), 
+         condition != "RMNA", 
+         mag > 5) %>%
+ 
+  mutate(.by = exercise, 
+         mag = mag/max(mag)) %>%
+  summarise(.by = c(participant, condition, time), 
+            mag = mean(mag)) %>%
+  
+
+  pivot_wider(names_from = time, values_from = mag) %>%
+  mutate(change_str = 100 * ((T4/T2)-1), 
+         participant = as.character(participant)) %>%
+  
+  inner_join(part %>% 
+               mutate(participant = as.character(participant)) %>%
+               inner_join(AOData::bodycomp) %>%
+               
+               
+               
+               
+               mutate(rel.fm = 100 * (fat.whole / (fat.whole + lean.whole + BMC.whole))) %>%
+              
+               filter(time == "T2") %>%
+               select(participant, rel.fm, sex)) %>%
+  select(participant, condition, change_str) %>%
+  pivot_wider(names_from = condition, values_from = change_str) 
+  
+
+## Lean leg mass data
+dat_lean <- part %>% 
+  mutate(participant = as.character(participant)) %>%
+  inner_join(AOData::bodycomp) %>%
+  
+  mutate(rel.fm = 100 * (fat.whole / (fat.whole + lean.whole + BMC.whole))) %>%
+  
+  select(participant, time, sex, bmi, rel.fm, lean.right_leg, lean.left_leg) %>%
+  pivot_longer(cols = lean.right_leg:lean.left_leg, 
+               values_to = "lean_leg", 
+               names_to = "leg") %>%
+  mutate(leg = if_else(leg == "lean.right_leg", "R", "L")) %>%
+
+  inner_join(mutate(AOData::thickness, participant = as.character(participant))) %>%
+  select(-VIthick) %>%
+
+  filter(time %in% c("T2", "T4")) %>%
+  pivot_wider(names_from = time, 
+              values_from = c(VLthick, lean_leg, rel.fm)) %>%
+  
+  mutate(change_lean = 100 * ((lean_leg_T4 / lean_leg_T2)-1), 
+         abs_change_lean = lean_leg_T4 - lean_leg_T2,
+         change_thick = VLthick_T4- VLthick_T2)  %>%
+ 
+  filter(condition != "RMNA") %>%
+
+
+
+  select(participant, condition, change_lean) %>%
+  pivot_wider(names_from = condition, values_from = change_lean) 
+
+
+## Correlation coefficient
+ct_vl <- cor.test(dat_vl$RM10, dat_vl$RM30)
+ct_str <- cor.test(dat_str$RM10, dat_str$RM30)
+ct_lean <- cor.test(dat_lean$RM10, dat_lean$RM30)
+
+
+cres_vl <-paste0("r = ", 
+             round(ct_vl$estimate,2), 
+             ", 95% CI: [",
+             round(ct_vl$conf.int[1],2), 
+             ", ",
+             round(ct_vl$conf.int[2],2), 
+             "]")
+
+cres_str <-paste0("r = ", 
+             round(ct_str$estimate,2), 
+             ", 95% CI: [",
+             round(ct_str$conf.int[1],2), 
+             ", ",
+             round(ct_str$conf.int[2],2), 
+             "]")
+
+cres_lean <-paste0("r = ", 
+             round(ct_lean$estimate,2), 
+             ", 95% CI: [",
+             round(ct_lean$conf.int[1],2), 
+             ", ",
+             round(ct_lean$conf.int[2],2), 
+             "]")
+
+
+p <- dat_vl %>%
+  pivot_longer(cols = RM10:RM30) %>%
+  mutate(measure = "Vastus lateralis thickness") %>%
+  bind_rows(dat_str %>%
+  pivot_longer(cols = RM10:RM30) %>%
+  mutate(measure = "Average unilateral strength")) %>%
+  bind_rows(dat_lean %>%
+  pivot_longer(cols = RM10:RM30) %>%
+  mutate(measure = "Leg lean mass")) %>%
+  pivot_wider(names_from = name, values_from = value) %>%
+  
+  mutate(measure = factor(measure, levels = c("Vastus lateralis thickness", 
+                                              "Leg lean mass", 
+                                              "Average unilateral strength"))) %>%
+
+
+  ggplot(aes(RM10, RM30, change)) + 
+  
+    geom_abline(intercept = 0, slope = 1, 
+                lty = 2, color = "gray40") + 
+  
+  geom_point(shape = 21, 
+             fill = colors[1], 
+             size = 2.5) + 
+
+  
+  annotate("text", x = 45, y = 42, label = "y = x", angle = 45) +
+  
+  scale_y_continuous(limits = c(-10, 55)) +
+  scale_x_continuous(limits = c(-10, 55)) +
+  
+  labs(x = "Relative change in 10RM (%)", 
+       y = "Relative change in 30RM (%)") +
+  
+  theme_classic(base_size = basesize) +
+  
+  facet_wrap(~ measure) + 
+  theme(strip.text = element_text(hjust = 0), 
+        strip.background = element_rect(color = "white"))
+  
+
+
+ggsave("ecss-2024-figures/fig2.pdf", 
+       p,
+       width = 24, 
+       height = 10, units = "cm")
+
+
+p
+
+```
+
+
+
+
+### Effects of baseline relative fat mass and training condition on Vastus lateralis thickness
+
+
+```{r}
+#| label: "fig-fig3"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: !expr 'glue::glue("Differences between training conditions in training-induced vastus lateralis thickness (mm). {diff}. Accounting for baseline VL thickness and sex.")'
+
+
+
+dat <- dat_fm %>%
+  
+  mutate(change = VLthick_T4 - VLthick_T2) %>%
+  filter(condition != "RMNA") %>%
+  
+  mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                            labels = c("10RM", "30RM")))
+
+
+
+## Calculate differences 
+
+m <- lmerTest::lmer(change ~ VLthick_T2 + condition + sex + (1|participant), 
+          data = dat)
+
+
+## Averages
+
+avg_dat <- data.frame(avg_predictions(m, by = c("condition"), 
+                           re.form = NA))
+
+
+
+
+diff <- paste0("Mean difference 30RM vs. 10RM: ", 
+               round(coef(summary(m))[3,1],2), 
+               " mm, 95% CI: [",
+               round(confint(m)[5,1],2), 
+               ", ",
+               round(confint(m)[5,2],2), 
+               "], p = ", 
+               round(coef(summary(m))[3,5],3))
+
+
+
+p <- dat %>%
+  
+  
+  ggplot(aes(condition, change, size = rel.fm_T2, fill = condition)) +
+  
+  
+  geom_hline(yintercept = 0, lty = 2, 
+             color = "gray") +
+  
+  geom_point(position = position_jitter(width = 0.2), 
+             alpha = 0.2, shape = 21) + 
+  
+     geom_errorbar(data = filter(avg_dat, condition == "10RM"), 
+             aes(condition, estimate, size = NULL, ymin = conf.low, 
+                 ymax = conf.high),
+            width = 0, size= 0.5,
+             position = position_nudge(x = -0.3)) +
+  
+  geom_point(data = filter(avg_dat, condition == "10RM"), 
+             aes(condition, estimate, size = NULL),
+             size = 3,shape = 21,
+             position = position_nudge(x = -0.3)) +
+  
+     geom_errorbar(data = filter(avg_dat, condition == "30RM"), 
+             aes(condition, estimate, size = NULL, ymin = conf.low, 
+                 ymax = conf.high),
+            width = 0, size= 0.5,
+             position = position_nudge(x = 0.3)) +
+  
+  geom_point(data = filter(avg_dat, condition == "30RM"), 
+             aes(condition, estimate, size = NULL),
+             size = 3,shape = 21,
+             position = position_nudge(x = 0.3)) +
+
+  
+  scale_fill_manual(values = c("orange", "orchid"), 
+                               guide = "none") + 
+  labs(size = "Baseline relative\nfat mass (%)", 
+       y = "Vastus lateralis\nthickness change (mm)", 
+       x = "Training condition") +
+  
+  
+  theme_classic(base_size = basesize)
+
+p
+
+
+ggsave("ecss-2024-figures/fig3.pdf", 
+       p,
+       width = 26, 
+       height = 18, units = "cm")
+
+```
+
+
+
+```{r}
+#| label: "fig-fig4"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 5
+#| fig-width: 6
+#| fig-cap: !expr 'glue::glue("Association between baseline relative fat mass and vastus lateralis thickness change. For every %-point increase in baseline relative fat mass, VL thickness was estimated to be reduced by {relfm_eff}. Estimates are conditional on sex and baseline VL thickness. Duplicate observations (training conditions) from participants are accounted for in a mixed effects model.")'
+
+
+
+dat <- dat_fm %>%
+  
+  mutate(change = 100 * ((VLthick_T4 / VLthick_T2)-1)) %>%
+  filter(condition != "RMNA") %>%
+  
+  mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                            labels = c("10RM", "30RM")))
+
+
+
+## Model without interaction
+
+m2 <- lmerTest::lmer(VLthick_T4 ~ rel.fm_T2 + VLthick_T2 + sex + (1|participant), 
+                    data = dat)
+
+# Model summary ###############
+relfm_eff <- paste0(round(coef(summary(m2))[2,1],3), 
+                    " mm. 95% CI: [",
+                    round(confint(m2, method = "profile")[4,1], 3), 
+                    ", ",
+                    round(confint(m2, method = "profile")[4,2], 3),
+                    "], p = ", 
+                    round(coef(summary(m2))[2,5],3),
+                    ".")
+
+
+
+
+preds2 <- predictions(m2, 
+            newdata = expand_grid(rel.fm_T2 = seq(from = 18, to = 64, by = 4), 
+                                  VLthick_T2 = seq(from = min(dat$VLthick_T2), 
+                                                   to = max(dat$VLthick_T2),
+                                                   length.out = 12),
+                                  sex = c("m", "f"),
+                                  participant = NA), 
+            by = c("rel.fm_T2","VLthick_T2"),
+            re.form = NA) %>%
+  data.frame() 
+
+p <- dat %>%
+
+  ggplot(aes(VLthick_T2, VLthick_T4)) + 
+  
+  geom_point(shape = 21, 
+             fill = colors[1], 
+             size = 2) + 
+  
+  geom_line(data = preds2, 
+            aes(x = VLthick_T2, 
+                y = estimate, 
+             
+                color = rel.fm_T2, 
+                group = rel.fm_T2), 
+            linewidth = 1) + 
+  geom_abline(intercept = 0, 
+              slope = 1, 
+              lty = 2, 
+              color = "gray50") + 
+  annotate("text", x = 20, y = 18.5, label = "No growth", 
+           color = "gray50", angle = 45) +
+  theme_classic(base_size = basesize) + 
+  labs(x = "Baseline Vastus\nlateralis thickness (mm)", 
+       y = "Post-intervention vastus\n lateralis thickness (mm)", 
+       color = "Baseline relative\nfat mass (%)") + 
+
+  theme(strip.background = element_rect(color = "white"), 
+        strip.text = element_text(hjust = 0))
+  
+
+p
+
+ggsave("ecss-2024-figures/fig4.pdf", 
+       p,
+       width = 20, 
+       height = 16, units = "cm")
+
+
+```
+
+
+```{r}
+#| label: "fig-fig5"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 12
+#| fig-cap: !expr 'glue::glue("Association between baseline relative fat mass and vastus lateralis thickness change. For every %-point increase in baseline relative fat mass, training-induced change in VL thickness was estimated to be reduced by {relfm_eff_change}. Each participants contributes duplicate measures to the model (training conditions), these are accounted for in a mixed-effects model that also accounts for sex and baseline VL thickness.")'
+
+
+
+dat <- dat_fm %>%
+  
+  mutate(change = 100 * ((VLthick_T4 / VLthick_T2)-1)) %>%
+  filter(condition != "RMNA") %>%
+  
+  mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                            labels = c("10RM", "30RM")))
+
+
+
+
+m <- lmerTest::lmer(change ~ VLthick_T2 + rel.fm_T2 + sex + (1|participant), data = dat)
+
+
+
+
+relfm_eff_change <- paste0("Average : ", 
+               round(coef(summary(m))[3,1],2), 
+               " mm, 95% CI: [",
+               round(confint(m)[5,1],2), 
+               ", ",
+               round(confint(m)[5,2],2), 
+               "], p = ", 
+               round(coef(summary(m))[3,5],3))
+
+
+preds <- predictions(m, 
+            newdata = expand_grid(rel.fm_T2 = seq(from = 18, to = 64, by = 2), 
+                                  condition = c("10RM", "30RM"), 
+                                  VLthick_T2 = mean(dat$VLthick_T2), 
+                                  participant = NA, 
+                                  sex = c("m", "f")), 
+            re.form = NA) %>%
+  data.frame() 
+
+
+p <- dat %>%
+  
+  
+  ggplot(aes(rel.fm_T2, change, fill = condition)) +
+  
+
+  geom_hline(yintercept = 1, 
+             lty = 2, 
+             color = "gray") +
+  
+  
+  geom_point(alpha = 0.5, 
+             size = 3,
+             shape = 21) + 
+  ## Predictions
+  geom_line(data = filter(preds,sex == "m"), 
+            aes(rel.fm_T2, estimate)) +
+  ## errors
+  geom_ribbon(data = filter(preds,sex == "m"),
+              aes(rel.fm_T2, 
+                  estimate, 
+                  ymin = conf.low, 
+                  ymax = conf.high, 
+                  ), 
+              fill = "gray50", 
+              alpha = 0.2) +
+  
+  
+  scale_fill_manual(values = c(colors[2], colors[3])) + 
+  labs(
+       y = "Vastus lateralis\nthickness change (%)", 
+       x = "Baseline relative\nfat mass (%)", 
+       fill = "Training\ncondition") +
+
+  theme_classic(base_size = basesize)
+
+
+
+p
+
+
+ggsave("ecss-2024-figures/fig5.pdf", 
+       p,
+       width = 26, 
+       height = 18, units = "cm")
+
+
+
+```
+
+
+## Leg lean mass (DXA)
+
+```{r}
+#| label: "fig-fig6"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: !expr 'glue::glue("Association between baseline relative fat mass and leg lean mass change. For every %-point increase in baseline relative fat mass, training-induced change leg lean mass was estimated to be affected by {relfm_eff_change}. Each participants contributes duplicate measures to the model (training conditions), these are accounted for in a mixed-effects model that also accounts for sex and baseline lean mass.")'
+
+
+
+
+dat <- part %>% 
+  mutate(participant = as.character(participant)) %>%
+  inner_join(AOData::bodycomp) %>%
+  
+  mutate(rel.fm = 100 * (fat.legs / (fat.legs + lean.legs + BMC.legs))) %>%
+  
+  select(participant, time, sex, bmi, rel.fm, lean.right_leg, lean.left_leg) %>%
+  pivot_longer(cols = lean.right_leg:lean.left_leg, 
+               values_to = "lean_leg", 
+               names_to = "leg") %>%
+  mutate(leg = if_else(leg == "lean.right_leg", "R", "L")) %>%
+
+  inner_join(mutate(AOData::thickness, participant = as.character(participant))) %>%
+  select(-VIthick) %>%
+
+  filter(time %in% c("T2", "T4")) %>%
+  pivot_wider(names_from = time, 
+              values_from = c(VLthick, lean_leg, rel.fm)) %>%
+  
+  mutate(change_lean = 100 * ((lean_leg_T4 / lean_leg_T2)-1), 
+         abs_change_lean = lean_leg_T4 - lean_leg_T2,
+         change_thick = VLthick_T4- VLthick_T2)  %>%
+ 
+  filter(condition != "RMNA") %>%
+
+  mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                            labels = c("10RM", "30RM"))) 
+
+
+
+m <- lmerTest::lmer(change_lean ~ scale(lean_leg_T2) + rel.fm_T2 + sex + (1|participant), 
+                    data = dat)
+
+
+relfm_eff_change <- paste0("Average : ", 
+               round(coef(summary(m))[3,1],2), 
+               " mm, 95% CI: [",
+               round(confint(m)[5,1],2), 
+               ", ",
+               round(confint(m)[5,2],2), 
+               "], p = ", 
+               round(coef(summary(m))[3,5],3))
+
+
+preds <- predictions(m, 
+            newdata = expand_grid(rel.fm_T2 = seq(from = 18, to = 64, by = 2), 
+                                  condition = c("10RM", "30RM"), 
+                                  lean_leg_T2 = mean(dat$lean_leg_T2), 
+                                  participant = NA, 
+                                  sex = c("m", "f")), 
+            re.form = NA) %>%
+  data.frame() 
+
+  
+p <- dat %>%
+  ggplot(aes(rel.fm_T2, change_lean, fill = condition)) +
+  
+  
+  geom_hline(yintercept = 1, 
+             lty = 2, 
+             color = "gray") +
+  
+  
+  geom_point(alpha = 0.5, 
+             size = 3,
+             shape = 21) + 
+  
+  
+   ## Predictions
+  geom_line(data = filter(preds,sex == "m"), 
+            aes(rel.fm_T2, estimate)) +
+  ## errors
+  geom_ribbon(data = filter(preds,sex == "m"),
+              aes(rel.fm_T2, 
+                  estimate, 
+                  ymin = conf.low, 
+                  ymax = conf.high, 
+                  ), 
+              fill = "gray50", 
+              alpha = 0.2) +
+  
+  
+  
+  scale_fill_manual(values = c("orange", "orchid")) + 
+  labs(
+    y = "Leg lean mass\n change (%)", 
+    x = "Baseline relative\nfat mass (%)") +
+  
+  
+  
+  theme_classic(base_size = basesize) +
+  theme( 
+        legend.title = element_blank())
+
+
+p
+
+
+ggsave("ecss-2024-figures/fig6.pdf", 
+       p,
+       width = 26, 
+       height = 18, units = "cm")
+
+
+```
+
+
+```{r}
+#| label: "fig-fig7"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: !expr 'glue::glue("Average difference between training conditions in leg lean mass: {diff_lean_cond}")'
+
+
+
+
+m <- lmerTest::lmer(abs_change_lean ~ scale(lean_leg_T2) + condition  + sex + (1|participant), 
+          data = dat)
+
+
+
+## Averages
+
+avg_dat <- data.frame(avg_predictions(m, by = c("condition"), 
+                           re.form = NA))
+
+
+
+diff_lean_cond <- paste0("Mean difference 30RM vs. 10RM: ", 
+               round(coef(summary(m))[3,1],2), 
+               " g, 95% CI: [",
+               round(confint(m)[5,1],2), 
+               ", ",
+               round(confint(m)[5,2],2), 
+               "], p = ", 
+               round(coef(summary(m))[3,5],3))
+
+
+
+p <- dat %>% 
+  ggplot(aes(condition, abs_change_lean, size = rel.fm_T2, fill = condition)) +
+  
+  
+  geom_hline(yintercept = 0, lty = 2, 
+             color = "gray") +
+  
+    
+     geom_errorbar(data = filter(avg_dat, condition == "10RM"), 
+             aes(condition, estimate, size = NULL, ymin = conf.low, 
+                 ymax = conf.high),
+            width = 0, size= 0.5,
+             position = position_nudge(x = -0.3)) +
+  
+  geom_point(data = filter(avg_dat, condition == "10RM"), 
+             aes(condition, estimate, size = NULL),
+             size = 3,shape = 21,
+             position = position_nudge(x = -0.3)) +
+  
+     geom_errorbar(data = filter(avg_dat, condition == "30RM"), 
+             aes(condition, estimate, size = NULL, ymin = conf.low, 
+                 ymax = conf.high),
+            width = 0, size= 0.5,
+             position = position_nudge(x = 0.3)) +
+  
+  geom_point(data = filter(avg_dat, condition == "30RM"), 
+             aes(condition, estimate, size = NULL),
+             size = 3,shape = 21,
+             position = position_nudge(x = 0.3)) +
+  
+  
+  geom_point(position = position_jitter(width = 0.2), 
+             alpha = 0.2, 
+             shape = 21) + 
+  
+  scale_fill_manual(values = c("orange", "orchid"), 
+                    guide = "none") + 
+  labs(size = "Baseline relative\nfat mass (%)", 
+       y = "Leg lean mass\n change (g)", 
+       x = "Training condition") +
+  
+  
+  theme_classic(base_size = basesize)
+  
+  
+  p
+
+
+ggsave("ecss-2024-figures/fig7.pdf", 
+       p,
+       width = 26, 
+       height = 18, units = "cm")
+  
+  
+
+  
+  
+
+```
+
+
+## Strength
+
+```{r}
+#| label: "fig-fig8"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: !expr 'glue::glue("Average difference between training conditions in unilateral strength. Overall benefit of the 10RM condition. Paired comparisons between conditions in change scores after controlling for baseline values and sex.")'
+
+
+
+### Strength #########################
+
+### Strength model ##############
+
+
+
+str_dat <- AOData::strength %>%
+  
+  inner_join(part) %>%
+  
+  select(participant:mag, sex) %>%
+  filter(time %in% c("T2", "T4"), 
+         condition != "RMNA") %>%
+  
+
+  
+  
+  pivot_wider(names_from = time, values_from = mag) %>%
+  
+  filter(T2 > 5, T4 > 0) %>%
+  
+  mutate(change = log(T4) - log(T2), 
+         pre = log(T2) -  mean(log(T2)), 
+         .by = exercise) 
+
+
+exercises <- unique(str_dat$exercise)
+preds_single <- list()
+compr <- list()
+
+for(i in seq_along(exercises))  {
+  
+  dat <- str_dat %>%
+    filter(exercise == exercises[i])
+  
+  
+  mstr <- lmerTest::lmer(change ~ condition + pre + sex + (1|participant), 
+               dat = dat) 
+  
+  
+  conf <- confint(mstr)
+  
+  
+  compr[[i]] <- cbind(data.frame(coef(summary(mstr)), row.names = NULL)[2,], data.frame(lwr = conf[4,1], upr = conf[4,2])) %>%
+    mutate(exercise = exercises[i])
+        
+       
+        
+  
+  preds_single[[i]] <- predictions(mstr, newdata = expand_grid(condition = c("RM10", "RM30"), 
+                                                   pre = 0, 
+                                                   sex = c("m", "f"),
+                                                   participant = NULL), 
+                                   by = "condition",
+                       re.form=NA) %>%
+  
+  
+
+  
+  
+    data.frame() %>%
+    mutate(change = 100 * (exp(estimate)-1), 
+           lwr = 100 * (exp(conf.low)-1), 
+           upr = 100 * (exp(conf.high)-1)) %>%
+    select(condition, change, lwr, upr) %>%
+    mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                              labels = c("10RM", "30RM")), 
+           exercise = exercises[i])
+  
+  
+  
+}
+
+
+preds_single <- bind_rows(preds_single) %>%
+  mutate(exercise = factor(exercise, levels = c("legext", "legpress", "isom", "isok60", "isok240"), 
+                           labels = c("*Leg extension (1RM)*", 
+                                      "*Leg press (1RM)*", 
+                                      "*Isometric leg exptension*", 
+                                      "*Isokinetic leg extension (60 deg&times;sec<sup>-1</sup>)*", 
+                                      "*Isokinetic leg extension (240 deg&times;sec<sup>-1</sup>)*")))
+
+
+compr_all <- bind_rows(compr) %>%
+  select(exercise, Estimate, lwr, upr) %>%
+  
+  mutate(Estimate = 100 * (exp(Estimate)-1),
+         lwr = 100 * (exp(lwr)-1), 
+         upr = 100 * (exp(upr)-1)) 
+
+
+comp_plot <- compr_all %>%
+  mutate(exercise = factor(exercise, levels = c("legext", "legpress", "isom", "isok60", "isok240"), 
+                           labels = c("*Leg extension (1RM)*", 
+                                      "*Leg press (1RM)*", 
+                                      "*Isometric leg exptension*", 
+                                      "*Isokinetic leg extension (60 deg&times;sec<sup>-1</sup>)*", 
+                                      "*Isokinetic leg extension (240 deg&times;sec<sup>-1</sup>)*")), 
+         exercise = fct_rev(exercise)) %>%
+  ggplot(aes(exercise, -Estimate)) +
+  
+  geom_errorbar(aes(ymin = -lwr, ymax = -upr), 
+                width = 0.1) +
+  
+  geom_hline(yintercept = 0, lty = 2, color = "gray50") +
+  
+  geom_point(size = 3, 
+             shape = 24, 
+             fill = colors[2]) + 
+  
+  coord_flip() + 
+  labs(y = "30RM vs. 10RM (95% CI)") +
+  theme_classic(base_size = basesize) + 
+  theme(axis.title.y = element_blank(), 
+        axis.text.y = element_blank(), 
+        axis.ticks.y = element_blank(), 
+        axis.line.y = element_blank())
+  
+
+
+str_plot <- AOData::strength %>%
+  
+  inner_join(part) %>%
+  
+  select(participant:mag) %>%
+  filter(time %in% c("T2", "T4"), 
+         condition != "RMNA") %>%
+  
+  
+  
+
+  pivot_wider(names_from = time, values_from = mag) %>%
+  
+  mutate(change = 100 * ((T4 / T2)-1)) %>%
+  
+  mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                            labels = c("10RM", "30RM")), 
+         exercise = factor(exercise, levels = c("legext", "legpress", "isom", "isok60", "isok240"), 
+                           labels = c("*Leg extension (1RM)*", 
+                                      "*Leg press (1RM)*", 
+                                      "*Isometric leg exptension*", 
+                                      "*Isokinetic leg extension (60 deg&times;sec<sup>-1</sup>)*", 
+                                      "*Isokinetic leg extension (240 deg&times;sec<sup>-1</sup>)*"))) %>%
+  
+  filter(T2 > 5, T4 > 0) %>%
+
+
+
+  ggplot(aes(condition, change,  fill = condition)) +
+  
+
+  
+
+  geom_errorbar(data = preds_single,
+                width = 0.2,
+                position = position_nudge(x = 0.3),
+                aes(ymin = lwr, ymax = upr)) + 
+  geom_point(data = preds_single, 
+             shape = 23,
+             size = 3,
+             position = position_nudge(x = 0.3),) +
+  
+  
+  geom_point(position = position_jitter(width = 0.15), 
+             alpha = 0.2, 
+             shape = 21) + 
+  
+  scale_fill_manual(values = c(colors[1], colors[3]), 
+                    guide = "none") + 
+  labs(size = "Baseline relative\nfat mass (%)", 
+       y = "Strength increase from baseline (%)", 
+       x = "Training condition") +
+  facet_wrap(~ exercise, ncol = 1) +
+  
+  theme_classic(base_size = basesize) + coord_flip() + 
+  theme(strip.text.x = element_markdown(hjust = 0), 
+        strip.background = element_rect(color ="white"))
+  
+
+
+str_plot_compl <- plot_grid(str_plot, comp_plot, align = "h", axis = "b", 
+          rel_widths = c(1, 0.4))
+
+
+str_plot_compl
+
+
+ggsave("ecss-2024-figures/fig8.pdf", str_plot_compl, 
+       width = 28, 
+       height = 17, 
+       units = c("cm"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#| label: "fig-fig9"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: !expr 'glue::glue("Association between baseline relative fat mass and average leg strength change. For every %-point increase in baseline relative fat mass, training-induced change average leg strength was estimated to be affected by {relfm_eff_change_str}. Each participants contributes duplicate measures to the model (training conditions), these are accounted for in a mixed-effects model that also accounts for sex and baseline average strength.")'
+
+
+
+###   Strength score ###############
+
+
+
+dat <- AOData::strength %>%
+  
+  inner_join(part) %>%
+  
+  select(participant:mag) %>%
+  filter(time %in% c("T2", "T4"), 
+         condition != "RMNA", 
+         mag > 5) %>%
+ 
+  mutate(.by = exercise, 
+         mag = mag/max(mag)) %>%
+  summarise(.by = c(participant, condition, time), 
+            mag = mean(mag)) %>%
+  
+
+  pivot_wider(names_from = time, values_from = mag) %>%
+  mutate(change = 100 * ((T4/T2)-1), 
+         participant = as.character(participant)) %>%
+  
+  inner_join(part %>% 
+               mutate(participant = as.character(participant)) %>%
+               inner_join(AOData::bodycomp) %>%
+               
+               
+               
+               
+               mutate(rel.fm = 100 * (fat.whole / (fat.whole + lean.whole + BMC.whole))) %>%
+              
+               filter(time == "T2") %>%
+               select(participant, rel.fm, sex)) 
+  
+
+
+# Model for average strength ###########
+
+m <- lmerTest::lmer(change ~ scale(T2) + rel.fm  + sex + (1|participant), 
+                    data = dat)
+
+
+relfm_eff_change_str <- paste0("Average : ", 
+               round(coef(summary(m))[3,1],2), 
+               " mm, 95% CI: [",
+               round(confint(m)[5,1],2), 
+               ", ",
+               round(confint(m)[5,2],2), 
+               "], p = ", 
+               round(coef(summary(m))[3,5],3))
+
+
+preds <- predictions(m, 
+            newdata = expand_grid(rel.fm = seq(from = 18, to = 64, by = 2), 
+                                  condition = c("10RM", "30RM"), 
+                                  T2 = mean(dat$T2), 
+                                  participant = NA, 
+                                  sex = c("m", "f")),
+            by = "rel.fm",
+            re.form = NA) %>%
+  data.frame() 
+
+p <- dat %>% 
+  ggplot(aes(rel.fm, change, fill = condition)) + 
+    geom_hline(yintercept = 1, 
+             lty = 2, 
+             color = "gray") +
+  
+  
+  geom_point(alpha = 0.5, 
+             size = 3,
+             shape = 21) + 
+  ## Predictions
+  geom_line(data = filter(preds), 
+            aes(rel.fm, estimate, fill = NULL)) +
+  ## errors
+  geom_ribbon(data = filter(preds),
+              aes(rel.fm, 
+                  estimate, 
+                  ymin = conf.low, 
+                  ymax = conf.high, 
+                  ), 
+              fill = "gray50", 
+              alpha = 0.2) +
+  
+  
+  scale_fill_manual(values = c(colors[2], colors[3])) + 
+  labs(
+       y = "Average strength change (%)", 
+       x = "Baseline relative\nfat mass (%)", 
+       fill = "Training\ncondition") +
+
+  theme_classic(base_size = basesize)
+  
+  
+  
+  
+  
+   p
+
+
+ggsave("ecss-2024-figures/fig9.pdf", 
+       p,
+       width = 26, 
+       height = 18, units = "cm")
+  
+  
+  
+  
+  
+
+
+
+```
+
+
+## Sex interactions
+
+
+- Do outcomes differ between men and women
+
+```{r}
+#| label: "fig-fig10"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: !expr 'glue::glue("There were no differences between males and females in leg lean mass changes (%) (p = {sex.lean.p}). Males and females showed similar changes in lean mass across training conditions (p = {sex.lean_cond.p}) and baseline relative fat mass (p = {sex.lean_fm.p})")'
+
+
+
+
+
+  
+### Lean mass sex interaction ###
+lean_dat <- part %>% 
+  mutate(participant = as.character(participant)) %>%
+  inner_join(AOData::bodycomp) %>%
+  
+  mutate(rel.fm = 100 * (fat.whole / (fat.whole + lean.whole + BMC.whole))) %>%
+
+  
+  select(participant, time, sex, bmi, rel.fm, lean.right_leg, lean.left_leg) %>%
+
+  pivot_longer(cols = lean.right_leg:lean.left_leg, 
+               values_to = "lean_leg", 
+               names_to = "leg") %>%
+  mutate(leg = if_else(leg == "lean.right_leg", "R", "L")) %>%
+
+
+  inner_join(mutate(AOData::thickness, participant = as.character(participant))) %>%
+  select(-VIthick) %>%
+
+  filter(time %in% c("T2", "T4")) %>%
+  select(-VLthick) %>%
+  pivot_wider(names_from = time, 
+               values_from = c(rel.fm, lean_leg)) %>%
+  
+  mutate(change = 100 * ((lean_leg_T4 / lean_leg_T2)-1)) %>%
+  mutate(.by = sex, 
+         scaled.t2 = (lean_leg_T2 - mean(lean_leg_T2)) / sd(lean_leg_T2)) 
+  
+  
+## Models ##
+
+m0 <- lmerTest::lmer(change ~  scaled.t2 + sex   + (1|participant), 
+                     data = lean_dat)
+m1 <- lmerTest::lmer(change ~  scaled.t2 + sex * condition  + (1|participant), 
+                     data = lean_dat)
+m2 <- lmerTest::lmer(change ~  scaled.t2 + sex * rel.fm_T2  + (1|participant), 
+                     data = lean_dat)
+
+
+sex.lean.p <- round(coef(summary(m0))[3,5], 3)
+sex.lean_cond.p <- round(coef(summary(m1))[5,5], 3)
+sex.lean_fm.p <- round(coef(summary(m2))[5,5], 3)
+
+
+
+
+## Plot condition per sex
+lean_pred <- avg_predictions(m1, by = c("sex", "condition"), 
+                re.form = NA) %>%
+  
+  data.frame() %>%
+             mutate(sex = factor(sex, levels = c("f", "m"), 
+                      labels = c("Female", "Male")))  %>%
+    mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                            labels = c("10RM", "30RM"))) 
+
+sex_lean_fig <- lean_dat %>%
+  filter(condition != "RMNA") %>%
+  mutate(sex = factor(sex, levels = c("f", "m"), 
+                      labels = c("Female", "Male"))) %>%
+    mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                            labels = c("10RM", "30RM"))) %>%
+
+  ggplot(aes(condition, change, color = condition)) + 
+  
+  geom_errorbar(data = filter(lean_pred, condition == "10RM"),
+             aes(condition, estimate, ymin = conf.low, 
+                 ymax = conf.high, 
+                 color = NULL), 
+             position = position_nudge(x = -0.3), 
+             width = 0) +
+  
+  
+  geom_point(data = filter(lean_pred, condition == "10RM"),
+             aes(condition, estimate, fill = condition, color = NULL), 
+             position = position_nudge(x = -0.3), 
+             size = 3, 
+             shape = 21) +
+  
+    
+  geom_errorbar(data = filter(lean_pred, condition == "30RM"),
+             aes(condition, estimate, ymin = conf.low, 
+                 ymax = conf.high, 
+                 color = NULL), 
+             position = position_nudge(x = 0.3), 
+             width = 0) +
+  
+  
+  geom_point(data = filter(lean_pred, condition == "30RM"),
+             aes(condition, estimate, fill = condition, color = NULL), 
+             position = position_nudge(x = 0.3), 
+             size = 3, 
+             shape = 21) +
+  
+  
+  geom_point(position = position_jitter(width = 0.1), 
+             alpha = 0.6) +
+  
+    
+  scale_fill_manual(values = c(colors[2], colors[3])) + 
+    
+  scale_color_manual(values = c(colors[2], colors[3])) + 
+  
+    labs(y = "Leg lean mass\n change (%)") +
+  
+  facet_wrap(~ sex, ncol = 2) +
+  
+  theme_classic(base_size = basesize) +
+  
+    theme(strip.text = element_text(hjust = 0), 
+        strip.background = element_rect(color = "white"), 
+        axis.title.x = element_blank(), 
+        legend.title= element_blank(), 
+        legend.position = "none")
+
+
+sex_lean_fig
+
+
+ggsave("ecss-2024-figures/fig10.pdf", 
+       sex_lean_fig,
+       width = 26, 
+       height = 18, units = "cm")
+
+
+```
+
+
+```{r}
+#| label: "fig-fig11"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: !expr 'glue::glue("There were no differences between males and females in vastus lateralis thickness changes (%) (p = {sex.vl.p}). Males and females showed similar changes in VL thickness across training conditions (p = {sex.vl_cond.p}) and baseline relative fat mass (p = {sex.vl_fm.p})")'
+
+
+### VL thickness ####
+
+vl_dat <- dat_fm %>%
+  select(participant, sex, condition, VLthick_T2, VLthick_T4, rel.fm_T2) %>%
+  mutate(change = 100 * ((VLthick_T4 / VLthick_T2)-1)) %>%
+  mutate(.by = sex, 
+         scaled.t2 = (VLthick_T2 - mean(VLthick_T2)) / sd(VLthick_T2)) 
+  
+  
+## Models ##
+
+vlm0 <- lmerTest::lmer(change ~  scaled.t2 + sex   + (1|participant), 
+                     data = vl_dat)
+vlm1 <- lmerTest::lmer(change ~  scaled.t2 + sex * condition  + (1|participant), 
+                     data = vl_dat)
+vlm2 <- lmerTest::lmer(change ~  scaled.t2 + sex * rel.fm_T2  + (1|participant), 
+                     data = vl_dat)
+
+
+sex.vl.p <- round(coef(summary(vlm0))[3,5], 3)
+sex.vl_cond.p <- round(coef(summary(vlm1))[5,5], 3)
+sex.vl_fm.p <- round(coef(summary(vlm2))[5,5], 3)
+
+
+## Plot condition per sex
+vl_pred <- avg_predictions(vlm1, by = c("sex", "condition"), 
+                re.form = NA) %>%
+  
+  data.frame() %>%
+             mutate(sex = factor(sex, levels = c("f", "m"), 
+                      labels = c("Female", "Male")))  %>%
+    mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                            labels = c("10RM", "30RM"))) 
+
+sex_vl_fig <- vl_dat %>%
+  filter(condition != "RMNA") %>%
+  mutate(sex = factor(sex, levels = c("f", "m"), 
+                      labels = c("Female", "Male"))) %>%
+    mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                            labels = c("10RM", "30RM"))) %>%
+
+  ggplot(aes(condition, change, color = condition)) + 
+  
+  geom_errorbar(data = filter(vl_pred, condition == "10RM"),
+             aes(condition, estimate, ymin = conf.low, 
+                 ymax = conf.high, 
+                 color = NULL), 
+             position = position_nudge(x = -0.3), 
+             width = 0) +
+  
+  
+  geom_point(data = filter(vl_pred, condition == "10RM"),
+             aes(condition, estimate, fill = condition, color = NULL), 
+             position = position_nudge(x = -0.3), 
+             size = 3, 
+             shape = 21) +
+  
+    
+  geom_errorbar(data = filter(vl_pred, condition == "30RM"),
+             aes(condition, estimate, ymin = conf.low, 
+                 ymax = conf.high, 
+                 color = NULL), 
+             position = position_nudge(x = 0.3), 
+             width = 0) +
+  
+  
+  geom_point(data = filter(vl_pred, condition == "30RM"),
+             aes(condition, estimate, fill = condition, color = NULL), 
+             position = position_nudge(x = 0.3), 
+             size = 3, 
+             shape = 21) +
+  
+  
+  geom_point(position = position_jitter(width = 0.1), 
+             alpha = 0.6) +
+  
+    
+  scale_fill_manual(values = c(colors[2], colors[3])) + 
+    
+  scale_color_manual(values = c(colors[2], colors[3])) + 
+  
+    labs(y = "Vastus lateralis\n thickness change (%)") +
+  
+  facet_wrap(~ sex, ncol = 2) +
+  
+  theme_classic(base_size = basesize) +
+  
+    theme(strip.text = element_text(hjust = 0), 
+        strip.background = element_rect(color = "white"), 
+        axis.title.x = element_blank(), 
+        legend.title= element_blank(), 
+        legend.position = "none")
+
+sex_vl_fig
+
+ggsave("ecss-2024-figures/fig11.pdf", 
+       sex_vl_fig,
+       width = 26, 
+       height = 18, units = "cm")
+
+
+
+```
+
+
+```{r}
+#| label: "fig-fig12"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: !expr 'glue::glue("Females showed greater increases in average strength (%) (p = {sex.str.p}) with no differences between males and females across training conditions (p = {sex.str_cond.p}) os baseline relative fat mass (p = {sex.str_fm.p})")'
+
+
+## Strength ###
+
+str_dat <- AOData::strength %>%
+  
+  inner_join(part) %>%
+  
+  select(participant:mag) %>%
+  filter(time %in% c("T2", "T4"), 
+         condition != "RMNA", 
+         mag > 5) %>%
+ 
+  mutate(.by = exercise, 
+         mag = mag/max(mag)) %>%
+  summarise(.by = c(participant, condition, time), 
+            mag = mean(mag)) %>%
+  
+
+  pivot_wider(names_from = time, values_from = mag) %>%
+  mutate(change = 100 * ((T4/T2)-1), 
+         participant = as.character(participant)) %>%
+  
+  inner_join(part %>% 
+               mutate(participant = as.character(participant)) %>%
+               inner_join(AOData::bodycomp) %>%
+               
+               mutate(rel.fm = 100 * (fat.whole / (fat.whole + lean.whole + BMC.whole))) %>%
+              
+               filter(time == "T2") %>%
+               select(participant, rel.fm, sex)) %>%
+    mutate(.by = sex, 
+         scaled.t2 = (T2 - mean(T2)) / sd(T2)) 
+
+## Models ##
+
+strm0 <- lmerTest::lmer(change ~  scaled.t2 + sex   + (1|participant), 
+                     data = str_dat)
+strm1 <- lmerTest::lmer(change ~  scaled.t2 + sex * condition  + (1|participant), 
+                     data = str_dat)
+strm2 <- lmerTest::lmer(change ~  scaled.t2 + sex * rel.fm  + (1|participant), 
+                     data = str_dat)
+
+
+sex.str.p <- round(coef(summary(strm0))[3,5], 3)
+sex.str_cond.p <- round(coef(summary(strm1))[5,5], 3)
+sex.str_fm.p <- round(coef(summary(strm2))[5,5], 3)
+
+
+
+
+## Plot condition per sex
+str_pred <- avg_predictions(strm1, by = c("sex", "condition"), 
+                re.form = NA) %>%
+  
+  data.frame() %>%
+             mutate(sex = factor(sex, levels = c("f", "m"), 
+                      labels = c("Female", "Male")))  %>%
+    mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                            labels = c("10RM", "30RM"))) 
+
+sex_str_fig <- str_dat %>%
+  filter(condition != "RMNA") %>%
+  mutate(sex = factor(sex, levels = c("f", "m"), 
+                      labels = c("Female", "Male"))) %>%
+    mutate(condition = factor(condition, levels = c("RM10", "RM30"), 
+                            labels = c("10RM", "30RM"))) %>%
+
+  ggplot(aes(condition, change, color = condition)) + 
+  
+  geom_errorbar(data = filter(str_pred, condition == "10RM"),
+             aes(condition, estimate, ymin = conf.low, 
+                 ymax = conf.high, 
+                 color = NULL), 
+             position = position_nudge(x = -0.3), 
+             width = 0) +
+  
+  
+  geom_point(data = filter(str_pred, condition == "10RM"),
+             aes(condition, estimate, fill = condition, color = NULL), 
+             position = position_nudge(x = -0.3), 
+             size = 3, 
+             shape = 21) +
+  
+    
+  geom_errorbar(data = filter(str_pred, condition == "30RM"),
+             aes(condition, estimate, ymin = conf.low, 
+                 ymax = conf.high, 
+                 color = NULL), 
+             position = position_nudge(x = 0.3), 
+             width = 0) +
+  
+  
+  geom_point(data = filter(str_pred, condition == "30RM"),
+             aes(condition, estimate, fill = condition, color = NULL), 
+             position = position_nudge(x = 0.3), 
+             size = 3, 
+             shape = 21) +
+  
+  
+  geom_point(position = position_jitter(width = 0.1), 
+             alpha = 0.6) +
+  
+    
+  scale_fill_manual(values = c(colors[2], colors[3])) + 
+    
+  scale_color_manual(values = c(colors[2], colors[3])) + 
+  
+    labs(y = "Average strength\n change (%)") +
+  
+  facet_wrap(~ sex, ncol = 2) +
+  
+  theme_classic(base_size = basesize) +
+  
+    theme(strip.text = element_text(hjust = 0), 
+        strip.background = element_rect(color = "white"), 
+        axis.title.x = element_blank(), 
+        legend.title= element_blank(), 
+        legend.position = "none")
+  
+
+sex_str_fig
+
+
+ggsave("ecss-2024-figures/fig12.pdf", 
+       sex_str_fig,
+       width = 26, 
+       height = 18, units = "cm")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```
+
+
+
+

@@ -1,0 +1,692 @@
+---
+title: "Precision nutrition: N-3 and adaptations to resistance training"
+author: "Hamarsland, Hammarström"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+
+## Methods
+
+
+
+```{r}
+#| include: false
+
+# Packages
+library(tidyverse)
+library(AOData)
+library(lme4)
+library(gt)
+library(marginaleffects)
+library(cowplot)
+library(ggtext)
+
+
+# Settings for figures
+
+colors <- c("#e66101", "#fdb863","#b2abd2","#5e3c99")
+basesize <- 14
+
+
+```
+
+```{r}
+#| label: tbl-participants
+#| message: false
+#| warning: false
+#| echo: false
+#| tbl-cap: "Characteristics of participants completing T4. Data are presented as Mean (SD)."
+
+
+
+## Participants
+# Only from completed to T4
+part <- AOData::idkeys %>%
+  filter(completed == "t4")
+
+
+part %>%
+  select(participant:bmi) %>%
+  pivot_longer(cols = c(age, bmi)) %>%
+  
+  
+  summarise(.by = c(treat, sex, name),
+            m = mean(value), 
+            s = sd(value), 
+            n = n()) %>%
+  
+  pivot_wider(names_from = name, values_from = c(m,s,n)) %>%
+  select(-n_age) %>%
+  pivot_wider(values_from = m_age:n_bmi,
+              names_from = treat) %>%
+  mutate(sex = if_else(sex == "m", "Male", "Female")) %>%
+  
+
+  
+  
+  gt() %>%
+  
+  fmt_number(columns = starts_with("m"), decimals = 1) %>%
+  fmt_number(columns = starts_with("s"), decimals = 1) %>%
+  
+  cols_merge(columns = c("m_age_omega", "s_age_omega"), 
+             pattern = "<<{1}>> <<({2})>>") %>%
+    cols_merge(columns = c("m_bmi_omega", "s_bmi_omega"), 
+             pattern = "<<{1}>> <<({2})>>") %>%
+  
+    cols_merge(columns = c("m_age_ctrl", "s_age_ctrl"), 
+             pattern = "<<{1}>> <<({2})>>") %>%
+    cols_merge(columns = c("m_bmi_ctrl", "s_bmi_ctrl"), 
+             pattern = "<<{1}>> <<({2})>>") %>%
+  
+  
+  cols_move(m_bmi_ctrl, m_age_ctrl) %>%
+  cols_move(n_bmi_ctrl, m_bmi_ctrl) %>%
+  
+  cols_label(sex = "Sex") %>%
+  tab_spanner(label = "Placebo", 
+              columns = c(m_age_ctrl,m_bmi_ctrl,n_bmi_ctrl)) %>%
+    tab_spanner(label = "Omega-3", 
+              columns = c(m_age_omega,m_bmi_omega,n_bmi_omega)) %>%
+  cols_label(m_age_ctrl = "Age", 
+             m_bmi_ctrl = "BMI", 
+             n_bmi_ctrl = "n", 
+             m_age_omega = "Age", 
+             m_bmi_omega = "BMI", 
+             n_bmi_omega = "n" )
+  
+  
+            
+
+
+
+```
+
+```{r}
+#| label: "fig-fig1"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 8
+#| fig-cap: "Participants included in the study. Bars in the histogram are stacked."
+
+
+
+part <- AOData::idkeys 
+
+
+## Descriptives data 
+
+dat <- AOData::bodycomp %>%
+  select(participant, time, lean.whole, BMC.whole, fat.whole)  %>%
+  mutate(weight = lean.whole + BMC.whole + fat.whole) %>%
+  inner_join(part %>% mutate(participant = as.character(participant))) %>%
+  filter(time == "T1") %>%
+  ## Calculate height based on weight (DXA) and BMI 
+  mutate(height = 100 * sqrt((weight/1000) / bmi)) %>%
+  ## Calculate relative lean and fat
+  mutate(lean.rel = 100 * (lean.whole / weight), 
+         fat.rel = 100 * (fat.whole/weight), 
+         # Weight in kg
+         weight = weight / 1000) %>%
+  select(participant, 
+         treat, 
+         completed, 
+         sex, 
+         age, 
+         height, 
+         weight, 
+         lean.rel, 
+         fat.rel, 
+         bmi) %>%
+  pivot_longer(cols = age:bmi)
+
+## Summarise descriptives
+dat_sum <- dat %>%
+  summarise(.by = c(sex, name), 
+            m = mean(value), 
+            s = sd(value), 
+            n = n()) %>%
+  mutate(stat = paste0(sprintf("%.1f", round(m, 1)), 
+                       " (", 
+                       sprintf("%.1f", round(s, 1)), 
+                       ")")) %>%
+  mutate(name = factor(name, levels = c("age", 
+                                        "height", 
+                                        "weight", 
+                                        "bmi", 
+                                        "lean.rel", 
+                                        "fat.rel"), 
+                       labels = c("Age (yrs)", 
+                                  "Stature (cm)", 
+                                  "Body mass (kg)", 
+                                  "Body mass index", 
+                                  "Lean mass (%)", 
+                                  "Fat mass (%)")), 
+         sex = factor(sex, levels = c("f", "m"), 
+                      labels = c("Female", "Male"))) %>%
+  mutate(.by = name, 
+         pos = mean(m) + 1 * mean(s)) %>%
+    mutate(.by = sex, 
+         sex_n = paste(sex, "n = ",mean(n)))
+
+
+
+
+p <- dat %>%
+   mutate(name = factor(name, levels = c("age", 
+                                        "height", 
+                                        "weight", 
+                                        "bmi", 
+                                        "lean.rel", 
+                                        "fat.rel"), 
+                       labels = c("Age (yrs)", 
+                                  "Stature (cm)", 
+                                  "Body mass (kg)", 
+                                  "Body mass index", 
+                                  "Lean mass (%)", 
+                                  "Fat mass (%)")), 
+         sex = factor(sex, levels = c("f", "m"), 
+                      labels = c("Female", "Male"))) %>%
+  mutate(.by = c(sex,name), 
+         sex_n = paste(sex, "n = ",n())) %>%
+  
+  
+  ggplot(aes(value, color = sex_n, fill = sex_n)) + 
+  geom_histogram(bins = 20, color = "gray10") + 
+  
+  geom_richtext(data = filter(dat_sum, sex == "Male"), 
+            aes(x = -Inf, y = Inf, color = sex_n, label = paste("&#9794;",stat)), 
+                hjust = -1.6, vjust = 1, 
+              show.legend = FALSE,
+                 fill = NA, label.color = NA, # remove background and outline
+    label.padding = grid::unit(rep(0, 4), "pt")) + # remove padding) +
+   geom_richtext(data = filter(dat_sum, sex == "Female"), 
+               aes(x = -Inf, y = Inf, color = sex_n, label = paste("&#9792;",stat)),
+               show.legend = FALSE,
+                hjust = -1.6, vjust = 2.5, 
+                 fill = NA, label.color = NA, # remove background and outline
+    label.padding = grid::unit(rep(0, 4), "pt")) + # remove padding) 
+  
+  
+  scale_color_manual(values = c(colors[1], colors[3])) + 
+ scale_fill_manual(values = c(colors[1], colors[3])) +  
+  
+  scale_y_continuous(limits = c(0, 26)) +
+  facet_wrap(~ name, scales = "free") + 
+  labs(y = "Count") +
+  
+  
+  theme_classic(base_size = basesize) + 
+  theme(strip.background = element_rect(color = "white"), 
+        strip.text = element_text(hjust = 0), 
+        legend.title = element_blank(), 
+        axis.title.x = element_blank(), 
+        legend.position = "bottom")
+  
+  p
+
+
+ggsave("pn-2024-figures/fig1.pdf", 
+       p,
+       width = 24, 
+       device = cairo_pdf,
+       height = 16, units = "cm")
+
+
+```
+
+
+
+
+## Included excluded
+
+
+
+```{r}
+#| label: "fig-fig2"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 6
+#| fig-width: 8
+#| fig-cap: "Analysis of drop-outs in baseline characteristics among treatment groups. Estimated differences in baseline characteristics between included and excluded participants in per-protocol analysis. Error bars in B show 95% CI. P-values from average differences and included and treatment interactions."
+
+
+# Test if drop-outs differ from the rest
+library(nlme)
+
+
+names <- unique(dat$name) 
+results <- list()
+comp <- list()
+
+
+for(i in seq_along(names)) {
+  
+  dat_temp <- dat %>%
+    filter(name == names[i]) %>%
+    mutate(included = if_else(completed == "t4", "incl", "excl"))
+  
+  m <- nlme::gls(value ~ included + sex, 
+                 weights = varIdent(form = ~ 1|included*sex),
+                 data = dat_temp)
+  
+  m2 <- nlme::gls(value ~ included*treat + sex, 
+                 weights = varIdent(form = ~ 1|included*sex),
+                 data = dat_temp)
+  
+ comp[[i]] <-  data.frame(predictions(m2, newdata = expand_grid(included = c( "incl", "excl"), 
+                                                    treat = c("omega", "ctrl"), 
+                                                    sex = c("m", "f")), 
+                         by = c("included", "treat"))) %>%
+    mutate(name = names[i])
+  
+  
+  results[[i]] <- cbind(name = names[i],
+                   comp = "included vs. excluded",
+                   data.frame(est = coef(summary(m))[2,1], 
+                   se = coef(summary(m))[2,2], 
+                   tval = coef(summary(m))[2,3], 
+                   pval = coef(summary(m))[2,4],
+                   pval.treat.interact = coef(summary(m2))[5,4]),
+        data.frame(lwr = intervals(m)$coef[2,][1], 
+                   upr = intervals(m)$coef[2,][3])) %>%
+    data.frame(row.names = NULL) 
+  
+  
+}
+
+
+p <- bind_rows(results) %>%
+  mutate(name = factor(name, levels = c("age", 
+                                        "height", 
+                                        "weight", 
+                                        "bmi", 
+                                        "lean.rel", 
+                                        "fat.rel"), 
+                       labels = c("Age (yrs)", 
+                                  "Stature (cm)", 
+                                  "Body mass (kg)", 
+                                  "Body mass index", 
+                                  "Lean mass (%)", 
+                                  "Fat mass (%)"))) %>%
+  
+  mutate(stat_incl = paste("p = ", 
+                           sprintf("%.3f",round(pval, 3) )), 
+         stat_interact = paste("p = ", 
+                               sprintf("%.3f",round(pval.treat.interact, 3)))) %>%
+  mutate(stat_incl = if_else(name == "Fat mass (%)", paste("Included vs. excluded: ", stat_incl), stat_incl), 
+         stat_interact= if_else(name == "Fat mass (%)", paste("Treatment interaction: ", stat_interact), stat_interact)) %>%
+  
+           ggplot(aes(name, est)) + 
+   geom_hline(yintercept = 0, lty = 2, color = "gray30") +
+           geom_errorbar(aes(ymin = lwr, ymax = upr), 
+                         width = 0.1) +
+  
+  geom_text(aes(name, Inf, label = stat_incl), 
+            vjust = -1, 
+            hjust = 1, 
+            color = colors[4]) +
+    geom_text(aes(name, Inf, label = stat_interact), 
+            vjust = 1, 
+            hjust = 1, 
+            color = colors[1]) +
+  
+  scale_y_continuous(limits = c(-8, 8)) +
+  
+            geom_point(shape = 21, size = 3,
+                       fill = colors[2], size = 2) + 
+  
+
+
+      theme_classic(base_size = basesize) + 
+  theme(strip.background = element_rect(color = "white"), 
+        strip.text = element_text(hjust = 0), 
+        legend.title = element_blank(), 
+        axis.title = element_blank(), 
+        legend.position = "bottom") + 
+  coord_flip()
+  
+
+p 
+
+
+ggsave("pn-2024-figures/fig2.pdf", 
+       p,
+       width = 20, 
+       device = cairo_pdf,
+       height = 12, units = "cm")
+```
+
+```{r}
+#| label: "fig-fig3"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 3
+#| fig-width: 8
+#| fig-cap: "Comparisons of baseline characteristics among treatment groups in participants included/excluded for pre-protocol analysis.Error bars show minimum and maximum values together with first and thirt quartile, points are medians. P-values from comparisons of average differences between included/excluded and treatment with inclusion interactions."
+
+stats <- bind_rows(results)  %>%
+  select(name, pval, pval.treat.interact) %>%
+   mutate(name = factor(name, levels = c("age", 
+                                        "height", 
+                                        "weight", 
+                                        "bmi", 
+                                        "lean.rel", 
+                                        "fat.rel"), 
+                       labels = c("Age (yrs)", 
+                                  "Stature (cm)", 
+                                  "Body mass (kg)", 
+                                  "Body mass index", 
+                                  "Lean mass (%)", 
+                                  "Fat mass (%)"))) %>%
+  mutate(pval = sprintf("%.3f",round(pval, 3)), 
+         pval.treat.interact = sprintf("%.3f",round(pval.treat.interact,3))) 
+
+
+p <- dat %>%
+   mutate(name = factor(name, levels = c("age", 
+                                        "height", 
+                                        "weight", 
+                                        "bmi", 
+                                        "lean.rel", 
+                                        "fat.rel"), 
+                       labels = c("Age (yrs)", 
+                                  "Stature (cm)", 
+                                  "Body mass (kg)", 
+                                  "Body mass index", 
+                                  "Lean mass (%)", 
+                                  "Fat mass (%)")), 
+         sex = factor(sex, levels = c("m", "f"), 
+                      labels = c("Male", "Female"))) %>%
+  mutate(included = if_else(completed == "t4", "included", "excluded")) %>%
+  
+
+  
+
+  
+  
+  
+  summarise(.by = c(included, treat, name), 
+            m = median(value), 
+            q25 = quantile(value, 0.25), 
+            q75 = quantile(value, 0.75), 
+            min = min(value),
+            max = max(value), 
+            n = n()) %>%
+  
+      ## Fix names to include stats
+  inner_join(stats) %>%
+  mutate(name = if_else(name == "Age (yrs)", 
+                        paste(name, 
+                      "<br><span style = 'color:#0072B2; font-size:8px;'>Incl vs. Excl: p = ",
+                      pval, 
+                      "</span><br><span style = 'color:#D55E00; font-size:8px;'>Treat interact: p = ",
+                      pval.treat.interact, 
+                      "</span>"),
+                        paste(name, 
+                      "<br><span style = 'color:#0072B2; font-size:8px;'>p = ",
+                      pval, 
+                      "</span><br><span style = 'color:#D55E00; font-size:8px;'>p = ",
+                      pval.treat.interact, 
+                      "</span>"))) %>%
+  mutate(treat = if_else(treat == "omega", "N-3", "Placebo")) %>%
+  
+  mutate(grp = paste(treat, included)) %>%
+  ## Adding n()
+  mutate(.by = grp, 
+         grp = paste0(grp, ", n = ",mean(n))) %>%
+  
+  
+  ggplot(aes(grp, m,
+             group = grp,
+             color = treat, 
+             alpha = included)) + 
+  
+  
+  geom_errorbar(aes(ymin = min, ymax = max), width = 0, 
+                position = position_dodge(width = 0.2)) +
+  geom_errorbar(aes(ymin = q25, ymax = q75), width = 0, linewidth = 2, 
+                position = position_dodge(width = 0.2)) +
+  geom_point(position = position_dodge(width = 0.2), 
+             shape = 22, fill = "white", color = "black") + 
+  scale_alpha_manual(values = c(0.45, 0.9), guide = "none") +
+  
+  theme_classic() + 
+  facet_wrap(~ name, scales = "free_x", 
+             ncol = 6) + 
+  coord_flip() +
+    theme_classic(base_size = basesize) + 
+  theme(strip.background = element_rect(color = "white"), 
+        strip.text = element_markdown(hjust = 0), 
+        legend.title = element_blank(), 
+        axis.title = element_blank(), 
+        legend.position = "bottom")
+  
+p
+
+
+ggsave("pn-2024-figures/fig3.pdf", 
+       p,
+       width = 24, 
+       device = cairo_pdf,
+       height = 8, units = "cm")
+
+```
+
+```{r}
+
+
+
+## Vastus lateralis data 
+dat_fm <-   part %>% 
+  filter(completed == "t4") %>%
+  mutate(participant = as.character(participant)) %>%
+  inner_join(AOData::bodycomp) %>%
+  inner_join(AOData::idkeys %>%
+               mutate(participant = as.character(participant))) %>%
+
+  
+  mutate(rel.fm = 100 * (fat.whole / (fat.whole + lean.whole + BMC.whole))) %>%
+  
+  select(participant, time, treat, sex, bmi, rel.fm) %>%
+  inner_join(mutate(AOData::thickness, participant = as.character(participant))) %>%
+  
+  select(-VIthick) %>%
+  
+  pivot_wider(names_from = time, values_from = c(VLthick, rel.fm), 
+              values_fn = mean)
+  
+
+## Models ###
+
+# Effects of treatmenat on vastus lateralis thickness (hypertrophy)
+
+dat_m <- dat_fm %>%
+  
+  mutate(change = VLthick_T4 - VLthick_T2) %>%
+  
+  select(participant, treat, sex, condition, change, rel.fm_T2, VLthick_T2)
+
+
+
+m1 <- lmerTest::lmer(change ~ VLthick_T2 + sex + treat + (1|participant),
+                     data = dat_m)
+
+m2 <- lmerTest::lmer(change ~ VLthick_T2 + sex + treat*rel.fm_T2 + (1|participant),
+                     data = dat_m)
+
+
+
+
+
+
+### Estimation plot ###############
+
+
+est_plot <- function(model_plot = m1, 
+                     dat_plot = dat_m, 
+                     round = 3, 
+                     yaxis = "Change") {
+  
+  # Calculate CI 
+#  ci <- confint(model_plot) 
+#  lwr <- ci["treatomega",][1]
+# upr <- ci["treatomega",][2]
+  
+  # Group predictions
+  grp_preds <- predictions(model_plot, by = c("treat"), re.form=NA) %>%
+    data.frame()
+  
+  # Group comparisons
+  grp_comp <- avg_comparisons(model_plot, variables = "treat", re.form=NA) %>%
+    data.frame()
+  
+  lwr <- grp_comp[,"conf.low"]
+  upr <- grp_comp[,"conf.high"]
+  
+  
+  # Values for comp and second axis
+  zero <- filter(grp_preds, treat == "ctrl") %>%
+    pull(estimate)
+  
+  lwr <- zero + lwr 
+  upr <- zero + upr
+  
+  # Range of ci
+  range <- floor(upr - lwr)
+  
+  
+  
+  sec.scale <- signif(c(
+    zero + range*3, 
+    zero + range*2, 
+    zero + range, 
+    zero, 
+    zero - range, 
+    zero - range*2,
+    zero - range*3))
+  
+  sec.scale.labels <- c(
+    range*3,
+    range*2,
+    range,
+    0, 
+    -range,
+    -range*2,
+    -range*3)
+  
+  
+  grp_preds<- grp_preds %>%
+    mutate(conf.low = if_else(treat == "omega", lwr, zero), 
+           conf.high = if_else(treat == "omega", upr, zero))
+  # Create CI for comparison
+  
+ 
+  dat_plot %>%
+    
+    summarise(.by = c(treat, participant), 
+              change = mean(change)) %>%
+    
+    ggplot(aes(treat, change, fill = treat)) + 
+    
+    # Add zero line 
+    annotate("segment", y = zero, yend = zero, 
+             x = 1.4, xend = 2.4, 
+             lty = 2, color = "gray20") +
+    
+    
+    # Add scale
+    annotate("segment", y = min(sec.scale), yend = max(sec.scale), 
+             x =2.4, xend = 2.4, 
+             lty = 1, color = "gray20") +
+    
+    # ticks
+    annotate("segment", y = sec.scale, yend = sec.scale, 
+             x =2.4, xend = 2.42, 
+             lty = 1, color = "gray20") +
+    # Values for comp
+    annotate("text", y = sec.scale, 
+             x = 2.44,
+             hjust = 0,
+             size = 3.5,
+             color = "gray30",
+             label = sec.scale.labels) +
+        annotate("text", y = zero, 
+             x = 2.5,
+             angle = -90,
+             # hjust = 0,
+             size = 5,
+             color = "gray30",
+             label = "Mean difference (95% CI)") +
+    
+    
+    scale_x_discrete(expand = c(0.1, 0.4), 
+                   
+                     labels = c("Placebo", "N-3")) +
+    
+    geom_point(shape = 21, size = 2, 
+               position = position_jitter(width = 0.05)) + 
+    
+    geom_errorbar(data = grp_preds, 
+                  aes(treat, estimate, ymin = conf.low, 
+                      ymax = conf.high),
+               position = position_nudge(x = 0.2), 
+               width = 0) +
+    
+    geom_point(data = grp_preds, 
+               aes(treat, estimate, fill = treat),
+               size = 4, 
+               shape = 21,
+               position = position_nudge(x = 0.2)) + 
+    
+    labs(y = yaxis) + 
+    
+    theme_classic(base_size = basesize) + 
+    theme(legend.position = "none", 
+          axis.title.x = element_blank())
+    
+
+  
+}
+
+
+
+est_plot(model_plot = m1, 
+         dat_plot = dat_m, 
+         round = 3, 
+         yaxis = "Pre- to post-\nintervention change (mm)")
+
+
+
+
+
+dat_fm %>%
+  
+  mutate(change = VLthick_T4 - VLthick_T2) %>%
+  
+  select(participant, treat, sex, change, rel.fm_T2) %>%
+  
+  ggplot(aes(treat, change)) + geom_point()
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+```
+
