@@ -1378,8 +1378,6 @@ ggsave("ecss-2024-figures/fig9.pdf",
 ## Sex interactions
 
 
-- Do outcomes differ between men and women
-
 ```{r}
 #| label: "fig-fig10"
 #| message: false
@@ -1425,7 +1423,7 @@ lean_dat <- part %>%
   
 ## Models ##
 
-m0 <- lmerTest::lmer(change ~  scaled.t2 + sex   + (1|participant), 
+m0 <- lmerTest::lmer(change ~  scaled.t2 + sex + (1|participant), 
                      data = lean_dat)
 m1 <- lmerTest::lmer(change ~  scaled.t2 + sex * condition  + (1|participant), 
                      data = lean_dat)
@@ -1436,6 +1434,102 @@ m2 <- lmerTest::lmer(change ~  scaled.t2 + sex * rel.fm_T2  + (1|participant),
 sex.lean.p <- round(coef(summary(m0))[3,5], 3)
 sex.lean_cond.p <- round(coef(summary(m1))[5,5], 3)
 sex.lean_fm.p <- round(coef(summary(m2))[5,5], 3)
+
+
+string_diff_fun <- function(m1, m2, m3, outcome) {
+  
+  
+
+m0_pred <- avg_predictions(m0, by = "sex", re.form = NA) %>%
+  data.frame()
+
+# Average per sex 
+avg_male <- paste0(round(m0_pred[1,2], 1), 
+                   "%, [", 
+                   round(m0_pred[1,7], 1), 
+                   ", ",
+                   round(m0_pred[1,8], 1),
+                   "]")
+avg_female <- paste0(round(m0_pred[2,2], 1), 
+                   "%, [", 
+                   round(m0_pred[2,7], 1), 
+                   ", ",
+                   round(m0_pred[2,8], 1),
+                   "]")
+avg_diff <- paste0(round(coef(summary(m0))[3,1], 1), 
+                   "%-points, [", 
+                   round(confint(m0)[5,1], 1), 
+                   ", ",
+                   round(confint(m0)[5,2], 1),
+                   "]")
+
+
+## Avg difference between sets in males and females
+
+m1_comp <- avg_comparisons(m1, re.form = NA, by = c("sex")) %>%
+  data.frame()
+
+avg_male_m1 <- paste0(round(m1_comp[2,4], 1), 
+                   "%-point, [", 
+                   round(m1_comp[2,9], 1), 
+                   ", ",
+                   round(m1_comp[2,10], 1),
+                   "]")
+avg_female_m1 <- paste0(round(m1_comp[1,4], 1), 
+                   "%-point, [", 
+                   round(m1_comp[1,9], 1), 
+                   ", ",
+                   round(m1_comp[1,10], 1),
+                   "]")
+avg_diff_m1 <- paste0(round(coef(summary(m1))[5,1], 1), 
+                   "%-points, [", 
+                   round(confint(m1)[7,1], 1), 
+                   ", ",
+                   round(confint(m1)[7,2], 1),
+                   "]")
+## Baseline fat mass 
+
+m2_comp <- avg_comparisons(m2, re.form = NA, by = c("sex")) %>%
+  data.frame()
+
+avg_male_m2 <- paste0(round(m2_comp[2,4], 1), 
+                   "%-point, [", 
+                   round(m2_comp[2,9], 1), 
+                   ", ",
+                   round(m2_comp[2,10], 1),
+                   "]")
+avg_female_m2 <- paste0(round(m2_comp[1,4], 1), 
+                   "%-point, [", 
+                   round(m2_comp[1,9], 1), 
+                   ", ",
+                   round(m2_comp[1,10], 1),
+                   "]")
+avg_diff_m2 <- paste0(round(coef(summary(m2))[5,1], 1), 
+                   "%-points, [", 
+                   round(confint(m1)[7,1], 1), 
+                   ", ",
+                   round(confint(m1)[7,2], 1),
+                   "]")
+
+
+## Combine information in a string ##
+
+out <- paste0("Male gain in ", outcome, 
+              " was ", avg_male, " and in females ", 
+              avg_female, ". The average estimated difference between males and females was ", avg_diff,
+              ". The average difference between conditions was ", 
+              avg_male_m1, " in male and ", 
+              avg_female_m1, " in females. The differences between sexes condition-differences was estimated to ", 
+              avg_diff_m1, ". For every percentage-point increase in baseline fat mass, males were estimated to have a ", 
+              avg_male_m2, " and females ", avg_female_m2,
+              " difference in ", outcome, " training induced change. Difference between sexes was estimated to ", avg_diff_m2, ".")
+
+
+return(out)
+  
+  
+}
+
 
 
 
@@ -1519,7 +1613,15 @@ ggsave("ecss-2024-figures/fig10.pdf",
        height = 18, units = "cm")
 
 
+
+out_llm <- string_diff_fun(m1, m2, m3, outcome = "leg lean mass")
+
 ```
+
+`r out_llm`
+
+
+
 
 
 ```{r}
@@ -1635,6 +1737,9 @@ ggsave("ecss-2024-figures/fig11.pdf",
 
 
 ```
+
+`r string_diff_fun(vlm1, vlm2, vlm3, outcome = "vastus lateralis thickness")`
+
 
 
 ```{r}
@@ -1778,6 +1883,7 @@ ggsave("ecss-2024-figures/fig12.pdf",
 ```
 
 
+`r string_diff_fun(strm1, strm2, strm3, outcome = "average strength")`
 
 
 
@@ -1786,9 +1892,6 @@ ggsave("ecss-2024-figures/fig12.pdf",
 
 
 
-
-
-```
 
 
 
