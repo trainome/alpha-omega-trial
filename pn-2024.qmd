@@ -1,8 +1,9 @@
 ---
 title: "Precision nutrition: N-3 and adaptations to resistance training"
 author: "Hamarsland, Hammarström"
-format: html
-editor: visual
+format:
+  html:
+    embed-resources: true
 editor_options: 
   chunk_output_type: console
 ---
@@ -26,7 +27,7 @@ library(ggtext)
 # Settings for figures
 
 colors <- c("#e66101", "#fdb863","#b2abd2","#5e3c99")
-basesize <- 14
+basesize <- 18
 
 
 ```
@@ -379,12 +380,12 @@ stats <- bind_rows(results)  %>%
                                         "bmi", 
                                         "lean.rel", 
                                         "fat.rel"), 
-                       labels = c("Age (yrs)", 
-                                  "Stature (cm)", 
-                                  "Body mass (kg)", 
-                                  "Body mass index", 
-                                  "Lean mass (%)", 
-                                  "Fat mass (%)"))) %>%
+                       labels = c("Age<br>(yrs)", 
+                                  "Stature<br>(cm)", 
+                                  "Body mass<br>(kg)", 
+                                  "Body mass<br>index", 
+                                  "Lean mass<br>(%)", 
+                                  "Fat mass<br>(%)"))) %>%
   mutate(pval = sprintf("%.3f",round(pval, 3)), 
          pval.treat.interact = sprintf("%.3f",round(pval.treat.interact,3))) 
 
@@ -396,12 +397,12 @@ p <- dat %>%
                                         "bmi", 
                                         "lean.rel", 
                                         "fat.rel"), 
-                       labels = c("Age (yrs)", 
-                                  "Stature (cm)", 
-                                  "Body mass (kg)", 
-                                  "Body mass index", 
-                                  "Lean mass (%)", 
-                                  "Fat mass (%)")), 
+                       labels = c("Age<br>(yrs)", 
+                                  "Stature<br>(cm)", 
+                                  "Body mass<br>(kg)", 
+                                  "Body mass<br>index", 
+                                  "Lean mass<br>(%)", 
+                                  "Fat mass<br>(%)")), 
          sex = factor(sex, levels = c("m", "f"), 
                       labels = c("Male", "Female"))) %>%
   mutate(included = if_else(completed == "t4", "included", "excluded")) %>%
@@ -465,6 +466,7 @@ p <- dat %>%
   theme(strip.background = element_rect(color = "white"), 
         strip.text = element_markdown(hjust = 0), 
         legend.title = element_blank(), 
+        axis.text.x = element_text(size = 12),
         axis.title = element_blank(), 
         legend.position = "bottom")
   
@@ -473,18 +475,25 @@ p
 
 ggsave("pn-2024-figures/fig3.pdf", 
        p,
-       width = 24, 
+       width = 28, 
        device = cairo_pdf,
        height = 8, units = "cm")
 
 ```
 
 
+## Vastus lateralis thickness
 
 
 
 ```{r}
-
+#| label: "fig-fig4"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 3
+#| fig-width: 8
+#| fig-cap: !expr 'glue::glue("Change in vastus lateralis thickness. Average difference in change scores between treatment groups was {inf_stats_vl}.")'
 
 
 ## Vastus lateralis data 
@@ -513,20 +522,22 @@ dat_fm <-   part %>%
 
 dat_m <- dat_fm %>%
   
-  mutate(change = VLthick_T4 - VLthick_T2) %>%
+  mutate(change = VLthick_T4 - VLthick_T1) %>%
   
-  select(participant, treat, sex, condition, change, rel.fm_T2, VLthick_T2)
+  select(participant, treat, sex, condition, change, rel.fm_T2, VLthick_T1) 
 
 
 
-m1 <- lmerTest::lmer(change ~ VLthick_T2 + sex + treat + (1|participant),
+m1 <- lmerTest::lmer(change ~ VLthick_T1 + sex + treat + (1|participant),
                      data = dat_m)
 
-m2 <- lmerTest::lmer(change ~ VLthick_T2 + sex + treat*rel.fm_T2 + (1|participant),
-                     data = dat_m)
-
-
-
+inf_stats_vl <- paste0(round(coef(summary(m1))[4,1],1), 
+       ", 95% CI: [",
+       round(confint(m1)[6,1],1),
+       ", ",
+       round(confint(m1)[6,2],1),
+       "], p = ", 
+       round(coef(summary(m1))[4,5],3))
 
 
 
@@ -535,7 +546,8 @@ m2 <- lmerTest::lmer(change ~ VLthick_T2 + sex + treat*rel.fm_T2 + (1|participan
 
 est_plot <- function(model_plot = m1, 
                      dat_plot = dat_m, 
-                     round = 3, 
+                     round = 3,
+                     xaxis_just = 0,
                      yaxis = "Change") {
   
   # Calculate CI 
@@ -622,15 +634,16 @@ est_plot <- function(model_plot = m1,
              color = "gray30",
              label = sec.scale.labels) +
         annotate("text", y = zero, 
-             x = 2.5,
+             x = 2.55 + xaxis_just,
              angle = -90,
              # hjust = 0,
-             size = 5,
+             size = 6,
+       
              color = "gray30",
              label = "Mean difference (95% CI)") +
     
     
-    scale_x_discrete(expand = c(0.1, 0.4), 
+    scale_x_discrete(expand = c(0.1, 0.6), 
                    
                      labels = c("Placebo", "N-3")) +
     
@@ -661,35 +674,472 @@ est_plot <- function(model_plot = m1,
 
 
 
-est_plot(model_plot = m1, 
+p <- est_plot(model_plot = m1, 
          dat_plot = dat_m, 
          round = 3, 
          yaxis = "Pre- to post-\nintervention change (mm)")
 
 
+p 
 
 
 
-dat_fm %>%
+
+ggsave("pn-2024-figures/fig4.pdf", 
+       p,
+       width = 20, 
+       device = cairo_pdf,
+       height = 12, units = "cm")
+
+
+
+
+```
+
+
+
+## Lean mass
+
+```{r}
+#| label: "fig-fig5"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 3
+#| fig-width: 8
+#| fig-cap: !expr 'glue::glue("Change in whole body lean mass. Average difference in change scores between treatment groups was {inf_stats}.")'
+
+
+### Lean mass ###
+lean_dat <- part %>% 
+  mutate(participant = as.character(participant)) %>%
+  inner_join(AOData::bodycomp) %>%
   
-  mutate(change = VLthick_T4 - VLthick_T2) %>%
-  
-  select(participant, treat, sex, change, rel.fm_T2) %>%
-  
-  ggplot(aes(treat, change)) + geom_point()
-
-
-
-
-
-
-
-
+  mutate(rel.fm = 100 * (fat.whole / (fat.whole + lean.whole + BMC.whole))) %>%
 
   
+  select(participant, time, sex, rel.fm, lean.whole) %>%
+
+
+  filter(time %in% c("T1", "T4")) %>%
+
+
+  pivot_wider(names_from = time, 
+               values_from = c(rel.fm, lean.whole)) %>%
+ 
+  
+  mutate(change = lean.whole_T4 - lean.whole_T1) %>%
+  mutate(.by = sex, 
+         scaled.t1 = (lean.whole_T1 - mean(lean.whole_T1)) / sd(lean.whole_T1)) %>%
+
+  inner_join(AOData::idkeys %>%
+               filter(completed == "t4") %>%
+               mutate(participant = as.character(participant)))
+
+
+
+m1 <- lm(change ~ scaled.t1 + sex + treat ,
+                     data = lean_dat)
+
+
+## Inferential stats
+
+inf_stats <- paste0(round(coef(summary(m1))[4,1],1), 
+       ", 95% CI: [",
+       round(confint(m1)[4,1],1),
+       ", ",
+       round(confint(m1)[4,2],1),
+       "], p = ", 
+       round(coef(summary(m1))[4,4],3))
+
+
+
+
+
+p <- est_plot(model_plot = m1, 
+         dat_plot = lean_dat, 
+         round = 3, 
+         xaxis_just = 0.1,
+         yaxis = "Pre- to post-\nintervention change (g)")
+
+
+p 
+
+ggsave("pn-2024-figures/fig5.pdf", 
+       p,
+       width = 20, 
+       device = cairo_pdf,
+       height = 12, units = "cm")
+
+
+```
+
+## Strength
+
+```{r}
+#| label: "fig-fig6"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 3
+#| fig-width: 8
+#| fig-cap: !expr 'glue::glue("Change average muscle strength (lower body). Average difference in change scores between treatment groups was {inf_stats_str}.")'
+
+
+str_dat <- AOData::strength %>%
+  
+  inner_join(part) %>%
+  
+  select(participant:mag) %>%
+  filter(time %in% c("T1", "T4"), 
+         condition != "RMNA", 
+         mag > 5) %>%
+ 
+  mutate(.by = exercise, 
+         mag = 100 * (mag/max(mag))) %>%
+  summarise(.by = c(participant, condition, time), 
+            mag = mean(mag)) %>%
+  
+
+  pivot_wider(names_from = time, values_from = mag) %>%
+  mutate(change = T4 - T1, 
+         participant = as.character(participant)) %>%
+  
+  inner_join(part %>% 
+               mutate(participant = as.character(participant)) %>%
+               inner_join(AOData::bodycomp) %>%
+               
+               mutate(rel.fm = 100 * (fat.whole / (fat.whole + lean.whole + BMC.whole))) %>%
+              
+               filter(time == "T1") %>%
+               select(participant, rel.fm, sex)) %>%
+    mutate(.by = sex, 
+         scaled.t1 = (T1 - mean(T1)) / sd(T1))  %>%
+  inner_join(AOData::idkeys %>%
+               filter(completed == "t4") %>%
+               mutate(participant = as.character(participant)))
+
+
+m1 <- lmerTest::lmer(change ~ scaled.t1 + sex + treat + (1|participant),
+                     data = str_dat)
+
+inf_stats_str <- paste0(round(coef(summary(m1))[4,1],1), 
+       ", 95% CI: [",
+       round(confint(m1)[6,1],1),
+       ", ",
+       round(confint(m1)[6,2],1),
+       "], p = ", 
+       round(coef(summary(m1))[4,5],3))
+
+
+
+
+p <- est_plot(model_plot = m1, 
+         dat_plot = str_dat, 
+         round = 3, 
+         xaxis_just = 0.1,
+         yaxis = "Pre- to post-\nintervention change (AU)")
+
+
+p 
+
+ggsave("pn-2024-figures/fig6.pdf", 
+       p,
+       width = 20, 
+       device = cairo_pdf,
+       height = 12, units = "cm")
+
+
+
+```
+
+
+## Serum N-3 and N-6
+
+
+```{r}
+#| label: "fig-fig7"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 3
+#| fig-width: 8
+#| fig-cap: !expr 'glue::glue("N-3 supplementation affected the EPA and DHA content of erythrocytes expressed as a percent of total identified fatty acids (Omega-3 index). At T2 the difference was {inf_omega_t2}, and at T4 the difference was {inf_omega_t4}.")'
+
+
+
+oindex_dat <- AOData::omega3 %>%
+  inner_join(AOData::idkeys) %>%
+  filter(completed == "t4") %>%
+  select(participant, time, treat, sex, omega3index) %>%
+  mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3")))
+
+
+
+m1 <- lmerTest::lmer(omega3index ~ time * treat + (1|participant), 
+                     data = oindex_dat)
+
+
+preds <- avg_predictions(m1, re.form = NA, 
+                by = c("treat", "time")) %>%
+  data.frame() 
+
+
+## Inferential stats
+inf_omega_t2 <- paste0(round(coef(summary(m1))[5,1],1), 
+       "%-points, 95% CI: [",
+       round(confint(m1)[7,1],1),
+       ", ",
+       round(confint(m1)[7,2],1),
+       "], p < 0.001")
+
+inf_omega_t4 <- paste0(round(coef(summary(m1))[6,1],1), 
+       "%-points, 95% CI: [",
+       round(confint(m1)[8,1],1),
+       ", ",
+       round(confint(m1)[8,2],1),
+       "], p < 0.001")
+
+
+
+p <- oindex_dat %>%
+  ggplot(aes(time, omega3index, 
+             group = participant, 
+             color = treat)) + 
+  
+  
+  
+  geom_line(alpha = 0.2, show.legend = FALSE) + 
+  
+  geom_line(data = preds, 
+            linewidth = 1.5,
+            aes(y = estimate, 
+                group = treat)) +
+   geom_errorbar(data = preds, 
+            width = 0,
+            aes(y = estimate,
+                ymin = conf.low, 
+                ymax = conf.high,
+                color = NULL,
+                group = treat)) +
+
+  geom_point(data = preds, 
+            size = 3,
+            shape = 21,
+            aes(y = estimate, 
+                group = treat, 
+                fill = treat, 
+                
+                color = NULL)) +
+      theme_classic(base_size = basesize) + 
+    theme(legend.title = element_blank(),
+          axis.title.x = element_blank()) + 
+  labs(y = "Omega-3 index (%)")
+  
+  
   
 
 
+p 
+
+ggsave("pn-2024-figures/fig7.pdf", 
+       p,
+       width = 20, 
+       device = cairo_pdf,
+       height = 12, units = "cm")
+
+
+
+
+
+```
+
+
+
+```{r}
+#| label: "fig-fig8"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 3
+#| fig-width: 8
+#| fig-cap: !expr 'glue::glue("N-3 supplementation affected the blood fatty acid profiles. At T2 the difference in N-6 content was {inf_omega_t2_n6}, and at T4 the difference was {inf_omega_t4_n6}. For the DHA/EPA content the difference between groups at T2 was {inf_omega_t2_dha}, and at T4 {inf_omega_t4_dha}")'
+
+
+
+n3n6_dat <- AOData::omega3 %>%
+  inner_join(AOData::idkeys) %>%
+  filter(completed == "t4") %>%
+  rowwise() %>%
+  mutate(n6 = sum(C182n6, C183n6, C203n6, C204n6), 
+         DHA_EPA = sum(C205n3, C226n3)) %>%
+
+  
+  select(participant, time, treat, sex, n6, DHA_EPA) %>%
+  mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3")))
+
+
+
+m1_n6 <- lmerTest::lmer(n6 ~ time * treat + (1|participant), 
+                     data = n3n6_dat)
+m1_dha <- lmerTest::lmer(DHA_EPA ~ time * treat + (1|participant), 
+                     data = n3n6_dat)
+
+preds_n6 <- avg_predictions(m1_n6, re.form = NA, 
+                by = c("treat", "time")) %>%
+  data.frame() 
+preds_dha <- avg_predictions(m1_dha, re.form = NA, 
+                by = c("treat", "time")) %>%
+  data.frame() 
+
+
+
+## Inferential stats
+inf_omega_t2_n6 <- paste0(round(coef(summary(m1_n6))[5,1],1), 
+       " &mu;g ml<sup>-1</sup>, 95% CI: [",
+       round(confint(m1_n6)[7,1],1),
+       ", ",
+       round(confint(m1_n6)[7,2],1),
+       "], p = ", 
+       round(coef(summary(m1_n6))[5,5],3))
+
+inf_omega_t4_n6 <- paste0(round(coef(summary(m1_n6))[6,1],1), 
+       " &mu;g ml<sup>-1</sup>, 95% CI: [",
+       round(confint(m1_n6)[8,1],1),
+       ", ",
+       round(confint(m1_n6)[8,2],1),
+       "], p = ", 
+       round(coef(summary(m1_n6))[6,5],3))
+
+inf_omega_t2_dha <- paste0(round(coef(summary(m1_dha))[5,1],1), 
+       " &mu;g ml<sup>-1</sup>, 95% CI: [",
+       round(confint(m1_dha)[7,1],1),
+       ", ",
+       round(confint(m1_dha)[7,2],1),
+       "], p < 0.001")
+
+inf_omega_t4_dha <- paste0(round(coef(summary(m1_dha))[6,1],1), 
+       " &mu;g ml<sup>-1</sup>, 95% CI: [",
+       round(confint(m1_dha)[8,1],1),
+       ", ",
+       round(confint(m1_dha)[8,2],1),
+       "], p < 0.001")
+
+
+
+
+p1 <- n3n6_dat %>%
+  ggplot(aes(time, n6, 
+             group = participant, 
+             color = treat)) + 
+  
+  
+  
+  geom_line(alpha = 0.2, show.legend = FALSE) + 
+  
+  geom_line(data = preds_n6, 
+            linewidth = 1.5,
+            aes(y = estimate, 
+                group = treat)) +
+   geom_errorbar(data = preds_n6, 
+            width = 0,
+            aes(y = estimate,
+                ymin = conf.low, 
+                ymax = conf.high,
+                color = NULL,
+                group = treat)) +
+
+  geom_point(data = preds_n6, 
+            size = 3,
+            shape = 21,
+            aes(y = estimate, 
+                group = treat, 
+                fill = treat, 
+                
+                color = NULL)) +
+   
+  labs(y = "N-6 content (&mu;g ml<sup>-1</sup>)") +
+  
+      theme_classic(base_size = basesize) + 
+    theme(legend.title = element_blank(),
+          axis.title.y = element_markdown(),
+          axis.title.x = element_blank())
+  
+
+p2 <- n3n6_dat %>%
+  ggplot(aes(time, DHA_EPA, 
+             group = participant, 
+             color = treat)) + 
+  
+  
+  
+  geom_line(alpha = 0.2, show.legend = FALSE) + 
+  
+  geom_line(data = preds_dha, 
+            linewidth = 1.5,
+            aes(y = estimate, 
+                group = treat)) +
+   geom_errorbar(data = preds_dha, 
+            width = 0,
+            aes(y = estimate,
+                ymin = conf.low, 
+                ymax = conf.high,
+                color = NULL,
+                group = treat)) +
+
+  geom_point(data = preds_dha, 
+            size = 3,
+            shape = 21,
+            aes(y = estimate, 
+                group = treat, 
+                fill = treat, 
+                
+                color = NULL)) +
+   
+  labs(y = "DHA and EPA content (&mu;g ml<sup>-1</sup>)") +
+  
+      theme_classic(base_size = basesize) + 
+    theme(legend.title = element_blank(),
+          axis.title.y = element_markdown(),
+          axis.title.x = element_blank())
+  
+  
+
+
+p1
+
+
+ggsave("pn-2024-figures/fig8.pdf", 
+       p1,
+       width = 20, 
+       device = cairo_pdf,
+       height = 12, units = "cm")
+
+
+```
+
+
+
+```{r}
+#| label: "fig-fig9"
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 3
+#| fig-width: 8
+#| fig-cap: !expr 'glue::glue("N-3 supplementation affected the blood fatty acid profiles. At T2 the difference in N-6 content was {inf_omega_t2_n6}, and at T4 the difference was {inf_omega_t4_n6}. For the DHA/EPA content the difference between groups at T2 was {inf_omega_t2_dha}, and at T4 {inf_omega_t4_dha}")'
+
+
+p2
+
+
+ggsave("pn-2024-figures/fig9.pdf", 
+       p2,
+       width = 20, 
+       device = cairo_pdf,
+       height = 12, units = "cm")
 
 ```
 

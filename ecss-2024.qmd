@@ -1436,11 +1436,11 @@ sex.lean_cond.p <- round(coef(summary(m1))[5,5], 3)
 sex.lean_fm.p <- round(coef(summary(m2))[5,5], 3)
 
 
-string_diff_fun <- function(m1, m2, m3, outcome) {
+string_diff_fun <- function(m1 = m1, m2 = m2, m3 = m3, outcome) {
   
   
 
-m0_pred <- avg_predictions(m0, by = "sex", re.form = NA) %>%
+m0_pred <- avg_predictions(m1, by = "sex", re.form = NA) %>%
   data.frame()
 
 # Average per sex 
@@ -1456,17 +1456,17 @@ avg_female <- paste0(round(m0_pred[2,2], 1),
                    ", ",
                    round(m0_pred[2,8], 1),
                    "]")
-avg_diff <- paste0(round(coef(summary(m0))[3,1], 1), 
+avg_diff <- paste0(round(coef(summary(m1))[3,1], 1), 
                    "%-points, [", 
-                   round(confint(m0)[5,1], 1), 
+                   round(confint(m1)[5,1], 1), 
                    ", ",
-                   round(confint(m0)[5,2], 1),
+                   round(confint(m1)[5,2], 1),
                    "]")
 
 
 ## Avg difference between sets in males and females
 
-m1_comp <- avg_comparisons(m1, re.form = NA, by = c("sex")) %>%
+m1_comp <- avg_comparisons(m2, re.form = NA, by = c("sex")) %>%
   data.frame()
 
 avg_male_m1 <- paste0(round(m1_comp[2,4], 1), 
@@ -1481,15 +1481,15 @@ avg_female_m1 <- paste0(round(m1_comp[1,4], 1),
                    ", ",
                    round(m1_comp[1,10], 1),
                    "]")
-avg_diff_m1 <- paste0(round(coef(summary(m1))[5,1], 1), 
+avg_diff_m1 <- paste0(round(coef(summary(m2))[5,1], 1), 
                    "%-points, [", 
-                   round(confint(m1)[7,1], 1), 
+                   round(confint(m2)[7,1], 1), 
                    ", ",
-                   round(confint(m1)[7,2], 1),
+                   round(confint(m2)[7,2], 1),
                    "]")
 ## Baseline fat mass 
 
-m2_comp <- avg_comparisons(m2, re.form = NA, by = c("sex")) %>%
+m2_comp <- avg_comparisons(m3, re.form = NA, by = c("sex")) %>%
   data.frame()
 
 avg_male_m2 <- paste0(round(m2_comp[2,4], 1), 
@@ -1504,11 +1504,11 @@ avg_female_m2 <- paste0(round(m2_comp[1,4], 1),
                    ", ",
                    round(m2_comp[1,10], 1),
                    "]")
-avg_diff_m2 <- paste0(round(coef(summary(m2))[5,1], 1), 
+avg_diff_m2 <- paste0(round(coef(summary(m3))[5,1], 1), 
                    "%-points, [", 
-                   round(confint(m1)[7,1], 1), 
+                   round(confint(m3)[7,1], 1), 
                    ", ",
-                   round(confint(m1)[7,2], 1),
+                   round(confint(m3)[7,2], 1),
                    "]")
 
 
@@ -1614,7 +1614,7 @@ ggsave("ecss-2024-figures/fig10.pdf",
 
 
 
-out_llm <- string_diff_fun(m1, m2, m3, outcome = "leg lean mass")
+out_llm <- string_diff_fun(m1 = m0, m2 = m1, m3 = m2, outcome = "leg lean mass")
 
 ```
 
@@ -1738,7 +1738,7 @@ ggsave("ecss-2024-figures/fig11.pdf",
 
 ```
 
-`r string_diff_fun(vlm1, vlm2, vlm3, outcome = "vastus lateralis thickness")`
+`r string_diff_fun(m1 = vlm0, m2 = vlm1, m3 = vlm2, outcome = "vastus lateralis thickness")`
 
 
 
@@ -1883,7 +1883,7 @@ ggsave("ecss-2024-figures/fig12.pdf",
 ```
 
 
-`r string_diff_fun(strm1, strm2, strm3, outcome = "average strength")`
+`r string_diff_fun(m1 = strm0, m2 = strm1, m3 = strm2, outcome = "average strength")`
 
 
 
