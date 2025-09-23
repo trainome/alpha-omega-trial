@@ -12,6 +12,29 @@ editor_options:
   chunk_output_type: console
 ---
 
+
+## To do:
+
+- Extend all analyses to include T4 as well (separate ANCOVA with T1 as baseline)
+- Add adiponectin (from glucose data set?)
+- Blood pressure (Add blood pressure to AOData package)
+- Waist circumference (Data in e-mail, add to AOData)
+
+## Papers, priority in this order:
+
+- Paper 1: Metabolic syndrome (Blood markers, blood pressure, waist circum)
+- Paper 2: Muscle mass, strength, training modalities, glucose tolerance test, RNA-seq...
+- Paper 3: Inflammation: PBMC RNA-seq
+...
+
+
+
+
+
+
+
+
+
 ## Supplementation period
 
 
