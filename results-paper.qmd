@@ -1,10 +1,25 @@
 ---
 title: "Omega-3 + RT on metabolic syndrome"
-format: html
+format:
+  typst:
+    fig-format: svg
 editor_options: 
   chunk_output_type: console
 ---
 
+## Outline
+
+- Primary (logistic regression)
+  -	Does omega-3 supplementation, strength training, or their combination reduce the prevalence of metabolic syndrome compared to placebo?
+- Secondary (LMM)
+  -	How do the interventions affect each component of metabolic syndrome?
+  -	Are the effects additive or synergistic?
+- Exploratory
+  -	Does supplementation compliance, verified by RBC EPA+DHA percentage, predict improvements in metabolic outcomes?
+  -	Do baseline characteristics (sex, age, BMI, initial metabolic syndrome components) influence responsiveness? 
+
+- For discussion:
+  -	Feasibility, effectiveness, and clinically meaningful changes?
 
 
 ```{r}
@@ -14,16 +29,109 @@ editor_options:
 #| warnings: false
 
 
+# Packages
 library(AOData)
 library(tidyverse)
 library(ggtext)
+library(ggrepel)
+library(patchwork)
 library(lme4)
 library(nlme)
+library(glmmTMB)
+library(gt)
+library(ggh4x)
+library(cmdstanr)
 
+
+
+## Plotting functions and settings ###########################################
 
 # Color scale
 colscale <-  c("#009E73", "#D55E00", "#E69F00", "#56B4E9", 
                 "#F0E442", "#0072B2", "#CC79A7", "#000000")
+
+
+alpha_theme <- function(yaxis = TRUE) {
+  
+  if(yaxis) {
+ fun <-  theme_classic() +
+  theme(strip.background = element_blank())
+  }
+   if(!yaxis) {
+   fun <-  theme_classic() +
+  theme(strip.background = element_blank(), 
+        axis.ticks.y = element_blank(), 
+        axis.line.y = element_blank(), 
+        axis.text.y = element_blank())
+     
+   }
+  
+  
+  return(fun)
+  
+}
+
+
+
+
+
+# Should models be refitted?
+refit.models <- FALSE
+
+
+
+# Helper functions ############################################################
+
+# Wrapper function for sampling from Stan models. 
+#
+# When models are run and fits are stored the function retrieves the fit 
+# from storage. This will make it easier to work with the qmd document.  
+#
+#
+# model, a compiled Stan model object
+# DATA, the data set used to fit the model
+# fit, name of the fitted model
+# iter, number of iterations
+# iterwu, number of iterations in war-up
+# chains, number of chains
+# pchains, number of parrallel chains, 
+# refresh, progress refresh
+fit_wrap <- function(model, 
+         DATA = d, 
+         fit = "fit.m1",
+         iter = 2000, 
+         iterwu = 1000, 
+         chains = 4, 
+         pchains = 4, 
+         refresh = 1000, 
+         refit = refit.models) {
+  
+  fit.filepath <- paste0("fits/paper1/", fit, ".RDS")
+  
+  # If refit is set to true in the document, all model fits will be refitted
+  if(refit) file.remove(fit.filepath)
+  
+  # Sample from the model if a saved version does not exixts.
+  if(!file.exists(fit.filepath)) {
+    
+      fittedmodel <- model$sample(
+        data = DATA,                 # The list of variables
+        iter_sampling = iter,        # Number of iterations for sampling
+        iter_warmup = iterwu,        # Number of warm-up iterations
+        chains = chains,             # Number of Markov chains
+        parallel_chains = pchains,   # Number of parallel chains
+        refresh = refresh)           # Number of iterations before each print
+    # Save the model for easy access
+     fittedmodel$save_object(file = fit.filepath)  # <-- use this
+  } else {
+    fittedmodel <- readRDS(fit.filepath)
+  }
+  # Assign the model object to the environment. 
+    assign(fit, fittedmodel, envir = parent.frame())
+}
+
+
+#
 
 
 
@@ -31,126 +139,1327 @@ colscale <-  c("#009E73", "#D55E00", "#E69F00", "#56B4E9",
 ```
 
 
-## Omega-3 supplementation and fatty acid profiles
+## Methods
 
-Fatty acids, including including EPA (C205n3) and DHA (226n3) where measured in whole blood. We will assess the effect of supplementation on group level fatty acid profiles using mixed effects models. As preliminary models indicated heteroscedasticity of residuals, log-transformed data was used in modelling.
+### Participants
+
+```{r}
+#| echo: false
+#| message: false
+#| warnings: false
+#| label: tbl-participants
+#| tbl-cap: "Participant characteristics."
+
+
+
+part <- AOData::idkeys  
+  
+## Descriptives data 
+baseline_dat <- AOData::bodycomp |>
+  select(participant, time, lean.whole, BMC.whole, fat.whole)  |>
+  mutate(weight = lean.whole + BMC.whole + fat.whole) |>
+  inner_join(part) |>
+  filter(time == "T1") |>
+  ## Calculate height based on weight (DXA) and BMI 
+  mutate(height = 100 * sqrt((weight/1000) / bmi)) |>
+  ## Calculate relative lean and fat
+  mutate(lean.rel = 100 * (lean.whole / weight), 
+         fat.rel = 100 * (fat.whole/weight), 
+         # Weight in kg
+         weight = weight / 1000) |>
+  select(participant, 
+         treat, 
+         completed, 
+         sex, 
+         age, 
+         height, 
+         weight, 
+         bmi) |>
+  pivot_longer(cols = age:bmi)
+  
+  
+## Included participants 
+total_participants <- baseline_dat |> 
+  distinct(participant) |> 
+  pull(participant)
+
+
+
+
+# Per completed period
+# dat |> 
+#   summarise(.by = c(completed, treat, sex, name), 
+#             m = mean(value), 
+#             s = sd(value), 
+#             min = min(value), 
+#             max = max(value))
+  
+# Total
+
+# Calculate n
+n_total <- baseline_dat |> 
+  filter(name == "age") |> 
+  summarise(.by = c(treat, sex), 
+            n = n()) 
+
+n_male_omega <- n_total[1,3][[1]]
+n_female_omega <- n_total[3,3][[1]]
+n_male_ctrl <-  n_total[2,3][[1]]
+n_female_ctrl <-  n_total[4,3][[1]]
+
+
+
+
+
+baseline_dat |> 
+  summarise(.by = c(treat, sex, name), 
+            m = mean(value), 
+            s = sd(value), 
+            min = min(value), 
+            max = max(value), 
+            n = n()) |> 
+  mutate(stats = paste0(
+    sprintf("%.0f", round(m, 0)), 
+    " (", 
+    sprintf("%.0f", round(s, 0)), 
+    ") [",
+    sprintf("%.0f", round(min, 0)), 
+    " - ", 
+    sprintf("%.0f", round(max, 0)), 
+    "]"), 
+    n = n) |> 
+  
+  dplyr::select(treat, sex, name,n, stats) |> 
+  
+
+  
+  dplyr::select(-n) |> 
+  
+  pivot_wider(names_from = treat, 
+              values_from = stats) |> 
+  
+  mutate(sex = if_else(sex == "m", "Male", "Female"), 
+         name = case_when(
+           name == "age" ~ "Age (years)", 
+           name == "height" ~ "Stature (cm)", 
+           name == "weight" ~ "Body mass (kg)", 
+           name == "bmi" ~ "Body mass index (kg&times;m^-2^)", 
+           TRUE ~ NA )) |> 
+
+  group_by(sex) |> 
+  gt() |> 
+  fmt_markdown() |> 
+  
+  cols_label(omega = md(paste0("N-3<br>(&male; n = ", 
+                               n_male_omega, 
+                               "; &female; n = ", 
+                               n_female_omega, ")")),
+             ctrl = md(paste0("Placebo<br>(&male; n = ", 
+                              n_male_ctrl, 
+                              "; &female; n = ",
+                              n_female_ctrl, ")")), 
+             sex = "", 
+             name = "") |> 
+  tab_footnote(footnote = "Data are presnted as Mean (SD) [Min-Max]")
+
+```
+
+
+### Statistics and data anlysis
+
+
+
+
+
+
+
+
+
+
+## Results
+
+
+```{r}
+#| label: data-prep
+#| message: false
+#| warning: false
+#| echo: false
+
+
+# Data prep. ##################################################################
+# Outcomes in the study are:
+# - Metabolic syndrome (with sub-scores) (primary)
+#   * Triglycerides
+#   * Waist circumference
+#   * Blood pressure 
+#   * HDL Cholesterol
+#   * Resting glucose
+# - Body mass index
+# - Relative fat mass
+# - OGTT
+# - HOMA2-IR
+ 
+
+
+## Body composition 
+body_comp <-  AOData::bodycomp |> 
+  select(participant, time, lean.whole, BMC.whole, fat.whole)  |> 
+  mutate(weight = lean.whole + BMC.whole + fat.whole) |>
+  inner_join(part) |>
+  filter(time %in%  c("T1", "T2", "T4")) |>
+  ## Calculate height based on weight (DXA) and BMI 
+  mutate(height = if_else(time == "T1", 
+                          100 * sqrt((weight/1000) / bmi), 
+                          NA)) |>
+  mutate(.by = participant, 
+         height = mean(height, na.rm = TRUE)) |> 
+
+  
+  ## Calculate relative lean and fat
+  mutate(lean.rel = 100 * (lean.whole / weight), 
+         fat.rel = 100 * (fat.whole / weight), 
+         # Weight in kg
+         weight = weight / 1000, 
+         bmi = weight * (height/100)^-2 ) |>
+
+  select(participant, time, sex, fat.rel, bmi) |> 
+  pivot_longer(cols = fat.rel:bmi, 
+               names_to = "analyte", 
+               values_to = "value") |> 
+  mutate(threshold = NA) 
+  
+  
+### Glucose data 
+glucose_dat <- AOData::glucose |> 
+  inner_join( idkeys |> 
+               select(participant, sex)) |> 
+  filter(min == 0) |> 
+  select(participant, sex, time, HOMA2IR) |> 
+  pivot_longer(cols = HOMA2IR, 
+               names_to = "analyte", 
+               values_to = "value") |> 
+  mutate(threshold = NA) 
+
+
+
+
+# Combine all data from metabolic syndrome criteria variables
+criteria_dat <- bind_rows(
+  # HDL Cholesterol: <40 mg/dL for men, <50 mg/dL for women, or taking medication for it.
+  AOData::bloodvar |> 
+  inner_join(AOData::idkeys |> 
+               select(participant, sex)) |> 
+  filter(analyte == "HDL") |> 
+  # Convert to mg/dl: 1 mmol/L = 38,6654 mg/dL
+  mutate(hdl = if_else(sex == "m",
+                       if_else(value * 38.6654 < 40, TRUE, FALSE), 
+                       if_else(value * 38.6654 < 50, TRUE, FALSE))) |> 
+  select(participant, time, sex, analyte, value, threshold = hdl), 
+  
+  # Fasting Glucose: 100 mg/dL or higher, or taking medication for it.
+  
+  AOData::glucose |> 
+  filter(min == 0) |> 
+  filter(!is.na(glucose)) |> 
+  select(participant, time, glucose) |>
+  inner_join(AOData::idkeys |> 
+               select(participant, sex)) |> 
+  # Convert to mg/dl: 1 mmol/L = 18,0156 mg/dL
+  mutate(threshold = if_else(glucose * 18.0156 > 100, TRUE, FALSE), 
+         analyte = "glucose") |> 
+  select(participant, time, sex, analyte, value = glucose, threshold), 
+  
+  # Triglycerides: 150 mg/dL or higher, or taking medication for it.
+  
+  AOData::bloodvar |> 
+  filter(analyte == "TG") |> 
+  inner_join(AOData::idkeys |> 
+               select(participant, sex)) |> 
+  # Convert to mg/dl: 1 mmol/L = 88.57 mg/dL
+  mutate(tg = if_else(value * 88.57 > 150, TRUE, FALSE)) |> 
+  select(participant, time, sex, analyte, value, threshold = tg), 
+  
+  # Waist circumference: >40 inches (102 cm) for men, >35 inches (88 cm) for women.
+  
+  AOData::waist_bp |> 
+  filter(measure == "waist") |> 
+  mutate(waist = if_else(sex == "m", 
+                         if_else(value > 102, TRUE, FALSE), 
+                         if_else(value > 88, TRUE, FALSE))) |> 
+  select(participant, time, sex, analyte = measure, value, threshold = waist) |> 
+  filter(!is.na(value)),
+  
+  # Blood Pressure: 130/85 mm Hg or higher, or taking medication for it.
+  
+  AOData::waist_bp |> 
+  filter(measure != "waist") |> 
+  pivot_wider(names_from = measure, values_from = value) |> 
+  mutate(bp = if_else(sys > 130 | dias > 85, TRUE, FALSE), 
+         map = dias + ((sys-dias)/3), 
+         analyte = "bp") |> 
+  select(participant, time, sex, analyte, value = map, threshold = bp) |> 
+  filter(!is.na(value)), 
+  # Add body composition 
+  body_comp, 
+  # Add homa2IR
+  glucose_dat
+  ) |> 
+  # Create binomial variable for individual criteria
+  mutate(crit = if_else(threshold == TRUE, 1, 0)) |> 
+  inner_join(idkeys |> 
+               select(participant, treat, age, sex))   |> 
+  
+  # Filter to correspond to total participants
+  filter(participant %in% total_participants)
+  
+  
+
+
+
+# Data set for complete-case analysis ##########################################
+# These are participants with complete cases for the main outcome (met syndrome) 
+# from T1 to T4. No missing values are allowed in the complete case analysis.
+# For the missingness analysis, participants completing T2 are also sorted out.
+participant_complete_T4 <- criteria_dat |> 
+  filter(analyte %in% c("HDL", 
+                        "TG", 
+                        "waist", 
+                        "glucose", 
+                        "bp")) |> 
+  select(participant, time, treat, sex, analyte, value) |> 
+  # Critera measures
+  pivot_wider(names_from = analyte, 
+              values_from = value) |> 
+  filter(complete.cases(pick(HDL:bp))) |> 
+  pivot_longer(cols = HDL:bp)  |> 
+  
+  
+  pivot_wider(names_from = time, 
+              values_from = value) |> 
+  filter(complete.cases(pick(T2, T4))) |> 
+  distinct(participant) |> 
+  pull(participant)
+
+
+participant_complete_T2 <- criteria_dat |> 
+  filter(analyte %in% c("HDL", 
+                        "TG", 
+                        "waist", 
+                        "glucose", 
+                        "bp")) |> 
+  select(participant, time, treat, sex, analyte, value) |> 
+  # Critera measures
+  pivot_wider(names_from = analyte, 
+              values_from = value) |> 
+  filter(complete.cases(pick(HDL:bp))) |> 
+  pivot_longer(cols = HDL:bp)  |> 
+  
+  
+  pivot_wider(names_from = time, 
+              values_from = value) |> 
+  filter(complete.cases(pick(T2))) |> 
+  distinct(participant) |> 
+  pull(participant)
+
+# All participants at baseline 
+
+
+
+
+
+
+
+```
+
+
+### Missing data analysis
+
+To assess if our outcome variables predict drop-out we fit a logistic regression model 
+
+$$
+\begin{align}
+D_i &\sim \operatorname{Bernoulli}(p_i) \\
+\operatorname{Logit}(p_i) &= \alpha_{[A]} + \beta_{X[A]} X_i + \beta_{S[A]} S_i + \beta_{T[A]} T_i + \beta__{TX[A]} T_i X_i \\
+\alpha_{[A]}, \beta_{X[A]}, \beta_{S[A]}, \beta_{T[A]}, \beta_{TX[A]} &\sim \operatorname{Normal}(0, 0.5) \\
+\end{align}
+$$
+
+```{r}
+#| label: fig-descriptive-data
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 8
+#| fig-width: 6
+#| fig-cap: "Observed data distributions of main outcomes."
+
+
+
+d_full <- criteria_dat |> 
+  
+  select(participant, time, treat, sex, age, analyte, value) |> 
+
+  # Add missing values for all missing obs. 
+  pivot_wider(names_from = time, 
+              values_from = value) |> 
+
+  pivot_longer(cols = c(T1, T2, T4), 
+               values_to = "value",
+               names_to = "time" ) |> 
+  
+  pivot_wider(names_from = analyte, 
+              values_from = value) |> 
+
+    pivot_longer(cols = HDL:HOMA2IR, 
+               values_to = "value",
+               names_to = "analyte" ) |> 
+  
+  
+  mutate(value_std = if_else(analyte == "TG", log(value), value)) |> 
+  
+  mutate(.by = analyte, 
+         value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE)) |> 
+  # To make all variables similarly signed HDL is reversed. 
+  # Expected improvement in scores will be in the negative direction 
+  # for all criteria markers
+  mutate(value_std = if_else(analyte == "HDL", 
+                         -value_std, value_std)) |> 
+  mutate(participant = paste0("p", participant)) 
+
+  
+
+
+## Descriptive plots
+
+d_full |> 
+
+
+  mutate(
+           analyte = case_when(
+           analyte == "waist" ~ "Waist<br>circumference (cm)", 
+           analyte == "glucose" ~ "Resting glucose<br>(mmol L<sup>-1</sup>)" ,
+           analyte == "bp" ~ "Blood pressure<br>(MAP)", 
+           analyte == "TG" ~ "Triglycerides<br>(mmol L<sup>-1</sup>)", 
+           analyte == "HDL" ~ "HDL Cholesterol<br>(mmol L<sup>-1</sup>)", 
+           analyte == "fat.rel" ~ "Relative fat mass<br>(%)", 
+           analyte == "bmi" ~ "Body mass index<br>(kg m<sup>-2</sup>)",
+           analyte == "HOMA2IR" ~ "Insulin sensitivity<br>index"
+           
+         ), 
+         sex = if_else(sex == "f", "Female", "Male")) |> 
+  
+
+  ggplot(aes(x = value, color = time)) + 
+  geom_line(stat = "density") + 
+  facet_wrap(~analyte + sex,  scales = "free")  + 
+  alpha_theme(yaxis = FALSE) + 
+  theme(strip.text = element_markdown(), 
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = "bottom") +
+  labs(color = "Time") + 
+  scale_color_manual(values = colscale)
+```
+
+
+
+
+
+```{r}
+#| label: fig-missing-data
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 8
+#| fig-width: 6
+#| fig-cap: "Observed and missing data across treatment groups and time-points. Rows are participants, columns are data points."
+
+
+d_full |> 
+
+  
+    # Add indicator for met syn criteria. 
+  mutate(met_sym_crit = if_else(analyte %in% c("bmi", "fat.rel", "HOMA2IR"), 0, 1)) |> 
+  
+
+
+  
+  mutate(.by = participant, 
+         n_miss =  sum(is.na(value))) |> 
+  # Reorder participants by missing values
+  mutate(participant = fct_reorder(participant, -n_miss)) |>
+  mutate(.by = treat, 
+         participant_num = dense_rank(as.numeric(participant))) |> 
+  mutate(miss = if_else(is.na(value), "miss", "data")) |> 
+  # Fix labels
+   mutate(
+           analyte = case_when(
+           analyte == "waist" ~ "Waist circumference", 
+           analyte == "glucose" ~ "Resting glucose" ,
+           analyte == "bp" ~ "Blood pressure", 
+           analyte == "TG" ~ "Triglycerides", 
+           analyte == "HDL" ~ "HDL Cholesterol",
+           analyte == "fat.rel" ~ "Relative fat mass", 
+           analyte == "bmi" ~ "Body mass index",
+          analyte == "HOMA2IR" ~ "Insulin sensitivity index"
+           
+         ),
+         
+         analyte = factor(analyte, 
+                          levels = c("Waist circumference", 
+                                     "Resting glucose", 
+                                     "Blood pressure",
+                                     "Triglycerides",
+                                     "HDL Cholesterol", 
+                                     "Relative fat mass", 
+                                     "Body mass index", 
+                                     "Insulin sensitivity index")),
+         
+         miss = factor(miss, levels = c("data", "miss"), 
+                       labels = c("Observed data", 
+                                  "Missing data")), 
+         treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3")), 
+         met_sym_crit = if_else(met_sym_crit == 1, 
+                                "Metabolic syndrome criteria", 
+                                "Body composition")) |> 
+    arrange(participant, time, analyte) |> 
+    mutate(.by = participant,
+         coord = rep(1:8, 3))|> 
+
+
+  
+  
+
+  # Per group
+  ggplot(aes(coord, participant_num, 
+             color = miss, 
+             fill = analyte, 
+             alpha = miss)) + 
+  
+
+  geom_point(shape = 21, size = 2) + 
+
+  scale_color_manual(values = c("black", "gray")) + 
+  scale_alpha_manual(values = c(1, 0.6)) +
+  scale_fill_manual(values = colscale) + 
+  facet_nested( ~ treat + time , scales = "free_y") +
+
+  alpha_theme(yaxis = FALSE) +
+  
+  
+  theme(axis.text.y = element_blank(), 
+        axis.ticks.y  = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x  = element_blank(), 
+        axis.line.x = element_blank(), 
+        panel.background = element_rect(fill = c("gray90"))
+        ) + 
+  labs(x = "",
+       y = "", 
+       fill = "Measurement", 
+       color = "", 
+       alpha = "")
+```
+
+
+
+
+
+
+```{r}
+#| label: missing-data-prep
+#| message: false
+#| warning: false
+#| echo: false
+#| output: false
+
+
+
+# Does baseline characteristics predict drop-out?
+
+miss_dat <- criteria_dat |> 
+  select(- threshold, -crit) |> 
+  # Filter for time-point 1
+  filter(time == "T1") |> 
+  pivot_wider(names_from = analyte, 
+              values_from = value) |> 
+  pivot_longer(cols = age:HOMA2IR, 
+               values_to = "value", 
+               names_to = "analyte")  |> 
+    mutate(.by = analyte, 
+         value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value), 
+         value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE)) 
+
+## For mean-centering 
+baseline_cent <- miss_dat |> 
+  summarise(.by = analyte, 
+            m = mean(value, na.rm = TRUE), 
+            s = sd(value, na.rm = TRUE), 
+            nas = sum(is.na(value_std)), 
+            n = n()) |> 
+  mutate(nas = nas / n) 
+
+
+miss_dat2 <- miss_dat |> 
+  filter(!is.na(value_std)) |> 
+  # Missing at follow-up
+  mutate(
+    miss_t4 = if_else(participant %in% participant_complete_T4, 0, 1), 
+    miss_t2 = if_else(participant %in% participant_complete_T2, 0, 1), 
+    P = dense_rank(participant), 
+    A = dense_rank(analyte), 
+    TX= if_else(treat == "ctrl", -0.5, 0.5), 
+    S = if_else(sex == "m", -0.5, 0.5),
+  ) 
+  
+  
+# Prepare list for model 
+d <- list(
+  N = nrow(miss_dat2), 
+  N_A = length(unique(miss_dat2$A)), 
+  N_P = length(unique(miss_dat2$P)), 
+  N_TX =length(unique(miss_dat2$TX)), 
+  N_S = length(unique(miss_dat2$S)), 
+  # Indicators
+  P = miss_dat2$P,           # Participant
+  A = miss_dat2$A,           # Outcome/Analyte
+  TX= miss_dat2$TX,          # Treatment
+  
+  # Predictors
+  S = miss_dat2$S,           # sex
+  x = miss_dat2$value_std,   # outcome std value
+  do4 = miss_dat2$miss_t4,   # Drop-out to T4 
+  do2 = miss_dat2$miss_t2,    # Drop-out to T2
+  
+  prior_only = 1
+  
+)
+
+
+
+# Compiling the model
+m1 <- cmdstan_model(stan_file = "models/m1.stan", 
+                      exe_file = "models/m1.exe")
+
+
+
+fit_wrap(m1,fit = "fit.m1", DATA = d)
+
+
+```
+
+
+```{r}
+#| label: fig-dropout-priorpredictive
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 8
+#| fig-width: 6
+#| fig-cap: "Prior predictive simulation for model 1. Columns are values of the predictor (SD-units) rows represents each predictor."
+
+
+draws.m1 <- fit.m1$draws(format = "df")
+
+
+draws.m1 |> 
+  filter(.chain == 1) |> 
+  pivot_longer(cols = starts_with(c("alpha2", "beta2"))) |> 
+  separate(name, into = c("param", "A"), sep = "\\[") |> 
+  mutate(A = gsub("\\]", "", A)) |> 
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  # Adding predictor variables
+  expand_grid(x = seq(from = -3, to = 3, by = 3), 
+                TX = c(-0.5, 0.5)) |>
+  
+  mutate(log_odds = alpha2 + beta2_x * x + beta2_tx * TX + beta2_xtx * TX * x, 
+         prob = plogis(log_odds)) |> 
+  mutate(Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+  ggplot(aes(prob, color = Treatment)) + 
+  geom_line(stat = "density") +
+  facet_grid( A ~ x ) +
+  labs(x = "Drop-out probability", 
+       y = "Prior density") +
+  theme_classic() + 
+  theme(strip.background = element_blank(), 
+        strip.text.y = element_text(angle = 0)) + 
+  scale_color_manual(values = colscale)
+
+  
+```
+
+
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| output: false
+
+
+
+d$prior_only <- 0
+
+fit_wrap(m1, fit = "fit.m1p", DATA = d)
+
+draws.m1 <- fit.m1p$draws(format = "df")
+
+```
+
+
+```{r}
+#| label: fig-dropout-across
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 8
+#| fig-width: 10
+#| fig-cap: "Probability of drop-out across values of baseline co-variates on per treatment group to time-point 2 (A) and 4 (B). Estimates are adjusted for sex, intervals are 90% percentile interval."
+
+a <- draws.m1 |> 
+  filter(.chain == 1) |> 
+  pivot_longer(cols = starts_with(c("alpha2", "beta2"))) |> 
+  separate(name, into = c("param", "A"), sep = "\\[") |> 
+  mutate(A = gsub("\\]", "", A)) |> 
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  # Adding predictor variables
+  expand_grid(x = seq(from = -3, to = 3, by = 0.1), 
+                TX = c(-0.5, 0.5)) |>
+  
+  mutate(log_odds = alpha2 + beta2_x * x + beta2_tx * TX + beta2_xtx * TX * x, 
+         prob = plogis(log_odds), 
+         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+  
+
+  summarise(.by = c(A, Treatment, x), 
+            mprob = mean(prob), 
+            lwr = quantile(prob, 0.05), 
+            upr = quantile(prob, 0.95)) |> 
+  
+  # Inner join transforming to centering
+  inner_join(
+    miss_dat2 |> 
+  distinct(A, analyte) |> 
+  mutate(
+    
+    A = as.character(A),
+    
+    Outcome = case_when(
+    analyte == "age" ~ "Age (years)", 
+    analyte == "waist" ~ "Waist circumference (cm)", 
+    analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
+    analyte == "bp" ~ "Blood pressure (MAP)", 
+    analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
+    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+    analyte == "fat.rel" ~ "Relative fat mass (%)", 
+    analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
+    analyte == "HOMA2IR" ~ "Insulin resistance index (log)")) |> 
+  inner_join(
+    baseline_cent
+   )
+  ) |> 
+  
+  mutate(outcome_scale = m + x * s) |> 
+  
+  ggplot(aes(outcome_scale, mprob, 
+             fill = Treatment,
+             ymin = lwr, ymax = upr)) +
+  geom_ribbon(alpha = 0.2) + 
+  facet_wrap(~ Outcome, scales = "free_x") + 
+  
+  theme(strip.text = element_markdown(), 
+        legend.position = c(0.9, 0.96), 
+        legend.title = element_blank()) + 
+  labs(x = "", 
+       y = "Probability of drop-out", 
+       title = "A") 
+  
+
+
+b <- draws.m1 |> 
+  filter(.chain == 1) |> 
+  pivot_longer(cols = starts_with(c("alpha4", "beta4"))) |> 
+  separate(name, into = c("param", "A"), sep = "\\[") |> 
+  mutate(A = gsub("\\]", "", A)) |> 
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  # Adding predictor variables
+  expand_grid(x = seq(from = -3, to = 3, by = 0.1), 
+                TX = c(-0.5, 0.5)) |>
+  
+  mutate(log_odds = alpha4 + beta4_x * x + beta4_tx * TX + beta4_xtx * TX * x, 
+         prob = plogis(log_odds), 
+         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+  
+
+  summarise(.by = c(A, Treatment, x), 
+            mprob = mean(prob), 
+            lwr = quantile(prob, 0.05), 
+            upr = quantile(prob, 0.95)) |> 
+  
+  # Inner join transforming to centering
+  inner_join(
+    miss_dat2 |> 
+  distinct(A, analyte) |> 
+  mutate(
+    
+    A = as.character(A),
+    
+    Outcome = case_when(
+    analyte == "age" ~ "Age (years)", 
+    analyte == "waist" ~ "Waist circumference (cm)", 
+    analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
+    analyte == "bp" ~ "Blood pressure (MAP)", 
+    analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
+    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+    analyte == "fat.rel" ~ "Relative fat mass (%)", 
+    analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
+    analyte == "HOMA2IR" ~ "Insulin resistance index (log)")) |> 
+  inner_join(
+    baseline_cent
+   )
+  ) |> 
+  
+  mutate(outcome_scale = m + x * s) |> 
+  
+  ggplot(aes(outcome_scale, mprob, 
+             fill = Treatment,
+             ymin = lwr, ymax = upr)) +
+  geom_ribbon(alpha = 0.2) + 
+  facet_wrap(~ Outcome, scales = "free_x") + 
+  
+  theme(strip.text = element_markdown(), 
+        legend.position = "none") + 
+  labs(x = "", 
+       y = "Probability of drop-out", 
+       title = "B")
+
+
+a | b
+
+```
+
+
+```{r}
+#| label: fig-dropout-treat
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 8
+#| fig-width: 6
+#| fig-cap: "Effects of one SD-uniut change in baseline value on log-odds probability of droup-out per treatment group. Estimates are adjusted for sex, intervals are 90% percentile interval."
+
+draws.m1 |> 
+  filter(.chain == 1) |> 
+  pivot_longer(cols = starts_with(c("alpha", "beta"))) |> 
+  separate(name, into = c("param", "A"), sep = "\\[") |> 
+  mutate(A = gsub("\\]", "", A), 
+         time = if_else(grepl("4", param), "T4", "T2"), 
+         param = gsub("[0-9]", "", param)) |> 
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  # Adding predictor variables
+  expand_grid(x = seq(from = -3, to = 3, by = 0.1), 
+                TX = c(-0.5, 0.5)) |>
+  
+  mutate(log_odds = beta_x + beta_xtx * TX , 
+         prob = plogis(log_odds), 
+         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+  
+  summarise(.by = c(A, Treatment, time), 
+            mprob = mean(log_odds), 
+            lwr = quantile(log_odds, 0.05), 
+            upr = quantile(log_odds, 0.95)) |> 
+    inner_join(
+    miss_dat2 |> 
+  distinct(A, analyte) |> 
+  mutate(
+    
+    A = as.character(A),
+    
+    Outcome = case_when(
+    analyte == "age" ~ "Age (years)", 
+    analyte == "waist" ~ "Waist circumference (cm)", 
+    analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
+    analyte == "bp" ~ "Blood pressure (MAP)", 
+    analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
+    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+    analyte == "fat.rel" ~ "Relative fat mass (%)", 
+    analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
+    analyte == "HOMA2IR" ~ "Insulin resistance index (log)")) |> 
+  inner_join(
+    baseline_cent
+   )
+  ) |> 
+ 
+  ggplot(aes(Treatment, mprob, 
+             ymin = lwr, ymax = upr, 
+             color = time)) + 
+  geom_pointrange(position = position_dodge(width = 0.2)) + 
+  facet_wrap(~ Outcome) +
+    theme(strip.text = element_markdown()) + 
+  labs(x = "", 
+       y = "Log-odds change in drop-out probability\nper SD-unit change in predictor")
+```
+
+
+```{r}
+#| label: fig-dropout-treatcomp
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 8
+#| fig-width: 6
+#| fig-cap: "Differences in the effect of baseline value on drop-out probability between treatments groups. Estimates are adjusted for sex, intervals are 90% percentile interval."
+
+
+
+draws.m1 |> 
+  filter(.chain == 1) |> 
+  pivot_longer(cols = starts_with(c("alpha", "beta"))) |> 
+  separate(name, into = c("param", "A"), sep = "\\[") |> 
+   mutate(A = gsub("\\]", "", A), 
+         time = if_else(grepl("4", param), "T4", "T2"), 
+         param = gsub("[0-9]", "", param)) |> 
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  # Adding predictor variables
+  expand_grid(x = seq(from = -3, to = 3, by = 0.1), 
+                TX = c(-0.5, 0.5)) |>
+  
+  mutate(log_odds = beta_xtx, 
+         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+  
+  summarise(.by = c(A, Treatment, time), 
+            mprob = mean(log_odds), 
+            lwr = quantile(log_odds, 0.05), 
+            upr = quantile(log_odds, 0.95)) |> 
+    inner_join(
+    miss_dat2 |> 
+  distinct(A, analyte) |> 
+  mutate(
+    
+    A = as.character(A),
+    
+    Outcome = case_when(
+    analyte == "age" ~ "Age (years)", 
+    analyte == "waist" ~ "Waist circumference (cm)", 
+    analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
+    analyte == "bp" ~ "Blood pressure (MAP)", 
+    analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
+    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+    analyte == "fat.rel" ~ "Relative fat mass (%)", 
+    analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
+    analyte == "HOMA2IR" ~ "Insulin resistance index (log)")) |> 
+  inner_join(
+    baseline_cent
+   )
+  ) |> 
+ 
+  ggplot(aes(Outcome, mprob, color = time,
+             ymin = lwr, ymax = upr)) + 
+  geom_pointrange(position = position_dodge(width = 0.1)) + 
+  labs(x = "", 
+       y = "Log-odds (N-3 - Placebo, 90% PI)", 
+       color = "Time-point") +
+  coord_flip() + 
+  theme(axis.text.y = element_markdown())
+  
+  
+
+```
+
+
+
+### N-3 supplementation and fatty acid profiles
+
+Fatty acids, including including EPA (C205n3) and DHA (226n3) where measured in whole blood. We will assess the effect of supplementation on group level fatty acid profiles using mixed-effects models. As preliminary models indicated heteroscedasticity of residuals, log-transformed data was used in modelling.
 
 
 
 ```{r}
 #| fig-width: 8
 #| fig-height: 10
-#| fig-cap: "Changes in whole-blood fatty acid profiles from baseline (T1) to post-supplementation (T2), and post-supplementation + exercise (T4), including EPA (C205n3) and DHA (226n3). Error bars represent 99% CI around estimated marginal means. Significant differences between treatment groups are indicated with * (FDR < 0.05)."
+#| fig-cap: "Prior predictive check for target-wise models of post-treatment fatty acid concentrations conditional on pre-treatment values. The model expects log-transformed standardized values and the priors suggest no difference between treatment groups and a proportional relationship between th pre-intervention values and post-intervention measurements."
+#| label: fig-m2-priorpred
 #| echo: false
+#| message: false
+#| warning: false
+#| output: false
+
+
+fat_dat <- AOData::omega3  |>
+  inner_join(idkeys) |>
+  
+  filter(time %in% c("T1", "T2", "T4"), 
+         participant %in% total_participants) |>
+  select(participant, time, treat, C16:C226n3) |>
+  pivot_longer(cols =  C16:C226n3, 
+               names_to = "fa", 
+               values_to = "value")  |> 
+  mutate(.by = fa, 
+         value_std = log(value), 
+         value_std = (value_std - mean(value_std)) / sd(value_std)) |> 
+  mutate(FA = dense_rank(fa), 
+         TX = dense_rank(treat)) 
+  
+  
+# Fatty acid summarise  
+fat_sum <- fat_dat |> 
+    summarise(.by = c(FA,fa), 
+              m = mean(log(value)), 
+              s = sd(log(value)))
+  
+  
+
+# Check n 
+fat_n <- fat_dat |> 
+  distinct(time, treat, participant) |> 
+  summarise(.by = c(time, treat), 
+            n = n())
+
+# Filter for complete case and prep data 
+
+fat_dat2 <- fat_dat |> 
+  select(participant, FA, TX, time, value_std) |> 
+  pivot_wider(names_from = time, values_from = value_std) |> 
+  filter(complete.cases(pick(T1:T4))) |> 
+  pivot_longer(names_to = "TI", 
+               values_to = "y", 
+               cols = T2:T4) |> 
+  mutate(TI = dense_rank(TI), 
+         P = dense_rank(participant))
+
+
+d <- list(
+  # Length of indices
+  N    = nrow(fat_dat2), 
+  N_FA = length(unique(fat_dat2$FA)),
+  N_P  = length(unique(fat_dat2$P)),
+  N_TX = length(unique(fat_dat2$TX)),
+  N_TI = length(unique(fat_dat2$TI)),
+  # Indicators 
+  P = fat_dat2$P, 
+  FA = fat_dat2$FA, 
+  TX = fat_dat2$TX,
+  TI = fat_dat2$TI,
+  # Co-variate and outcome
+  pre = fat_dat2$T1, 
+  y = fat_dat2$y, 
+  # Prior only flag
+  prior_only = 1
+
+)
+
+
+
+# Compiling the model
+m2 <- cmdstan_model(stan_file = "models/m2.stan", 
+                      exe_file = "models/m2.exe")
+
+
+fit_wrap(m2, fit = "fit.m2", DATA = d)
+
+
+draws.m2 <- fit.m2$draws(format = "df")
+
+
+draws.m2 |>
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .iteration, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  inner_join(
+    draws.m2 |>
+      filter(.chain == 1) |> 
+      select(starts_with("beta"), .iteration) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             beta = value 
+         ) ) |> 
+
+  
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.1)) |> 
+   
+  mutate(mu = alpha + beta * pre) |> 
+  
+  summarise(.by = c(FA, TI, TX, pre), 
+            m = mean(mu), 
+            lwr = quantile(mu, 0.05), 
+            upr = quantile(mu, 0.95)) |> 
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
+             color = TX, 
+             fill = TX)) + 
+  geom_line() + 
+  geom_ribbon(alpha = 0.2, aes(color = NULL)) + 
+  facet_grid(FA ~ TI)
+
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Model performance metrics from Model 2."
+#| echo: false
+#| label: fig-m2-modelperformance
+#| message: false
+#| warning: false
+#| output: false
+
+
+d$prior_only <- 0
+
+# Sample the posterior
+fit_wrap(m2, fit = "fit.m2p", DATA = d)
+
+
+# Model performance
+sum.m2 <- fit.m2p$summary()
+
+# Get (most) problematic parameters
+vars <- sum.m2 |> 
+  arrange(-rhat) |> 
+   filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  slice_head(n = 3) |> 
+  pull(variable)
+
+
+
+p1 <- sum.m2 |> 
+  filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  mutate(variable_type = variable) |> 
+  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+  
+  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
+  
+  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
+  geom_point() + 
+  
+  geom_text_repel(aes(label = highlight, 
+                color = NULL, 
+                size = NULL)) +
+  
+  labs(x = "(Bulk) effective sample size", 
+       y = "R-hat", 
+       color = "Parameter type", 
+       size = "(Tail) effective sample size") +
+  scale_color_manual(values = colscale)
+
+
+
+
+draws.m2 <- fit.m2p$draws(format = "df")
+
+
+p2  <- draws.m2 |> 
+  select(.iteration, .chain, all_of(vars)) |> 
+  pivot_longer(cols = all_of(vars)) |> 
+  ggplot(aes(.iteration, value, 
+             color = as.factor(.chain))) + 
+  geom_line(alpha = 0.5) + 
+  facet_wrap(~ name, ncol = 1, 
+             scales = "free_y") + 
+  scale_color_manual(values = colscale) + 
+  labs(x = "Iteration", 
+       color = "Chain", 
+       y = "Parameter value")
+
+
+
+p1 / p2
+
+
+```
+
+
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 8
+#| fig-cap: "Posterior predictive check of Model 2."
+#| echo: false
+#| label: fig-m2-postpred
 #| message: false
 #| warning: false
 
 
 
 
-idkeys <- AOData::idkeys |>
-  select(participant, treat, sex, completed) |>
-  filter(completed != "t1") |>
-  select(-completed) 
-
-d <- AOData::omega3  |>
-  inner_join(idkeys) |>
-  filter(time %in% c("T1", "T2", "T4")) |>
-  select(participant, time, treat, C16:C226n3) |>
-  pivot_longer(cols =  C16:C226n3, 
-               names_to = "fa", 
-               values_to = "value") 
-
-## Set up loop to model fatty acids 
-
-target <- d |> 
-  distinct(fa) |> 
-  pull(fa)
-
-
-
-coefs <- list()
-preds <- list()
-
-for(i in seq_along(target)) {
+# Posterior predictive check 
+draws.m2 |>
+  filter(.chain == 1) |> 
+  filter(.iteration %in% sample(1:2000, 50)) |> 
+  select(starts_with("y_rep"), .iteration) |> 
+  pivot_longer(cols = starts_with("y_rep")) |> 
   
-  dsub <- d |> 
-  filter(fa == target[i]) |> 
-    mutate(lnvalue = log(value))
+  mutate(FA = rep(d$FA, 50), 
+         TI = rep(d$TI, 50), 
+         TX = rep(d$TX, 50)) |> 
   
+  inner_join(fat_sum) |> 
+
+  ggplot(aes(x = value, 
+             color = as.factor(TX),
+             group = paste(.iteration, TX))) + 
+  geom_line(stat = "density", alpha = 0.1) + 
   
-  # Fit model log-transformed data
-  m <- lmerTest::lmer(lnvalue ~ time + time:treat + (1|participant), 
-                      data = dsub)
+  geom_line(data = data.frame(
+    value = d$y, 
+    FA = d$FA, 
+    TI = d$TI, 
+    TX = d$TX
+  ) |>  inner_join(fat_sum), 
+  aes(x = value, group = TX, color = as.factor(TX)), 
+  stat = "density", 
+  linewidth = 1.2) +
   
-  out <- bind_rows(
-    broom.mixed::tidy(m, conf.int = TRUE), 
-    marginaleffects::avg_comparisons(m, variables = "treat", by = "time", 
-                                   transform = function(x) 100  * (exp(x) - 1)) |> 
-    data.frame() |> 
-    mutate(effect = "comp", 
-           group = NA, 
-           std.error = NA, 
-           statistic = NA, 
-           df = NA, 
-           term = paste0(contrast,":", time)) |> 
-    select(effect, 
-           group,
-          term,
-           estimate,
-           std.error, 
-           statistic, 
-           df, 
-           conf.low, 
-           conf.high) 
-    ) |> 
-    mutate(fa = target[i]) |> 
-    select(fa, effect:conf.high)
+  facet_grid(fa ~ TI) +
   
+  scale_color_manual(values = colscale) +
+  
+  theme(axis.text.y = element_blank(), 
+        axis.ticks.y = element_blank(), 
+        axis.title.y = element_blank()) +
+  labs(color = "Treatment groups", 
+       x = "Observed / Predicted values")
   
 
+
+
+```
+
+
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 8
+#| fig-cap: "Predictions of fatty acid concentration in response to treatment. Pre-intervention values are means per treatment group, post-intervention means are predicted from the model with 99% PI."
+#| echo: false
+#| label: fig-m2-meanpred
+#| message: false
+#| warning: false
+
+
+
+pre_int_means <- fat_dat2 |> 
+  filter(TI == 1) |> 
+  summarise(.by = FA, 
+            pre = mean(T1))
+
+
+m2_sum <- draws.m2 |>
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .iteration, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws.m2 |>
+      filter(.chain == 1) |> 
+      select(starts_with("sigma"), .iteration) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws.m2 |>
+      filter(.chain == 1) |> 
+      select(starts_with("beta"), .iteration) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA)) |> 
+  
+  inner_join(pre_int_means) |> 
+  rowwise() |> 
+  mutate(mu = alpha + beta * pre, 
+         y_pred = rnorm(1, alpha + beta * pre, sigma)) |> 
+  ungroup() |> 
+  summarise(
+    .by = c(FA, TI, TX), 
+    Mu  = mean(mu), 
+    lwr99 = quantile(mu, 0.005), 
+    upr99 = quantile(mu, 0.995), 
+    lwr50 = quantile(mu, 0.25), 
+    upr50 = quantile(mu, 0.75),
+    
+    lwr_pred90 = quantile(y_pred, 0.05), 
+    upr_pred90 = quantile(y_pred, 0.95) ) |> 
+  
+  # Back-transform all estimates
+  pivot_longer(cols = Mu:upr_pred90, 
+               names_to = "est", 
+               values_to = "value") |> 
+  inner_join(fat_sum) |> 
+  
+  mutate(value_org = exp(value * s + m)) |> 
+  
+  select(FA:est, fa, value_org) |> 
+  pivot_wider(names_from = est, 
+              values_from = value_org) |> 
+  
+  mutate(time = if_else(TI == 1, "T2", "T4"), 
+         treat = if_else(TX == 1, "ctrl", "omega"), 
+         treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+
+  add_row(
+    fat_dat |> 
+      filter(time == "T1") |> 
+      summarise(.by = c(time, treat, fa), 
+                Mu = mean(value)) |> 
+      mutate(TX = NA, 
+             TI = NA,
+             FA = NA, 
+              treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3"))) 
+  ) 
   
   
-  coefs[[i]] <- out
-  preds[[i]] <- marginaleffects::avg_predictions(m, variables = c("time", "treat"), 
-                                   transform = "exp", 
-                                   conf_level = 0.99) |> 
-    mutate(fa = target[i]) |> 
-    data.frame()
-  
-}
 
-
-res <- bind_rows(coefs)
-
-preds <- bind_rows(preds) |> 
-  mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3")))
-
-
-
-
-stats  <- res |> 
-  filter(term %in% c("timeT2:treatomega", "timeT4:treatomega")) |> 
-  select(fa, term, p.value) |> 
-  mutate(fdr = p.adjust(p.value), 
-         sign = if_else(fdr < 0.05, "*", ""), 
-        term = gsub("time", "", term), 
-        term = gsub(":treatomega", "", term)) |> 
-  select(fa, time = term, p.value, sign) |> 
-  inner_join(preds |> 
-  summarise(.by = c(time, fa), 
-  m = max(estimate))) |> 
-  inner_join(d |> 
-  summarise(.by = c(fa), 
-          m.obs = quantile(value, 0.95))) |> 
-  mutate(sign.place = m + ((m.obs - m) / 2))
-
-
-
-
+## Plotting predictions with data  
 AOData::omega3  |>
   inner_join(idkeys) |>
+  filter(participant %in% fat_dat2$participant)  |> 
+
   filter(time %in% c("T1", "T2", "T4")) |>
   select(participant, time, treat, C16:C226n3) |>
   pivot_longer(cols =  C16:C226n3, 
@@ -161,36 +1470,33 @@ AOData::omega3  |>
   
   
   ggplot(aes(time, value, color = treat, group = paste(participant, fa))) + 
-  geom_line(alpha = 0.2) + 
+  geom_line(alpha = 0.2) +
   
-  ## Add model predictions
+   ## Add model predictions
 
-  geom_errorbar(data = preds, 
-                aes(time, estimate, 
-                    ymin = conf.low, 
-                    ymax = conf.high, 
+  geom_errorbar(data = m2_sum, 
+                aes(time, Mu, 
+                    ymin = lwr99, 
+                    ymax = upr99, 
                     group = treat,
                     color = NULL), 
                 width = 0.1, 
                 position = position_dodge(width = 0.2)) +
   
-  geom_line(data = preds, 
-            aes(time, estimate, group = treat, color = NULL), 
+
+    geom_line(data = m2_sum, 
+            aes(time, Mu, group = treat, color = NULL), 
             alpha = 1, 
                 position = position_dodge(width = 0.2)) +
-    geom_point(data = preds, 
-             aes(time, estimate, fill = treat, group = NULL),
+  
+
+    geom_point(data = m2_sum, 
+             aes(time, Mu, fill = treat, group = NULL),
              color = "black",
              size = 3,
              alpha = 1,
              shape = 21, 
                 position = position_dodge(width = 0.2)) +
-  # Plot statistical significance 
-  geom_text(data = stats, 
-            aes(time, sign.place, label = sign, 
-                color = NULL, group = NULL),
-        size = 6,
-        show.legend = FALSE) + 
 
   scale_color_manual(values = colscale) +
   scale_fill_manual(values = colscale) +
@@ -206,24 +1512,838 @@ AOData::omega3  |>
         strip.background = element_rect(color = "white"),   
         strip.text = element_text(hjust = 0, size = 12), 
         legend.position = "inside", 
-        legend.position.inside = c(0.85, 0.1)) 
+        legend.position.inside = c(0.85, 0.1))
+```
 
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior densities for differences between treatment groups in fatty acid concentrations."
+#| echo: false
+#| label: fig-m2-contrast
+#| message: false
+#| warning: false
+
+
+### Contrasts
+draws.m2 |>
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .iteration, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws.m2 |>
+      filter(.chain == 1) |> 
+      select(starts_with("sigma"), .iteration) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws.m2 |>
+      filter(.chain == 1) |> 
+      select(starts_with("beta"), .iteration) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA)) |> 
+
+    # Compute contrasts
+    mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
+    select(.iteration:TI, treat, alpha) |> 
+  
+    pivot_wider(names_from = treat, 
+                values_from = alpha) |> 
+    
+    mutate(contrats = omega - ctrl, 
+           rel_contrast = exp(contrats), 
+           time = if_else(TI == 1, "T2", "T4")) |>
+    
+    inner_join(fat_sum) |> 
+    
+    ggplot(aes(x = rel_contrast, 
+               fill = time)) + 
+    geom_density(alpha = 0.2) +
+    facet_wrap(~ fa, scales = "free") +
+    
+    labs(x = "Fold-difference (N-3 vs. Placebo)", 
+         y = "Posterior density", 
+         fill = "Time-point") +
+    theme_classic() + 
+  
+  theme(legend.position = c(0.9, 0.2), 
+        strip.background = element_blank(), 
+        strip.text = element_text(hjust = 0), 
+        axis.text.y = element_blank(), 
+        axis.line.y = element_blank(), 
+        axis.ticks.y = element_blank()) +
+  
+  geom_vline(xintercept = 1, 
+             lty = 2, 
+             color = "gray50") +
+
+
+  
+  scale_fill_manual(values = colscale)
+  
   
 ```
 
 
 
+
+
+
 ```{r}
+#| fig-width: 6
+#| fig-height: 8
+#| fig-cap: "Prior predictive check model 3 (data imputation)."
+#| echo: false
+#| label: fig-m3-prior
+#| message: false
+#| warning: false
 
-# Waist circumference: >40 inches (102 cm) for men, >35 inches (88 cm) for women.
-# Triglycerides: 150 mg/dL or higher, or taking medication for it.
-# HDL Cholesterol: <40 mg/dL for men, <50 mg/dL for women, or taking medication for it.
-# Blood Pressure: 130/85 mm Hg or higher, or taking medication for it.
-# Fasting Glucose: 100 mg/dL or higher, or taking medication for it.
+
+
+### Data imputation fatty acid profiles ###################
+
+
+
+# Prepare data set with complete cases at baseline, imputation of missing values
+# post-treatment.
+fat_dat_compl <- AOData::omega3  |>
+  inner_join(idkeys) |>
+  filter(time %in% c("T1", "T2", "T4"), 
+         participant %in% total_participants) |>
+  
+  select(participant, time, treat, C16:C226n3) |>
+
+  pivot_longer(cols =  C16:C226n3, 
+               names_to = "fa", 
+               values_to = "value")  |> 
+  
+  pivot_wider(names_from = time, 
+              values_from = value) |> 
+  
+  # Two participants have no data at T1
+  filter(!is.na(T1)) |> 
+  pivot_longer(names_to = "time", 
+               values_to = "value", 
+               cols = T1:T4) |> 
+  mutate(.by = fa, 
+         value_std = log(value), 
+         value_std = (value_std - mean(value_std, na.rm = TRUE)) / 
+           sd(value_std, na.rm = TRUE)) |> 
+  mutate(FA = dense_rank(fa), 
+         TX = dense_rank(treat)) 
+  
+  
+# Fatty acid summarise on complete data 
+fat_sum_compl <- fat_dat |> 
+    summarise(.by = c(FA,fa), 
+              m = mean(log(value), na.rm = TRUE), 
+              s = sd(log(value), na.rm = TRUE))
+
+
+# Check n 
+fat_n_compl <- fat_dat |> 
+  distinct(time, treat, participant) |> 
+  summarise(.by = c(time, treat), 
+            n = n())
+
+# Filter for complete case and prep data 
+fat_dat_compl2 <- fat_dat_compl |> 
+  select(participant, FA, TX, time, value_std) |> 
+  pivot_wider(names_from = time, values_from = value_std) |> 
+
+  pivot_longer(names_to = "TI", 
+               values_to = "y", 
+               cols = T2:T4) |> 
+  mutate(TI = dense_rank(TI), 
+         P = dense_rank(participant), 
+         # Add missing data and fill y
+         obs = if_else(is.na(y), 0, 1), 
+         y = if_else(is.na(y), -999, y) )
 
 
 
 
+d <- list(
+  # Length of indices
+  N    = nrow(fat_dat_compl2), 
+  N_FA = length(unique(fat_dat_compl2$FA)),
+  N_P  = length(unique(fat_dat_compl2$P)),
+  N_TX = length(unique(fat_dat_compl2$TX)),
+  N_TI = length(unique(fat_dat_compl2$TI)),
+  # Indicators 
+  P = fat_dat_compl2$P, 
+  FA = fat_dat_compl2$FA, 
+  TX = fat_dat_compl2$TX,
+  TI = fat_dat_compl2$TI,
+  # Co-variate and outcome
+  pre = fat_dat_compl2$T1, 
+  y = fat_dat_compl2$y, 
+  obs = fat_dat_compl2$obs,
+  # Prior only flag
+  prior_only = 1
+)
+
+
+# Compiling the model
+m3 <- cmdstan_model(stan_file = "models/m3.stan", 
+                      exe_file = "models/m3.exe")
+
+
+# Prior predictive check
+fit_wrap(m3, DATA = d, fit = "fit.m3")
+
+draws.m3 <- fit.m3$draws(format = "df")
+
+
+draws.m3 |>
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .iteration, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  inner_join(
+    draws.m3 |>
+      filter(.chain == 1) |> 
+      select(starts_with("beta"), .iteration) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             beta = value 
+         ) ) |> 
+
+  
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.1)) |> 
+   
+  mutate(mu = alpha + beta * pre) |> 
+  
+  summarise(.by = c(FA, TI, TX, pre), 
+            m = mean(mu), 
+            lwr = quantile(mu, 0.05), 
+            upr = quantile(mu, 0.95)) |> 
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
+             color = TX, 
+             fill = TX)) + 
+  geom_line() + 
+  geom_ribbon(alpha = 0.2, aes(color = NULL)) + 
+  facet_grid(FA ~ TI) + 
+  labs(x = "Pre-inteverntion values", 
+       y = "Prior predictive distribution of post-intervention values (std.)", 
+       fill = "Treatment", 
+       color = "Treatment") + 
+  
+  scale_color_manual(values = colscale) + 
+  scale_fill_manual(values = colscale) 
+
+
+
+```
+
+
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Model performance metrics model 3."
+#| echo: false
+#| label: fig-m3-performance
+#| message: false
+#| warning: false
+
+
+
+d$prior_only <- 0
+
+# Sample from the posterior
+fit_wrap(m3, DATA = d, fit = "fit.m3p")
+
+# Diagnostics 
+# fit.m3p$diagnostic_summary()
+
+# Model performance
+sum.m3 <- fit.m3p$summary(.cores = 12)
+
+
+
+
+
+# Get (most) problematic parameters
+vars <- sum.m3 |> 
+    filter(grepl(paste(
+    c("alpha","beta", "sigma", "y_imp"), collapse = "|"), 
+               variable)) |> 
+  arrange(-rhat) |> 
+  slice_head(n = 3) |> 
+  pull(variable)
+
+
+
+p1 <- sum.m3 |> 
+  filter(grepl(paste(
+    c("alpha","beta", "sigma", "y_imp"), collapse = "|"), 
+               variable)) |> 
+  mutate(variable_type = variable) |> 
+  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+  
+  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
+  
+  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
+  geom_point(alpha = 0.3) + 
+  
+  geom_text_repel(aes(label = highlight, 
+                color = NULL, 
+               
+                size = NULL), 
+                show.legend = FALSE) +
+  
+  labs(x = "(Bulk) effective sample size", 
+       y = "R-hat", 
+       color = "Parameter type", 
+       size = "(Tail) effective sample size") +
+  scale_color_manual(values = colscale) +
+  labs(title = "A")
+
+
+
+
+draws.m3 <- fit.m3p$draws(format = "df")
+
+
+p2  <- draws.m3 |> 
+  select(.iteration, .chain, all_of(vars)) |> 
+  pivot_longer(cols = all_of(vars)) |> 
+  ggplot(aes(.iteration, value, 
+             color = as.factor(.chain))) + 
+  geom_line(alpha = 0.5) + 
+  facet_wrap(~ name, ncol = 1, 
+             scales = "free_y") + 
+  scale_color_manual(values = colscale) + 
+  labs(x = "Iteration", 
+       color = "Chain", 
+       y = "Parameter value") +
+  labs(title = "B")
+
+
+
+p1 / p2
+
+
+```
+
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 7
+#| fig-cap: "Model predictions. Pre-intervention values are observed means, post-treatment (T2, T4) values are model predictions conditional pre-intervention value with 99% percentile intervals."
+#| echo: false
+#| label: fig-m3-predictions
+#| message: false
+#| warning: false
+
+
+
+pre_int_means <- fat_dat_compl2 |> 
+  filter(TI == 1) |> 
+  summarise(.by = FA, 
+            pre = mean(T1))
+
+
+m3_sum <- draws.m3 |>
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .iteration, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws.m3 |>
+      filter(.chain == 1) |> 
+      select(starts_with("sigma"), .iteration) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws.m3 |>
+      filter(.chain == 1) |> 
+      select(starts_with("beta"), .iteration) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA)) |> 
+  
+
+  
+  inner_join(pre_int_means) |> 
+  rowwise() |> 
+  
+
+  mutate(mu = alpha + beta * pre, 
+         y_pred = rnorm(1, alpha + beta * pre, sigma)) |> 
+  ungroup() |> 
+  summarise(
+    .by = c(FA, TI, TX), 
+    Mu  = mean(mu), 
+    lwr99 = quantile(mu, 0.005), 
+    upr99 = quantile(mu, 0.995), 
+    lwr50 = quantile(mu, 0.25), 
+    upr50 = quantile(mu, 0.75),
+    
+    lwr_pred90 = quantile(y_pred, 0.05), 
+    upr_pred90 = quantile(y_pred, 0.95) ) |> 
+  
+  # Back-transform all estimates
+  pivot_longer(cols = Mu:upr_pred90, 
+               names_to = "est", 
+               values_to = "value") |> 
+  inner_join(fat_sum_compl) |> 
+
+  mutate(value_org = exp(value * s + m)) |> 
+  
+  select(FA:est, fa, value_org) |> 
+  pivot_wider(names_from = est, 
+              values_from = value_org) |> 
+  
+  mutate(time = if_else(TI == 1, "T2", "T4"), 
+         treat = if_else(TX == 1, "ctrl", "omega"), 
+         treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+  
+
+  
+
+  add_row(
+    fat_dat_compl |> 
+      filter(time == "T1") |> 
+      summarise(.by = c(time, treat, fa), 
+                Mu = mean(value, na.rm = TRUE)) |> 
+      mutate(TX = NA, 
+             TI = NA,
+             FA = NA, 
+              treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3"))) 
+  ) 
+  
+
+## Plotting predictions with data  
+AOData::omega3  |>
+  inner_join(idkeys) |>
+  filter(participant %in% fat_dat_compl2$participant)  |> 
+
+  filter(time %in% c("T1", "T2", "T4")) |>
+  select(participant, time, treat, C16:C226n3) |>
+  pivot_longer(cols =  C16:C226n3, 
+               names_to = "fa", 
+               values_to = "value") |>
+    mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+  
+  
+  ggplot(aes(time, value, color = treat, group = paste(participant, fa))) + 
+  geom_line(alpha = 0.2) +
+  
+   ## Add model predictions
+
+  geom_errorbar(data = m3_sum, 
+                aes(time, Mu, 
+                    ymin = lwr99, 
+                    ymax = upr99, 
+                    group = treat,
+                    color = NULL), 
+                width = 0.1, 
+                position = position_dodge(width = 0.2)) +
+  
+
+    geom_line(data = m3_sum, 
+            aes(time, Mu, group = treat, color = NULL), 
+            alpha = 1, 
+                position = position_dodge(width = 0.2)) +
+  
+
+    geom_point(data = m3_sum, 
+             aes(time, Mu, fill = treat, group = NULL),
+             color = "black",
+             size = 3,
+             alpha = 1,
+             shape = 21, 
+                position = position_dodge(width = 0.2)) +
+
+  scale_color_manual(values = colscale) +
+  scale_fill_manual(values = colscale) +
+  
+   facet_wrap(~ fa, ncol = 3, scales = "free_y") +
+  
+  labs(y = "Fatty acid concentration (&mu;g ml<sup>-1</sup>)", 
+       x = "Time point", 
+       fill = "Treatment", 
+       color = "Treatment") + 
+  theme_classic() +
+  theme(axis.title.y = element_markdown(), 
+        strip.background = element_rect(color = "white"),   
+        strip.text = element_text(hjust = 0, size = 12), 
+        legend.position = "inside", 
+        legend.position.inside = c(0.85, 0.1))
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior densities for differences between treatment groups in fatty acid concentrations (data imputation model)."
+#| echo: false
+#| label: fig-m3-contrast
+#| message: false
+#| warning: false
+
+
+### Contrasts
+draws.m3 |>
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .iteration, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws.m3 |>
+      filter(.chain == 1) |> 
+      select(starts_with("sigma"), .iteration) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws.m3 |>
+      filter(.chain == 1) |> 
+      select(starts_with("beta"), .iteration) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA)) |> 
+
+    # Compute contrasts
+    mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
+    select(.iteration:TI, treat, alpha) |> 
+  
+    pivot_wider(names_from = treat, 
+                values_from = alpha) |> 
+    
+    mutate(contrats = omega - ctrl, 
+           rel_contrast = exp(contrats), 
+           time = if_else(TI == 1, "T2", "T4")) |>
+    
+    inner_join(fat_sum_compl) |> 
+    
+    ggplot(aes(x = rel_contrast, 
+               fill = time)) + 
+    geom_density(alpha = 0.2) +
+    facet_wrap(~ fa, scales = "free") +
+    
+    labs(x = "Fold-difference (N-3 vs. Placebo)", 
+         y = "Posterior density", 
+         fill = "Time-point") +
+    theme_classic() + 
+  
+  theme(legend.position = c(0.9, 0.2), 
+        strip.background = element_blank(), 
+        strip.text = element_text(hjust = 0), 
+        axis.text.y = element_blank(), 
+        axis.line.y = element_blank(), 
+        axis.ticks.y = element_blank()) +
+  
+  geom_vline(xintercept = 1, 
+             lty = 2, 
+             color = "gray50") +
+
+
+  
+  scale_fill_manual(values = colscale)
+  
+  
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior predictions for fatty acid concentrations in complete-case analysis (model m2) and data imputation model (model m3)."
+#| echo: false
+#| label: fig-m3m2-predictions
+#| message: false
+#| warning: false
+
+
+m3_sum |> 
+  mutate(model = "m3") |> 
+  bind_rows(m2_sum |>  mutate(model = "m2")) |> 
+    
+  ggplot(aes(time, Mu, group = paste(treat,model))) + 
+
+   ## Add model predictions
+
+  geom_errorbar(aes(time, Mu, 
+                    ymin = lwr99, 
+                    ymax = upr99), 
+                width = 0.1, 
+                position = position_dodge(width = 0.3)) +
+  
+
+    geom_line(aes(time, Mu,   
+                  group = paste(treat,model), 
+                  linetype = model), 
+            alpha = 1, 
+                position = position_dodge(width = 0.3)) +
+  
+
+    geom_point(aes(time, Mu, fill = paste(treat), group = paste(treat,model)),
+             color = "black",
+             size = 3,
+             alpha = 1,
+             shape = 21, 
+                position = position_dodge(width = 0.3)) +
+
+  scale_color_manual(values = colscale) +
+  scale_fill_manual(values = colscale) +
+  
+  scale_linetype_manual(values = c(2, 1)) +
+  
+  
+   facet_wrap(~ fa, ncol = 3, scales = "free_y") +
+  
+  labs(y = "Fatty acid concentration (&mu;g ml<sup>-1</sup>)", 
+       x = "Time point", 
+       fill = "Treatment", 
+       linetype = "Model") + 
+  theme_classic() +
+  theme(axis.title.y = element_markdown(), 
+        strip.background = element_rect(color = "white"),   
+        strip.text = element_text(hjust = 0, size = 12), 
+        legend.position = "inside", 
+        legend.position.inside = c(0.85, 0.07), 
+        legend.spacing.y = unit(0.1, "cm"))
+
+
+
+```
+
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Comparing inference from complete-case and imputation models."
+#| echo: false
+#| label: fig-m2m3-comp
+#| message: false
+#| warning: false
+
+
+### Contrasts
+
+bind_rows(
+  
+  draws.m3 |>
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .iteration, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws.m3 |>
+      filter(.chain == 1) |> 
+      select(starts_with("sigma"), .iteration) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws.m3 |>
+      filter(.chain == 1) |> 
+      select(starts_with("beta"), .iteration) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA)) |> 
+
+    # Compute contrasts
+    mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
+    select(.iteration:TI, treat, alpha) |> 
+  
+    pivot_wider(names_from = treat, 
+                values_from = alpha) |> 
+    
+    mutate(contrats = omega - ctrl, 
+           rel_contrast = exp(contrats), 
+           time = if_else(TI == 1, "T2", "T4")) |>
+    
+    inner_join(fat_sum_compl) |> 
+    
+    mutate(model = "m3"), 
+  
+  
+  draws.m2 |>
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .iteration, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws.m2 |>
+      filter(.chain == 1) |> 
+      select(starts_with("sigma"), .iteration) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws.m2 |>
+      filter(.chain == 1) |> 
+      select(starts_with("beta"), .iteration) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA)) |> 
+
+    # Compute contrasts
+    mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
+    select(.iteration:TI, treat, alpha) |> 
+  
+    pivot_wider(names_from = treat, 
+                values_from = alpha) |> 
+    
+    mutate(contrats = omega - ctrl, 
+           rel_contrast = exp(contrats), 
+           time = if_else(TI == 1, "T2", "T4")) |>
+    
+    inner_join(fat_sum) |> 
+    
+    mutate(model = "m2") ) |> 
+  
+    ggplot(aes(x = rel_contrast, 
+               color = model, 
+               linetype = model)) + 
+    geom_line(alpha = 0.8, 
+              stat = "density") +
+    facet_wrap(~ fa + time, scales = "free") +
+    
+  scale_linetype_manual(values = c(2, 1)) +
+  
+    labs(x = "Fold-difference (N-3 vs. Placebo)", 
+         y = "Posterior density", 
+         color = "Model", 
+         linetype = "Model") +
+    theme_classic() + 
+  
+  
+  
+  theme(legend.position = c(0.9, 0.1), 
+        strip.background = element_blank(), 
+        strip.text = element_text(hjust = 0), 
+        axis.text.y = element_blank(), 
+        axis.line.y = element_blank(), 
+        axis.ticks.y = element_blank()) +
+  
+  geom_vline(xintercept = 1, 
+             lty = 2, 
+             color = "gray50") +
+
+
+  
+  scale_color_manual(values = colscale)
+  
 
 
 
@@ -236,10 +2356,1929 @@ AOData::omega3  |>
 
 
 
+## Does omega-3 supplementation, strength training, or their combination reduce the prevalence of metabolic syndrome compared to placebo?
+
+A first analysis defines metabolic syndrome prevalence as the proportion of participants identified as having at least three out of five diagnostic criteria for metabolic syndrome. The analysis is complete-case analysis including individuals with at least three out of five criteria measurements over three studies time-point (pre-intervention, T1; post-supplementation, T2; post-supplementation + strength training, T4 @tbl-logregparticipants). 
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| label: tbl-logregparticipants
+
+
+# Counting up the number of participants in the complete-case analysis 
+# of metabolic syndrome.
+d <- criteria_dat |> 
+  
+  filter(participant %in% participant_complete_T4) |> 
+  
+  summarise(.by = c(participant, time, treat, sex, age), 
+            n = n(),
+            n_threshold = sum(threshold, na.rm = TRUE) ) |> 
+  
+  mutate(met_syn = if_else(n_threshold >= 3, 1, 0), 
+         age = (age - mean(age)) / sd(age)) 
+
+
+
+# How many participants is in this analysis?
+d |> 
+  
+  summarise(.by = c(time, treat, sex), 
+            n = n(), 
+            met_sym = sum(met_syn)) |> 
+  arrange(time, treat) |> 
+  
+  
+  mutate(n_prev = paste0(n, " (", round(100 * (met_sym/n), 0), "%)")) |> 
+  select(-n, -met_sym) |> 
+  pivot_wider(names_from = time, 
+              values_from = n_prev)  |> 
+  
+  mutate(sex = if_else(sex == "m", "Male", "Female"), 
+         treat = if_else(treat == "ctrl", "Placebo", "N-3")) |> 
+  
+  bind_rows(
+    d |> 
+      
+     summarise(.by = c(time, treat), 
+            n = n(), 
+            met_sym = sum(met_syn)) |> 
+       arrange(time, treat) |> 
+  
+  
+  mutate(n_prev = paste0(n, " (", round(100 * (met_sym/n), 0), "%)"))  |> 
+  select(-n, -met_sym) |> 
+  pivot_wider(names_from = time, 
+              values_from = n_prev)  |> 
+  
+  mutate(sex = "Total",
+         treat = if_else(treat == "ctrl", "Placebo", "N-3")) |> 
+  select(treat, sex, T1:T4) 
+  ) |> 
+  
+
+  group_by(sex) |> 
+  gt() |> 
+  fmt_markdown() |> 
+  tab_spanner(label = "Time", 
+              columns = 2:5) |> 
+  
+  cols_label(treat = "") |> 
+  tab_footnote(footnote = "Data are presnted as n (Metabolic syndrom proportion)")
+
+```
 
 
 
 
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| label: fig-metsyndrome
+#| fig-cap: "Proportion of participants with metabolic syndrome (at least three criteria thresholds)."
+#| eval: false
+
+
+d |> 
+  filter(participant %in% participant_complete) |> 
+  
+  filter(n >= 5) |> 
+  
+  summarise(.by = c(time, treat), 
+            n = n(), 
+            crit = sum(met_syn), 
+            rel = crit / n ) |> 
+  
+      mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+  
+  ggplot(aes(time, rel * 100, fill = treat)) + 
+  geom_bar(stat = "identity", 
+           width = 0.5,
+
+           color = "black",
+           position = position_dodge(0.6)) +
+  
+  
+  
+  labs(y = "Occurance of metabolic syndrome (%)", 
+       x = "Time point", 
+       fill = "Treatment") + 
+  
+  scale_y_continuous(limits = c(0, 40), 
+                     breaks = c(0, 10, 20, 30, 40, 50), 
+                     expand = c(0, 0)) +
+  
+    scale_fill_manual(values = colscale) +
+  
+  
+  theme_classic() +
+  theme(axis.title.y = element_markdown(), 
+        strip.background = element_rect(color = "white"),   
+        strip.text = element_text(hjust = 0, size = 12), 
+        legend.position = "inside", 
+        legend.position.inside = c(0.88, 0.85), 
+        legend.background = element_rect(color = "black"))
+```
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| label: model1
+#| eval: false
+
+# A model for Met Sym data
+dat <- d |> 
+    filter(participant %in% participant_complete) 
+
+
+
+m1 <- glmmTMB(met_syn ~  time * treat + (1|participant), 
+             family = binomial, 
+             data = dat)
+
+
+nobs <- nrow(m1$frame)
+npart <- m1$frame |> distinct(participant) |> nrow()
+
+```
+
+
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| label: tbl-metsyndrome-model
+#| eval: false
+
+
+# #| tbl-cap: !expr 'paste("Logistic regression model for metabolic syndrome occurance. Time: T1 and  Treatment: Placebo where set as reference levels. Total number of observations: ", nobs, ". Total number of participants: ", npart, ".")'
+
+
+
+broom.mixed::tidy(m1) |> 
+  select(term:p.value) |> 
+  filter(!grepl("sd__", term)) |> 
+  
+  mutate(Parameter = c(
+    "Intercept", 
+    "Time:T2", 
+    "Time:T4", 
+    "Treatment:N-3", 
+    "Time:T2 &times; Treatment:N-3", 
+    "Time:T4 &times; Treatment:N-3" 
+    
+  )) |> 
+  select(Parameter, 
+         Estimate = estimate,
+         SE = std.error, 
+         Z = statistic, 
+         "P-value" = p.value) |> 
+  
+  gt() |> 
+  fmt_markdown(columns = Parameter)  |> 
+  fmt_auto() 
+  
+
+
+```
+
+The proportion of individuals identified as having metabolic syndrome (three out of five criteria thresholds) did not differ between Placebo and N-3 supplementation after the supplementation period or after the period with supplementation and strength training. 
+
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| eval: false
+
+
+
+
+```
+
+
+
+
+### Intention-to-treat analysis with imputed missing values
+
+
+
+### Bayesian ITT-models
+
+The goal here is to develop a Bayesian ITT model with missing data imputation to compare the treatment groups across all subcategories of the metabolic syndrome diagnostic criteria.
+
+A first model is built to retrieve sub-score treatment effects (Blood pressure, HDL, Resting glucose, Triglycerides and Waist circumference). 
+
+$$
+\begin{align}
+y_i &\sim \operatorname{Normal}(\mu_i, \sigma_i) \\
+\mu_i 
+
+\end{align}
+$$
+
+
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| label: fig-s1-priorpred
+#| fig-cap: "Prior predictive check of model s1. "
+
+
+
+d_full <- criteria_dat |> 
+  select(participant, time, treat, sex, age, analyte, value) |>
+  # Add missing values for all missing obs. 
+  pivot_wider(names_from = time, 
+              values_from = value) |> 
+
+  pivot_longer(cols = c(T1, T2, T4), 
+               values_to = "value",
+               names_to = "time" ) |> 
+  
+  pivot_wider(names_from = analyte, 
+              values_from = value) |> 
+
+    pivot_longer(cols = HDL:HOMA2IR, 
+               values_to = "value",
+               names_to = "analyte" ) |> 
+  
+  mutate(value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value)) |> 
+  
+
+  
+  mutate(.by = analyte, 
+         value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE)) |> 
+  # To make all variables similarly signed HDL is reversed. 
+  # Expected improvement in scores will be in the negative direction 
+  # for all criteria markers
+  mutate(value_std = if_else(analyte == "HDL", 
+                         -value_std, value_std)) |> 
+  mutate(participant = paste0("p", participant)) 
+
+  
+
+d_nomiss <- d_full |> 
+  filter(!is.na(value_std)) 
+
+
+
+# Using complete cases for T2 and T4
+dat <- d_nomiss |> 
+ 
+  filter(time %in% c("T1", "T4")) |> 
+  filter(.by = participant, 
+         sum(!is.na(value_std)) == 16) |> 
+  
+  mutate(type = dense_rank(analyte), 
+         participant = dense_rank(participant), 
+         treat_seq = dense_rank(treat) ) |> 
+  select(-value) |> 
+  pivot_wider(names_from = time, 
+              values_from = value_std) 
+
+
+
+
+
+d <- list(P = dat$participant, 
+          y = dat$T4, 
+          pre = dat$T1, 
+          type = dat$type, 
+          K = length(unique(dat$type)),
+          N_P = length(unique(dat$participant)),
+          N_TX = 2,
+          treat = dat$treat_seq, 
+          N = nrow(dat))
+
+
+## Compile the first model 
+
+# Compiling the model
+s1 <- cmdstan_model(stan_file = "models/s1.stan", 
+                      exe_file = "models/s1.exe")
+
+
+# For prior predictive checking
+d$prior_only <- 1
+fit_wrap(s1, DATA = d, fit = "fit.s1")
+
+draws.s1 <- fit.s1$draws(format = "df")
+
+draws.s1 |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+  pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+
+  mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.4)) |> 
+  
+  rowwise() |> 
+  
+  mutate(placebo_pred = rnorm(1, alpha1 + beta * pre, sigma), 
+         omega_pred =   rnorm(1,   alpha2 + beta * pre, sigma)) |> 
+  ungroup() |> 
+  mutate(placebo = alpha1 + beta * pre, 
+         omega = alpha1 + beta * pre) |> 
+  
+  pivot_longer(cols = placebo_pred:omega, 
+               names_to = "treat") |>
+  separate(treat, into = c("treat", "interval")) |> 
+  mutate(interval = if_else(is.na(interval), "mean", interval)) |> 
+
+  summarise(.by = c(pre, treat, type, interval), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+
+  
+  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr, group = interval)) + 
+  geom_line() + 
+  geom_ribbon(alpha = 0.2) +
+  facet_grid(type ~ treat) +
+  scale_x_continuous(limits = c(-5,5)) + 
+  scale_y_continuous(limits = c(-5,5)) + 
+  labs(y = "Prior predictive mean (90% PI)", 
+       x = "Pre-intervention scores") + 
+  alpha_theme() + 
+  theme(strip.text.y = element_text(angle = 0))
+```
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Full posterior
+d$prior_only <- 0
+fit_wrap(s1, DATA = d, fit = "fit.s1p")
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Model performance metrics from Model s1."
+#| echo: false
+#| label: fig-s1-modelperformance
+#| message: false
+#| warning: false
+#| output: false
+
+
+
+# Model performance
+s1_sum <- fit.s1p$summary()
+
+# Get (most) problematic parameters
+vars <- s1_sum |> 
+  arrange(-rhat) |> 
+   filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  slice_head(n = 3) |> 
+  pull(variable)
+
+
+
+p1 <- s1_sum |> 
+  filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  mutate(variable_type = variable) |> 
+  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+  
+  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
+  
+  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
+  geom_point() + 
+  
+  geom_text_repel(aes(label = highlight, 
+                color = NULL, 
+                size = NULL), 
+                show.legend = FALSE) +
+  
+  labs(x = "(Bulk) effective sample size", 
+       y = "R-hat", 
+       color = "Parameter type", 
+       size = "(Tail) effective sample size") +
+  scale_color_manual(values = colscale)
+
+
+
+
+draws.s1 <- fit.s1p$draws(format = "df")
+
+
+p2  <- draws.s1 |> 
+  select(.iteration, .chain, all_of(vars)) |> 
+  pivot_longer(cols = all_of(vars)) |> 
+  ggplot(aes(.iteration, value, 
+             color = as.factor(.chain))) + 
+  geom_line(alpha = 0.5) + 
+  facet_wrap(~ name, ncol = 1, 
+             scales = "free_y") + 
+  scale_color_manual(values = colscale) + 
+  labs(x = "Iteration", 
+       color = "Chain", 
+       y = "Parameter value")
+
+
+
+p1 / p2
+
+
+```
+
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior predictive check of Model s1 using data from T4."
+#| echo: false
+#| label: fig-s1-posteriorpredict
+#| message: false
+#| warning: false
+#| output: false
+
+
+# Extract log_lik
+log_lik.s1 <- fit.s1$draws("log_lik_part", format = "matrix") |> 
+  loo::loo(cores = 12)
+
+
+
+
+
+draws.s1 |> 
+  select(starts_with("y_rep"), .chain, .draw) |> 
+  pivot_longer(cols = starts_with("y_rep")) |> 
+  filter(.chain == 1, .draw %in% 1:50) |> 
+  
+  mutate(type = rep(d$type, 50)) |> 
+  
+  inner_join(dat |> 
+  distinct(type, analyte)) |> 
+  
+  
+  ggplot(aes(value, group = .draw)) + 
+  geom_density(color = "gray80") + 
+  geom_density(data = data.frame(y = d$y, 
+                                 type = d$type), 
+               aes(y, group = NULL), 
+               color = colscale[2]) + 
+  facet_wrap(~ analyte) + 
+  alpha_theme(yaxis = FALSE) + 
+  labs(y = "Posterior density", 
+       x = "Predicted/Observed values") 
+
+
+
+
+```
+
+
+
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Prior predictive check of Model s2."
+#| echo: false
+#| label: fig-s2-posteriorpredict
+#| message: false
+#| warning: false
+#| output: false
+
+
+### Model 2
+
+# Compiling the model
+s2 <- cmdstan_model(stan_file = "models/s2.stan", 
+                      exe_file = "models/s2.exe")
+
+
+
+# For prior predictive checking
+d$prior_only <- 1
+
+fit_wrap(s2, DATA = d, fit = "fit.s2")
+
+
+draws.s2 <- fit.s2$draws(format = "df")
+
+
+draws.s2 |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+  pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+
+  mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.4)) |> 
+  
+  rowwise() |> 
+  
+  mutate(placebo = rnorm(1, alpha1 + beta * pre, sigma), 
+         omega = rnorm(1,   alpha2 + beta * pre, sigma)) |> 
+  
+  pivot_longer(cols = placebo:omega, 
+               names_to = "treat") |> 
+
+  summarise(.by = c(pre, treat, type), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  
+  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+  
+  
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr)) + 
+  geom_line() + 
+  geom_ribbon(alpha = 0.2) +
+  facet_grid(type ~ treat) +
+  scale_x_continuous(limits = c(-5,5)) + 
+  scale_y_continuous(limits = c(-5,5)) + 
+  labs(y = "Prior predictive mean (90% PI)", 
+       x = "Pre-intervention scores") +
+  alpha_theme()
+```
+
+
+```{r}
+#| message: false
+#| warning: false
+#| output: false
+#| echo: false
+
+
+# Full posterior
+d$prior_only <- 0
+
+fit_wrap(s2, DATA = d, fit = "fit.s2p")
+
+
+# Log lik comp
+log_lik.s2 <- fit.s2p$draws("log_lik_part", format = "matrix") |> 
+  loo::loo(cores = 12)
+
+
+```
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Model performance metrics from Model s1."
+#| echo: false
+#| label: fig-s1-modelperformance
+#| message: false
+#| warning: false
+#| output: false
+
+
+
+# Model performance
+s2_sum <- fit.s2p$summary()
+
+# Get (most) problematic parameters
+vars <- s2_sum |> 
+  arrange(-rhat) |> 
+   filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  slice_head(n = 3) |> 
+  pull(variable)
+
+
+
+p1 <- s2_sum |> 
+  filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  mutate(variable_type = variable) |> 
+  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+  
+  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
+  
+  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
+  geom_point() + 
+  
+  geom_text_repel(aes(label = highlight, 
+                color = NULL, 
+                size = NULL), 
+                show.legend = FALSE) +
+  
+  labs(x = "(Bulk) effective sample size", 
+       y = "R-hat", 
+       color = "Parameter type", 
+       size = "(Tail) effective sample size") +
+  scale_color_manual(values = colscale)
+
+
+
+
+draws.s2 <- fit.s2p$draws(format = "df")
+
+
+p2  <- draws.s1 |> 
+  select(.iteration, .chain, all_of(vars)) |> 
+  pivot_longer(cols = all_of(vars)) |> 
+  ggplot(aes(.iteration, value, 
+             color = as.factor(.chain))) + 
+  geom_line(alpha = 0.5) + 
+  facet_wrap(~ name, ncol = 1, 
+             scales = "free_y") + 
+  scale_color_manual(values = colscale) + 
+  labs(x = "Iteration", 
+       color = "Chain", 
+       y = "Parameter value")
+
+
+
+p1 / p2
+
+
+```
+
+
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior predictive check of Model s2 using data from T4."
+#| echo: false
+#| label: fig-s2-posteriorpredict
+#| message: false
+#| warning: false
+
+
+
+draws.s2 |> 
+  select(starts_with("y_rep"), .chain, .draw) |> 
+  pivot_longer(cols = starts_with("y_rep")) |> 
+  filter(.chain == 1, .draw %in% 1:50) |> 
+  
+  mutate(type = rep(d$type, 50)) |> 
+  
+    
+  inner_join(dat |> 
+  distinct(type, analyte)) |> 
+  
+  
+  ggplot(aes(value, group = .draw)) + 
+  geom_density(color = "gray80") + 
+  geom_density(data = data.frame(y = d$y, 
+                                 type = d$type), 
+               aes(y, group = NULL), 
+               color = colscale[2]) + 
+  facet_wrap(~ analyte) + 
+  alpha_theme(yaxis = FALSE) + 
+  labs(y = "Posterior density", 
+       x = "Predicted/Observed values") 
+
+
+```
+
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior predictive check of Model s2 using data from T4."
+#| echo: false
+#| label: fig-s2-posteriorpredict2
+#| message: false
+#| warning: false
+
+
+draws.s2 |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+  pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+
+  mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.1)) |> 
+  
+  rowwise() |> 
+  
+  mutate(placebo_pred = rnorm(1, alpha1 + beta * pre, sigma), 
+         omega_pred = rnorm(1,   alpha2 + beta * pre, sigma), 
+         placebo_mu = alpha1 + beta * pre, 
+         omega_mu = alpha2 + beta * pre) |> 
+ 
+
+  pivot_longer(cols = placebo_pred:omega_mu, 
+               names_to = "treat") |> 
+  separate(treat, into = c("treat", "pred")) |> 
+
+  summarise(.by = c(pre, treat, type, pred), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+
+  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+ 
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
+             group = pred)) + 
+  geom_ribbon(alpha = 0.4) +
+  facet_grid(type ~ treat) +
+  scale_x_continuous(limits = c(-4,4)) + 
+  scale_y_continuous(limits = c(-4,4)) + 
+  labs(y = "Prior predictive mean (90% PI prediction and &mu; interval)", 
+       x = "Pre-intervention scores") +
+  theme(axis.title.y = element_markdown())
+```
+
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| output: false
+
+
+## Model 3 -- Missing data included ##################
+
+# Using complete cases for T2 and T4
+dat <- d_full |> 
+  filter(time %in% c("T1", "T4")) |> 
+
+  
+  mutate(type = dense_rank(analyte), 
+         participant = dense_rank(participant), 
+         treat_seq = dense_rank(treat), 
+         miss = if_else(is.na(value_std), 0, 1), 
+         value_std = if_else(is.na(value_std), -999, value_std)) |> 
+  select(-value) |> 
+  pivot_wider(names_from = time, 
+              values_from = c(value_std, miss)) |> 
+  mutate(age = (age - mean(age)) / sd(age), 
+         sex = if_else(sex == "m", 1, 2)) |> 
+  
+  
+  
+  select(y_obs = value_std_T4, 
+         pre_obs = value_std_T1, 
+         y_miss = miss_T4, 
+         pre_miss = miss_T1, 
+         P = participant, 
+         age, 
+         sex,
+         type, 
+         treat = treat_seq) 
+
+
+
+
+d <- list(
+  N = nrow(dat), 
+  N_P = length(unique(dat$P)),
+  K = length(unique(dat$type)),
+  y_obs = dat$y_obs, 
+  pre_obs = dat$pre_obs, 
+  y_miss = dat$y_miss,
+  pre_miss = dat$pre_miss, 
+  type = dat$type, 
+  treat = dat$treat, 
+  P = dat$P, 
+  prior_only = 1
+)
+
+
+
+s3 <- cmdstan_model(stan_file = "models/s3.stan", 
+                      exe_file = "models/s3.exe")
+
+fit_wrap(s3, DATA = d, fit = "fit.s3")
+
+
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Prior predictive check of Model s3."
+#| echo: false
+#| label: fig-s3-priorpredict
+#| message: false
+#| warning: false
+#| eval: false
+
+
+
+draws.s3 <- fit.s3$draws(format = "df")
+
+
+
+draws.s3 |> 
+  filter(.chain == 1, 
+         .iteration %in% 1:1000) |> 
+  select(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+  pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+
+  mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.4)) |> 
+  
+  rowwise() |> 
+  
+  mutate(placebo = rnorm(1, alpha1 + beta * pre, sigma), 
+         omega = rnorm(1,   alpha2 + beta * pre, sigma)) |> 
+  
+  pivot_longer(cols = placebo:omega, 
+               names_to = "treat") |> 
+
+  summarise(.by = c(pre, treat, type), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  
+  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+  
+  
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr)) + 
+  geom_line() + 
+  geom_ribbon(alpha = 0.2) +
+  facet_grid(type ~ treat) +
+  scale_x_continuous(limits = c(-5,5)) + 
+  scale_y_continuous(limits = c(-5,5)) + 
+  labs(y = "Prior predictive mean (90% PI)", 
+       x = "Pre-intervention scores") +
+  alpha_theme()
+
+
+```
+
+
+
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| output: false
+
+
+
+# Full posterior s3 ######################################################
+
+d$prior_only <- 0
+
+fit_wrap(s3, DATA = d, fit = "fit.s3p")
+
+draws.s3 <- fit.s3p$draws(format = "df")
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior predictive check of Model s3 using data from T4."
+#| echo: false
+#| label: fig-s3-posteriorpredict
+#| message: false
+#| warning: false
+
+
+
+draws.s3 |> 
+  select(starts_with("y_rep"), .chain, .draw) |> 
+  pivot_longer(cols = starts_with("y_rep")) |> 
+  filter(.chain == 1, .draw %in% 1:50) |> 
+  
+  mutate(type = rep(d$type, 50)) |> 
+  
+    
+  inner_join(
+    d_full |> 
+      distinct(analyte) |> 
+      mutate(type = dense_rank(analyte))) |> 
+  
+  
+  ggplot(aes(value, group = .draw)) + 
+  geom_density(color = "gray80") + 
+  geom_density(data = data.frame(y = d$y_obs, 
+                                 type = d[d$y_miss==1]$type) |> 
+                 filter(y > -900), 
+               aes(y, group = NULL), 
+               color = colscale[2]) + 
+  facet_wrap(~ analyte) + 
+  alpha_theme(yaxis = FALSE) + 
+  labs(y = "Posterior density", 
+       x = "Predicted/Observed values") 
+
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Fitted vs. residual model s3."
+#| echo: false
+#| label: fig-s3-posteriorpredict
+#| message: false
+#| warning: false
+
+
+draws.s3 |>
+  filter(.chain == 1,
+         .draw %in% 1:50) |>
+  select(starts_with("y_exp"), .chain, .draw) |>
+  pivot_longer(cols = starts_with("y_exp")) |>
+  mutate(type = rep(dat$type, 50),
+         treat = rep(dat$treat, 50),
+         P = rep(dat$P, 50),
+         y_obs = rep(dat$y_obs, 50),
+         pre_obs = rep(dat$pre_obs, 50)) |>
+  summarise(.by = name,
+            resid = mean(y_obs - value),
+            resid.lwr = quantile(y_obs - value, 0.05),
+            resid.upr = quantile(y_obs - value, 0.95),
+            m = mean(value),
+            lwr = quantile(value, 0.05),
+            upr = quantile(value, 0.95)) |>
+  mutate(type = dat$type,
+         treat = dat$treat,
+         P = dat$P,
+         y_obs = dat$y_obs,
+         pre_obs = dat$pre_obs) |>
+  filter(y_obs > -900) |>
+  ggplot(aes(m, resid, ymin = resid.lwr, ymax = resid.upr)) +
+  geom_pointrange() +
+  facet_wrap(~ type)
+
+
+```
+
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior predictive check of Model s3 using data from T4."
+#| echo: false
+#| label: fig-s3-posteriorpredict2
+#| message: false
+#| warning: false
+
+
+draws.s3 |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+  pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+
+  mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.1)) |> 
+  
+  rowwise() |> 
+  
+  mutate(placebo_pred = rnorm(1, alpha1 + beta * pre, sigma), 
+         omega_pred = rnorm(1,   alpha2 + beta * pre, sigma), 
+         placebo_mu = alpha1 + beta * pre, 
+         omega_mu = alpha2 + beta * pre) |> 
+ 
+
+  pivot_longer(cols = placebo_pred:omega_mu, 
+               names_to = "treat") |> 
+  separate(treat, into = c("treat", "pred")) |> 
+
+  summarise(.by = c(pre, treat, type, pred), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+
+  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+ 
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
+             group = pred)) + 
+  geom_ribbon(alpha = 0.4) +
+  facet_grid(type ~ treat) +
+  scale_x_continuous(limits = c(-4,4)) + 
+  scale_y_continuous(limits = c(-4,4)) + 
+  labs(y = "Prior predictive mean (90% PI prediction and &mu; interval)", 
+       x = "Pre-intervention scores") +
+  theme(axis.title.y = element_markdown())
+```
+
+
+
+
+
+
+
+```{r}
+
+# These are residual correlations. 
+
+# Correlations among residuals supports the use of the imputation model
+
+
+
+bind_rows(
+  
+  draws.s3 |> 
+  filter(.chain == 1) |> 
+   select(starts_with("Omega_"), .chain, .draw) |> 
+  
+  pivot_longer(cols = starts_with("Omega")) |>  
+  
+  mutate(name = gsub("_pre", "", name)) |> 
+  
+  separate(name, into = c("param", "typex", "typey")) |> 
+  
+  mutate(time = "pre"), 
+  
+  draws.s3 |> 
+  filter(.chain == 1) |> 
+   select(starts_with("Omega["), .chain, .draw) |> 
+  
+  pivot_longer(cols = starts_with("Omega")) |>  
+
+  separate(name, into = c("param", "typex", "typey")) |> 
+  
+  mutate(time = "post")) |> 
+  
+  ggplot(aes(value, color = time)) + geom_density() + 
+  facet_grid(typey ~ typex)
+  
+  
+
+
+
+bind_rows(
+  
+  draws.s3 |> 
+  filter(.chain == 1) |> 
+   select(starts_with("Omega_"), .chain, .draw) |> 
+  
+  pivot_longer(cols = starts_with("Omega")) |>  
+  
+  mutate(name = gsub("_pre", "", name)) |> 
+  
+  separate(name, into = c("param", "typex", "typey")) |> 
+  
+  mutate(time = "pre"), 
+  
+  draws.s3 |> 
+  filter(.chain == 1) |> 
+   select(starts_with("Omega["), .chain, .draw) |> 
+  
+  pivot_longer(cols = starts_with("Omega")) |>  
+
+  separate(name, into = c("param", "typex", "typey")) |> 
+  
+  mutate(time = "post")) |> 
+  
+  mutate(cor = paste(typex, typey, sep = ",")) |> 
+  summarise(.by = c(cor, time),
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  filter(m != 1) |> 
+  arrange(m)
+```
+
+
+```{r}
+
+
+d_full |> 
+  distinct(analyte) |> 
+  mutate(typex = dense_rank(analyte), 
+         typey = dense_rank(analyte))
+
+
+draws.s3 |> 
+  filter(.chain == 1, 
+         .draw %in% 1:50) |> 
+  select(starts_with("y_exp"), .chain, .draw) |> 
+  pivot_longer(cols = starts_with("y_exp")) |> 
+  
+  summarise(.by = name, 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  mutate(type = dat$type, 
+         treat = dat$treat, 
+         P = dat$P, 
+         y_obs = dat$y_obs, 
+         pre_obs = dat$pre_obs) |> 
+  
+  filter(y_obs > -900) |> 
+
+  ggplot(aes(y_obs, m)) +
+  geom_pointrange(aes(ymin = lwr, ymax = upr)) +
+  facet_wrap(~ type)
+  
+  
+
+
+
+
+
+
+
+```
+
+
+
+
+```{r}
+#| eval: false
+#| echo: false
+#| message: false
+#| warning: false
+
+
+
+## Model 4 --- Including Age and Sex for predictions ####
+
+d <- list(
+  N = nrow(dat), 
+  N_part = length(unique(dat$P)),
+  K = length(unique(dat$type)),
+  y_obs = dat$y_obs, 
+  pre_obs = dat$pre_obs, 
+  y_miss = dat$y_miss,
+  pre_miss = dat$pre_miss, 
+  type = dat$type, 
+  treat = dat$treat, 
+  P = dat$P, 
+  prior_only = 1,
+  # Adding age and sex to data structure
+  age = dat$age, 
+  sex = dat$sex
+)
+
+
+dat |> 
+  filter(pre_obs > -900) |> 
+  ggplot(aes(pre_obs, color = as.factor(sex))) + 
+  geom_density()+ 
+  facet_wrap(~ type) 
+
+
+
+
+
+
+s4 <- cmdstan_model(stan_file = "models/s4.stan", 
+                      exe_file = "models/s4.exe")
+
+
+
+d$prior_only <- 0
+
+fit.s4 <- s4$sample(
+        data = d,                 # The list of variables
+        iter_sampling = 2000,      # Number of iterations for sampling
+        iter_warmup = 1000,        # Number of warm-up iterations
+        chains = 4,                # Number of Markov chains
+        parallel_chains = 4,
+        refresh = 1000             # Number of iterations before each print
+)
+
+
+
+
+# Log lik comp
+log_lik.s4 <- fit.s4$draws("log_lik_part", format = "matrix") |> 
+  loo::loo(cores = 12)
+ 
+
+
+# Investigate if high pareto K comes from 
+pareto_k <- log_lik.s4$diagnostics$pareto_k
+
+dat |> 
+  arrange(P) |> 
+  
+  summarise(.by = P, 
+            miss_y = 5 - sum(y_miss), 
+            miss_pre = 5 - sum(pre_miss), 
+            sex = mean(sex)) |> 
+  
+  mutate(pareto_k = pareto_k) |> 
+  
+  ggplot(aes(miss_y, pareto_k)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0.7, lty = 2)
+  
+
+## Compare models on complete data 
+
+compl_part <- dat |> 
+  arrange(P) |> 
+  
+  summarise(.by = P, 
+            miss_y = 5 - sum(y_miss), 
+            miss_pre = 5 - sum(pre_miss), 
+            sex = mean(sex)) |> 
+  filter(miss_y == 0 ) |> 
+  pull(P)
+
+log_lik.s3 <- fit.s3$draws("log_lik_part", format = "matrix")[,compl_part] |> 
+  loo::loo(cores = 12)
+
+log_lik.s4 <- fit.s4$draws("log_lik_part", format = "matrix")[,compl_part] |> 
+  loo::loo(cores = 12)
+
+loo_compare(log_lik.s3, log_lik.s4)
+```
+
+
+```{r}
+#| eval: false
+#| echo: false
+#| message: false
+#| warning: false
+
+
+draws.s4 |> 
+  filter(.chain == 1, .draw %in% 1:50) |> 
+  select(starts_with("y_rep"), .chain, .draw) |> 
+  pivot_longer(cols = starts_with("y_rep")) |> 
+  mutate(type = rep(d$type, 50), 
+         type_descriptive = case_when(
+           type == 1 ~ "HDL", 
+           
+         )) |> 
+
+  ggplot(aes(value, group = .draw)) + 
+  geom_density(color = "gray80") + 
+  geom_density(data = data.frame(y = d$y_obs[d$y_obs > -900], 
+                                 type = d$type[d$y_obs > -900]), 
+               aes(y, group = NULL), 
+               color = "blue") + 
+  facet_wrap(~ type)
+
+
+
+
+
+draws.s4 |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+  
+  pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+
+  mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.1)) |> 
+  
+  rowwise() |> 
+  
+  mutate(placebo_pred = rnorm(1, alpha1 + beta * pre, sigma), 
+         omega_pred = rnorm(1,   alpha2 + beta * pre, sigma), 
+         placebo_mu = alpha1 + beta * pre, 
+         omega_mu = alpha2 + beta * pre) |> 
+ 
+
+  pivot_longer(cols = placebo_pred:omega_mu, 
+               names_to = "treat") |> 
+  separate(treat, into = c("treat", "pred")) |> 
+
+  summarise(.by = c(pre, treat, type, pred), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+
+  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+ 
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
+             group = pred)) + 
+  geom_ribbon(alpha = 0.4) +
+  facet_grid(type ~ treat) +
+  scale_x_continuous(limits = c(-4,4)) + 
+  scale_y_continuous(limits = c(-4,4)) + 
+  labs(y = "Prior predictive mean (90% PI prediction and &mu; interval)", 
+       x = "Pre-intervention scores") +
+  theme(axis.title.y = element_markdown())
+
+
+
+
+## Comparing treatments
+
+
+bind_rows(
+  
+  draws.s3 |> 
+  filter(.chain == 1 ) |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+
+  rowwise() |> 
+  
+  mutate(placebo_pred = rnorm(1, alpha1 , sigma), 
+         omega_pred = rnorm(1,   alpha2 , sigma), 
+         placebo_mu = alpha1 , 
+         omega_mu = alpha2 ) |> 
+  ungroup() |> 
+
+  pivot_longer(cols = placebo_pred:omega_mu, 
+               names_to = "treat") |> 
+  separate(treat, into = c("treat", "pred")) |> 
+
+  summarise(.by = c(treat, type, pred), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  
+  filter(pred == "mu") |> 
+    mutate(model = "m3"),
+  
+  draws.s4 |> 
+  filter(.chain == 1 ) |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+
+  rowwise() |> 
+  
+  mutate(placebo_pred = rnorm(1, alpha1 , sigma), 
+         omega_pred = rnorm(1,   alpha2 , sigma), 
+         placebo_mu = alpha1 , 
+         omega_mu = alpha2 ) |> 
+  ungroup() |> 
+
+  pivot_longer(cols = placebo_pred:omega_mu, 
+               names_to = "treat") |> 
+  separate(treat, into = c("treat", "pred")) |> 
+
+  summarise(.by = c(treat, type, pred), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  
+  filter(pred == "mu") |> 
+    mutate(model = "m4")) |> 
+
+  ggplot(aes(treat, m, color = model)) + 
+  geom_pointrange(aes(ymin = lwr, ymax = upr), 
+                  position = position_dodge(width = 0.1)) + 
+  
+  facet_wrap(~ type, ncol = 1)
+  
+## Calculate constrats
+
+
+bind_rows(
+  draws.s3 |> 
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  mutate(contrast = alpha2 - alpha1) |> 
+  select(.draw, type, contrast) |> 
+
+  summarise(.by = c(type), 
+            m = mean(contrast), 
+            lwr = quantile(contrast, 0.025), 
+            upr = quantile(contrast, 0.975)) |> 
+    mutate(model = "m3"), 
+  
+  draws.s4 |> 
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  mutate(contrast = alpha2 - alpha1) |> 
+  select(.draw, type, contrast) |> 
+
+  summarise(.by = c(type), 
+            m = mean(contrast), 
+            lwr = quantile(contrast, 0.025), 
+            upr = quantile(contrast, 0.975)) |> 
+    mutate(model = "m4") ) |> 
+  
+  ggplot(aes("Contrast", m, color = model)) + 
+  geom_pointrange(aes(ymin = lwr, ymax = upr), 
+                  position = position_dodge(width = 0.1)) + 
+  
+  facet_wrap(~ type, ncol = 1) + 
+  geom_hline(yintercept = 0, lty = 2)
+
+
+
+
+
+```
+
+
+
+
+```{r}
+#| eval: false
+#| echo: false
+#| message: false
+#| warning: false
+
+
+## Model 5 --- Including pre time-point ##
+dat <- d_full |> 
+  filter(time %in% c("T1", "T2","T4")) |> 
+  
+
+  mutate(type = dense_rank(analyte), 
+         participant = dense_rank(participant), 
+         treat_seq = dense_rank(treat), 
+         value_std = if_else(is.na(value_std), -999, value_std)) |> 
+
+    select(-value) |> 
+  
+  pivot_wider(names_from = time, 
+              values_from = c(value_std)) |> 
+  
+  pivot_longer(cols = T2:T4, 
+               names_to = "time",
+               values_to = "y_obs") |> 
+  rename(pre_obs = T1) |> 
+  
+
+  
+  mutate(time = if_else(time == "T2", 1, 2), 
+         sex = if_else(sex == "m", 1, 2), 
+         y_miss = if_else(y_obs == -999, 0, 1), 
+         pre_miss= if_else(pre_obs == -999, 0, 1)) |> 
+
+  select(y_obs, 
+         pre_obs, 
+         y_miss, 
+         pre_miss, 
+         P = participant, 
+         sex,
+         type,
+         score = type,
+         time,
+         treat = treat_seq) |> 
+  print()
+
+
+# Check what particpants has near complete data 
+compl_dat_id <- dat |> 
+  summarise(.by = P, 
+            n_y = sum(y_miss)) |> 
+  filter(n_y == 10 ) |> 
+  pull(P)
+
+
+# Check participants with less 
+dat_compl <- dat |> 
+  filter(P %in% compl_dat_id) |> 
+  mutate(P = dense_rank(P))
+
+  
+
+d <- list(
+  N = nrow(dat), 
+  N_part = length(unique(dat$P)),
+  K = length(unique(dat$score)),
+  y_obs = dat$y_obs, 
+  pre_obs = dat$pre_obs, 
+  y_miss = dat$y_miss,
+  pre_miss = dat$pre_miss, 
+  score = dat$score, 
+  treat = dat$treat, 
+  P = dat$P, 
+  prior_only = 1,
+  # Adding sex to data structure
+  time = dat$time,
+  sex = dat$sex
+)
+
+# Warning participant ID are not the same!
+d_compl <- list(
+  N = nrow(dat_compl), 
+  N_part = length(unique(dat_compl$P)),
+  K = length(unique(dat_compl$score)),
+  y_obs = dat_compl$y_obs, 
+  pre_obs = dat_compl$pre_obs, 
+  y_miss = dat_compl$y_miss,
+  pre_miss = dat_compl$pre_miss, 
+  score = dat_compl$score, 
+  treat = dat_compl$treat, 
+  P = dat_compl$P, 
+  prior_only = 0,
+  # Adding sex to data structure
+  time = dat_compl$time,
+  sex = dat_compl$sex
+)
+
+
+s5 <- cmdstan_model(stan_file = "models/s5.stan", 
+                      exe_file = "models/s5.exe")
+
+
+
+init_fun <- function() {
+  list(
+    alpha_mid = matrix(0, d$K, 2),
+    alpha_post = matrix(0, d$K, 2),
+    beta = rep(1, d$K),
+    sigma_mid = rep(0.5, d$K),
+    sigma_post = rep(0.5, d$K),
+    L_Omega_mid = diag(d$K),
+    L_Omega_post = diag(d$K),
+    sigma_pre = rep(0.5, d$K),
+    L_Omega_pre = diag(d$K),
+    mu_pre = rep(0, d$K),
+    y_impute_raw = rep(0, sum(!d$y_miss)),
+    pre_impute_raw = rep(0, sum(!d$pre_miss))
+  )
+}
+
+
+
+d$prior_only <- 0
+
+fit.s5 <- s5$sample(
+        data = d,                 # The list of variables
+        init = init_fun,          # Initiating the parameters
+        
+        adapt_delta = 0.95, 
+        max_treedepth = 15,
+        
+        
+        iter_sampling = 2000,      # Number of iterations for sampling
+        iter_warmup = 1000,        # Number of warm-up iterations
+        
+        chains = 4,   
+        # Number of Markov chains
+        parallel_chains = 4,
+        refresh = 1000             # Number of iterations before each print
+)
+
+
+fit.s5_compl <- s5$sample(
+        data = d_compl,                 # The list of variables
+
+        adapt_delta = 0.95, 
+        max_treedepth = 15,
+        
+        
+        iter_sampling = 2000,      # Number of iterations for sampling
+        iter_warmup = 1000,        # Number of warm-up iterations
+        chains = 4,   
+        # Number of Markov chains
+        parallel_chains = 4,
+        refresh = 1000             # Number of iterations before each print
+)
+
+
+
+
+rethinking::precis(fit.s5, depth = 2)
+
+
+draws.s5 <- fit.s5$draws(format = "df")
+draws.s5_compl <- fit.s5_compl$draws(format = "df")
+
+
+bind_rows(
+  
+  draws.s5_compl |> 
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  
+  separate(parameter, into = c("parameter", "time") ) |> 
+    filter(time != "pre") |> 
+
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+ 
+  mutate(contrast = alpha2 - alpha1) |> 
+  select(.draw, type, contrast, time) |> 
+
+  summarise(.by = c(type, time), 
+            m = mean(contrast), 
+            lwr = quantile(contrast, 0.025), 
+            upr = quantile(contrast, 0.975)) |> 
+  
+  mutate(type = case_when(
+    type == 1 ~ "HDL", 
+    type == 2 ~ "Triglycerides", 
+    type == 3 ~ "Blood pressure",
+    type == 4 ~ "Fasting glucose", 
+    type == 5 ~ "Waist curcumference",
+  )) |> 
+    mutate(Analysis = "Complete data"), 
+  
+  draws.s5 |> 
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  
+  separate(parameter, into = c("parameter", "time") ) |> 
+    filter(time != "pre") |> 
+
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+ 
+  mutate(contrast = alpha2 - alpha1) |> 
+  select(.draw, type, contrast, time) |> 
+
+  summarise(.by = c(type, time), 
+            m = mean(contrast), 
+            lwr = quantile(contrast, 0.025), 
+            upr = quantile(contrast, 0.975)) |> 
+  
+  mutate(type = case_when(
+    type == 1 ~ "HDL", 
+    type == 2 ~ "Triglycerides", 
+    type == 3 ~ "Blood pressure",
+    type == 4 ~ "Fasting glucose", 
+    type == 5 ~ "Waist curcumference",
+  )) |> 
+    mutate(Analysis = "ITT (imputed missing values)")
+  ) |> 
+  
+  ggplot(aes("Contrast", m, color = time, alpha = Analysis)) + 
+  
+    geom_pointrange(aes(ymin = lwr, ymax = upr), 
+                  position = position_dodge(width = 0.1)) +
+    scale_alpha_manual(values = c(0.4, 1)) +
+  
+  facet_wrap(~ type, ncol = 1, scales = "free") + 
+  geom_hline(yintercept = 0, lty = 2)
+```
+
+
+```{r}
+#| eval: false
+#| echo: false
+#| message: false
+#| warning: false
+
+
+
+
+
+```
+
+
+
+
+
+```{r}
+#| eval: false
+#| echo: false
+#| message: false
+#| warning: false
+
+## Comparing completers with drop-out in pre scores
+
+d_full |> 
+  filter(time == "T1") |> 
+  
+  mutate(completer = if_else(dense_rank(participant ) %in% compl_dat_id, 
+                             1, 0)) |> 
+  
+  
+  
+  ggplot(aes(value, color = as.factor(completer))) + geom_density() +
+  facet_wrap(~ analyte, scales = "free")
+  
+  print()
+
+  
+  
+
+```
 
 
 
