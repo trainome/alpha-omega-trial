@@ -18,5 +18,4 @@ book:
 bibliography: resources/bibliography.bib
 
 format:
-  pdf:
-    documentclass: scrreport
+  typst

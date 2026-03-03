@@ -12,7 +12,7 @@ editor_options:
 
 Descriptive data are presented as mean and standard deviations (SD). 
 
-Bayesian models were constructed using the Stan probabilistic programming language [@stanpaper] and fitted using the `cmdstanr` interface [@cmdstanr] in R [@R]. All sampling from the prior and joint posterior distribution was done using the Hamiltonian Monte Carlo (HMC) no-U-turn sampler ([Stan Reference Manual: MCMC sampling](https://mc-stan.org/docs/reference-manual/mcmc.html)). A general workflow was adopted where models were incrementally built and tested for validity through simulations. First, consequences of prior distributions were evaluated using prior predictive simulations. Priors where selected to constrain model predictions and parameter values to *a priori* plausible ranges. Samples from the joint posterior distribution where used to create posterior predictive checks where model implications where simulated and compared to observed data [@gelman2014, pp. 141].
+Bayesian models were constructed using the Stan probabilistic programming language [@stanpaper] and fitted using the `cmdstanr` interface [@cmdstanr] in R [@R]. All sampling from the prior and joint posterior distribution was done using the Hamiltonian Monte Carlo (HMC) no-U-turn sampler ([Stan Reference Manual: MCMC sampling](https://mc-stan.org/docs/reference-manual/mcmc.html)). A general workflow was adopted where models were incrementally built and tested for validity through simulations. First, implications of prior distributions were evaluated using prior predictive simulations. Priors where selected to constrain model predictions and parameter values to *a priori* plausible ranges. Samples from the joint posterior distribution where used to create posterior predictive checks where model implications where simulated and compared to observed data [@gelman2014, pp. 141].
 Performance of the HMC algorithm was assessed by inspecting chain convergence statistics (R-hat) and visually inspecting convergence and stationary sampling across multiple HMC chains.   
 
 ## Description of the data set
@@ -32,9 +32,14 @@ The overall objective of the present analysis is to determine the effect of N-3 
 
 ```{r}
 
-# Source figure options 
+# Source figure options, packages, and main data prep.
 source("./R/fig-opt-fun.R")
 source("./R/packages.R")
+source("./R/data-prep.R")
+source("./R/helpers.R")
+
+# Settings
+refit.models <- FALSE
 
 ```
 
@@ -158,5 +163,679 @@ baseline_dat |>
   tab_footnote(footnote = "Data are presnted as Mean (SD) [Min-Max]")
 
 ```
+
+
+### Descriptives and Missing data patterns
+
+
+
+
+```{r}
+#| label: fig-descriptive-data
+#| fig-height: 8
+#| fig-width: 6
+#| fig-cap: "Observed data distributions of main outcomes."
+
+
+
+d_full <- criteria_dat |> 
+  
+  select(participant, time, treat, sex, age, analyte, value) |> 
+
+  # Add missing values for all missing obs. 
+  pivot_wider(names_from = time, 
+              values_from = value) |> 
+
+  pivot_longer(cols = c(T1, T2, T4), 
+               values_to = "value",
+               names_to = "time" ) |> 
+  
+  pivot_wider(names_from = analyte, 
+              values_from = value) |> 
+
+    pivot_longer(cols = HDL:HOMA2IR, 
+               values_to = "value",
+               names_to = "analyte" ) |> 
+  
+  
+  mutate(value_std = if_else(analyte == "TG", log(value), value)) |> 
+  
+  mutate(.by = analyte, 
+         value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE)) |> 
+  # To make all variables similarly signed HDL is reversed. 
+  # Expected improvement in scores will be in the negative direction 
+  # for all criteria markers
+  mutate(value_std = if_else(analyte == "HDL", 
+                         -value_std, value_std)) |> 
+  mutate(participant = paste0("p", participant)) 
+
+  
+
+
+## Descriptive plots
+
+d_full |> 
+
+
+  mutate(
+           analyte = case_when(
+           analyte == "waist" ~ "Waist<br>circumference (cm)", 
+           analyte == "glucose" ~ "Resting glucose<br>(mmol L<sup>-1</sup>)" ,
+           analyte == "bp" ~ "Blood pressure<br>(MAP)", 
+           analyte == "TG" ~ "Triglycerides<br>(mmol L<sup>-1</sup>)", 
+           analyte == "HDL" ~ "HDL Cholesterol<br>(mmol L<sup>-1</sup>)", 
+           analyte == "fat.rel" ~ "Relative fat mass<br>(%)", 
+           analyte == "bmi" ~ "Body mass index<br>(kg m<sup>-2</sup>)",
+           analyte == "HOMA2IR" ~ "Insulin sensitivity<br>index"
+           
+         ), 
+         sex = if_else(sex == "f", "Female", "Male")) |> 
+  
+
+  ggplot(aes(x = value, color = time)) + 
+  geom_line(stat = "density") + 
+  facet_wrap(~analyte + sex,  scales = "free")  + 
+  alpha_theme(yaxis = FALSE) + 
+  theme(strip.text = element_markdown(), 
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = "bottom") +
+  labs(color = "Time") + 
+  scale_color_manual(values = colscale)
+```
+
+
+
+
+
+```{r}
+#| label: fig-missing-data
+#| message: false
+#| warning: false
+#| echo: false
+#| fig-height: 12
+#| fig-width: 8
+#| fig-cap: "Observed and missing data across treatment groups and time-points. Rows are participants, columns are data points."
+
+
+d_full |> 
+
+  
+    # Add indicator for met syn criteria. 
+  mutate(met_sym_crit = if_else(analyte %in% c("bmi", "fat.rel", "HOMA2IR"), 0, 1)) |> 
+  
+
+
+  
+  mutate(.by = participant, 
+         n_miss =  sum(is.na(value))) |> 
+  # Reorder participants by missing values
+  mutate(participant = fct_reorder(participant, -n_miss)) |>
+  mutate(.by = treat, 
+         participant_num = dense_rank(as.numeric(participant))) |> 
+  mutate(miss = if_else(is.na(value), "miss", "data")) |> 
+  # Fix labels
+   mutate(
+           analyte = case_when(
+           analyte == "waist" ~ "Waist circumference", 
+           analyte == "glucose" ~ "Resting glucose" ,
+           analyte == "bp" ~ "Blood pressure", 
+           analyte == "TG" ~ "Triglycerides", 
+           analyte == "HDL" ~ "HDL Cholesterol",
+           analyte == "fat.rel" ~ "Relative fat mass", 
+           analyte == "bmi" ~ "Body mass index",
+          analyte == "HOMA2IR" ~ "Insulin sensitivity index"
+           
+         ),
+         
+         analyte = factor(analyte, 
+                          levels = c("Waist circumference", 
+                                     "Resting glucose", 
+                                     "Blood pressure",
+                                     "Triglycerides",
+                                     "HDL Cholesterol", 
+                                     "Relative fat mass", 
+                                     "Body mass index", 
+                                     "Insulin sensitivity index")),
+         
+         miss = factor(miss, levels = c("data", "miss"), 
+                       labels = c("Observed data", 
+                                  "Missing data")), 
+         treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3")), 
+         met_sym_crit = if_else(met_sym_crit == 1, 
+                                "Metabolic syndrome criteria", 
+                                "Body composition")) |> 
+    arrange(participant, time, analyte) |> 
+    mutate(.by = participant,
+         coord = rep(1:8, 3))|> 
+
+
+  
+  
+
+  # Per group
+  ggplot(aes(coord, participant_num, 
+             color = miss, 
+             fill = analyte, 
+             alpha = miss)) + 
+  
+
+  geom_point(shape = 21, size = 2) + 
+
+  scale_color_manual(values = c("black", "gray")) + 
+  scale_alpha_manual(values = c(1, 0.6)) +
+  scale_fill_manual(values = colscale) + 
+  facet_nested( ~ treat + time , scales = "free_y") +
+
+  alpha_theme(yaxis = FALSE) +
+  
+  
+  theme(axis.text.y = element_blank(), 
+        axis.ticks.y  = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x  = element_blank(), 
+        axis.line.x = element_blank(), 
+        panel.background = element_rect(fill = c("gray90"))
+        ) + 
+  labs(x = "",
+       y = "", 
+       fill = "Measurement", 
+       color = "", 
+       alpha = "")
+```
+
+
+To assess if the outcome variables predict drop-out we fit a logistic regression model with drop-out ($D_i$) at time $\text{Time}$ T2 or T4, coded as 0/1 as the outcome variable. The association between the standardized measurement type value ($X_{i[A]}$) and drop-out was determined while controlling for sex ($S$) within each treatment group ($T$).
+
+$$
+\begin{align}
+D_{i[\text{Time}]} &\sim \operatorname{Bernoulli}(p_i) \\
+\operatorname{Logit}(p_i) &= \alpha_{[A]} + \beta_{X[A]} X_{i[A]} + \beta_{S[A]} S_i + \beta_{T[A]} T_i + \beta_{TX[A]} T_i X_i \\
+\alpha_{[A]} &\sim \operatorname{Normal}(0, 0.5) \\
+\beta_{X[A]} &\sim \operatorname{Normal}(0, 0.5) \\
+\beta_{S[A]} &\sim \operatorname{Normal}(0, 0.5) \\
+\beta_{T[A]} &\sim \operatorname{Normal}(0, 0.5) \\
+\beta_{TX[A]} &\sim \operatorname{Normal}(0, 0.5) 
+\end{align}
+$$
+
+
+
+
+
+
+```{r}
+#| label: missing-data-prep
+
+
+miss_dat <- criteria_dat |> 
+  select(- threshold, -crit) |> 
+  # Filter for time-point 1
+  filter(time == "T1") |> 
+  pivot_wider(names_from = analyte, 
+              values_from = value) |> 
+  pivot_longer(cols = age:HOMA2IR, 
+               values_to = "value", 
+               names_to = "analyte")  |> 
+    mutate(.by = analyte, 
+         value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value), 
+         value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE)) 
+
+## For mean-centering 
+baseline_cent <- miss_dat |> 
+  summarise(.by = analyte, 
+            m = mean(value, na.rm = TRUE), 
+            s = sd(value, na.rm = TRUE), 
+            nas = sum(is.na(value_std)), 
+            n = n()) |> 
+  mutate(nas = nas / n) 
+
+
+miss_dat2 <- miss_dat |> 
+  filter(!is.na(value_std)) |> 
+  # Missing at follow-up
+  mutate(
+    miss_t4 = if_else(participant %in% participant_complete_T4, 0, 1), 
+    miss_t2 = if_else(participant %in% participant_complete_T2, 0, 1), 
+    P = dense_rank(participant), 
+    A = dense_rank(analyte), 
+    TX= if_else(treat == "ctrl", -0.5, 0.5), 
+    S = if_else(sex == "m", -0.5, 0.5),
+  ) 
+  
+  
+# Prepare list for model 
+d <- list(
+  N = nrow(miss_dat2), 
+  N_A = length(unique(miss_dat2$A)), 
+  N_P = length(unique(miss_dat2$P)), 
+  N_TX =length(unique(miss_dat2$TX)), 
+  N_S = length(unique(miss_dat2$S)), 
+  # Indicators
+  P = miss_dat2$P,           # Participant
+  A = miss_dat2$A,           # Outcome/Analyte
+  TX= miss_dat2$TX,          # Treatment
+  
+  # Predictors
+  S = miss_dat2$S,           # sex
+  x = miss_dat2$value_std,   # outcome std value
+  do4 = miss_dat2$miss_t4,   # Drop-out to T4 
+  do2 = miss_dat2$miss_t2,    # Drop-out to T2
+  
+  prior_only = 1
+  
+)
+```
+
+
+```{r}
+#| label: model1-fit
+#| output: false
+
+# Compiling the model
+m1 <- cmdstan_model(stan_file = "models/m1.stan", 
+                      exe_file = "models/m1.exe")
+
+
+
+fit_wrap(m1,fit = "fit.m1", DATA = d)
+
+```
+
+
+In addition to measurements included in the metabolic syndrome diagnostic criteria (Fasting glucose, waist circumference, HDL, triglycerides, mean arterial blood pressure), we also included relative fat mass, body mass index, age and insulin resistance index (HOMA2IR).
+
+Prior predictive checks (@fig-dropout-priorpredictive) confirmed that the model expects nine measurement types in two treatment groups and that the combined priors weakly regularize away from all/non drop-out.
+
+
+```{r}
+#| label: fig-dropout-priorpredictive
+#| fig-height: 8
+#| fig-width: 6
+#| fig-cap: "Prior predictive simulation for model 1. Columns are values of the predictor (SD-units) rows represents each predictor."
+
+
+draws.m1 <- fit.m1$draws(format = "df")
+
+
+draws.m1 |> 
+  filter(.chain == 1) |> 
+  pivot_longer(cols = starts_with(c("alpha2", "beta2"))) |> 
+  separate(name, into = c("param", "A"), sep = "\\[") |> 
+  mutate(A = gsub("\\]", "", A)) |> 
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  # Adding predictor variables
+  expand_grid(x = seq(from = -3, to = 3, by = 3), 
+                TX = c(-0.5, 0.5)) |>
+  
+  mutate(log_odds = alpha2 + beta2_x * x + beta2_tx * TX + beta2_xtx * TX * x, 
+         prob = plogis(log_odds)) |> 
+  mutate(Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+  ggplot(aes(prob, color = Treatment)) + 
+  geom_line(stat = "density") +
+  facet_grid( A ~ x ) +
+  labs(x = "Drop-out probability", 
+       y = "Prior density") +
+  theme_classic() + 
+  theme(strip.background = element_blank(), 
+        strip.text.y = element_text(angle = 0)) + 
+  scale_color_manual(values = colscale)
+
+  
+```
+
+
+
+```{r}
+#| output: false
+#| label: m1-posterior-fit
+
+d$prior_only <- 0
+fit_wrap(m1, fit = "fit.m1p", DATA = d)
+draws.m1 <- fit.m1p$draws(format = "df")
+
+```
+
+
+```{r}
+#| label: fig-dropout-across
+#| fig-height: 8
+#| fig-width: 10
+#| fig-cap: "Probability of drop-out across values of baseline co-variates on per treatment group to time-point 2 (A) and 4 (B). Estimates are adjusted for sex, intervals are 90% percentile interval."
+
+a <- draws.m1 |> 
+  filter(.chain == 1) |> 
+  pivot_longer(cols = starts_with(c("alpha2", "beta2"))) |> 
+  separate(name, into = c("param", "A"), sep = "\\[") |> 
+  mutate(A = gsub("\\]", "", A)) |> 
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  # Adding predictor variables
+  expand_grid(x = seq(from = -3, to = 3, by = 0.1), 
+                TX = c(-0.5, 0.5)) |>
+  
+  mutate(log_odds = alpha2 + beta2_x * x + beta2_tx * TX + beta2_xtx * TX * x, 
+         prob = plogis(log_odds), 
+         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+  
+
+  summarise(.by = c(A, Treatment, x), 
+            mprob = mean(prob), 
+            lwr = quantile(prob, 0.05), 
+            upr = quantile(prob, 0.95)) |> 
+  
+  # Inner join transforming to centering
+  inner_join(
+    miss_dat2 |> 
+  distinct(A, analyte) |> 
+  mutate(
+    
+    A = as.character(A),
+    
+    Outcome = case_when(
+    analyte == "age" ~ "Age (years)", 
+    analyte == "waist" ~ "Waist circumference (cm)", 
+    analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
+    analyte == "bp" ~ "Blood pressure (MAP)", 
+    analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
+    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+    analyte == "fat.rel" ~ "Relative fat mass (%)", 
+    analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
+    analyte == "HOMA2IR" ~ "Insulin resistance index (log)")) |> 
+  inner_join(
+    baseline_cent
+   )
+  ) |> 
+  
+  mutate(outcome_scale = m + x * s) |> 
+  
+  ggplot(aes(outcome_scale, mprob, 
+             fill = Treatment,
+             ymin = lwr, ymax = upr)) +
+  geom_ribbon(alpha = 0.2) + 
+  facet_wrap(~ Outcome, scales = "free_x") + 
+  
+  theme(strip.text = element_markdown(), 
+        legend.position = c(0.9, 0.96), 
+        legend.title = element_blank()) + 
+  labs(x = "", 
+       y = "Probability of drop-out", 
+       title = "A") 
+  
+
+
+b <- draws.m1 |> 
+  filter(.chain == 1) |> 
+  pivot_longer(cols = starts_with(c("alpha4", "beta4"))) |> 
+  separate(name, into = c("param", "A"), sep = "\\[") |> 
+  mutate(A = gsub("\\]", "", A)) |> 
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  # Adding predictor variables
+  expand_grid(x = seq(from = -3, to = 3, by = 0.1), 
+                TX = c(-0.5, 0.5)) |>
+  
+  mutate(log_odds = alpha4 + beta4_x * x + beta4_tx * TX + beta4_xtx * TX * x, 
+         prob = plogis(log_odds), 
+         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+  
+
+  summarise(.by = c(A, Treatment, x), 
+            mprob = mean(prob), 
+            lwr = quantile(prob, 0.05), 
+            upr = quantile(prob, 0.95)) |> 
+  
+  # Inner join transforming to centering
+  inner_join(
+    miss_dat2 |> 
+  distinct(A, analyte) |> 
+  mutate(
+    
+    A = as.character(A),
+    
+    Outcome = case_when(
+    analyte == "age" ~ "Age (years)", 
+    analyte == "waist" ~ "Waist circumference (cm)", 
+    analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
+    analyte == "bp" ~ "Blood pressure (MAP)", 
+    analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
+    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+    analyte == "fat.rel" ~ "Relative fat mass (%)", 
+    analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
+    analyte == "HOMA2IR" ~ "Insulin resistance index (log)")) |> 
+  inner_join(
+    baseline_cent
+   )
+  ) |> 
+  
+  mutate(outcome_scale = m + x * s) |> 
+  
+  ggplot(aes(outcome_scale, mprob, 
+             fill = Treatment,
+             ymin = lwr, ymax = upr)) +
+  geom_ribbon(alpha = 0.2) + 
+  facet_wrap(~ Outcome, scales = "free_x") + 
+  
+  theme(strip.text = element_markdown(), 
+        legend.position = "none") + 
+  labs(x = "", 
+       y = "Probability of drop-out", 
+       title = "B")
+
+
+a | b
+
+```
+
+
+```{r}
+#| label: tbl-dropout
+#| tbl-cap: "Change in log-odds (Slope) for drop-out for 1 SD-unit change in baseline characteristic (Outcome) and differences in slope between treatment groups (&Delta Treatment) at time T2 and time T4. Values are posterior means with 95% percentile intervals."
+
+
+draws.m1 |> 
+  filter(.chain == 1) |> 
+  select(.iteration, starts_with("beta")) |> 
+  pivot_longer(cols = starts_with(c("beta"))) |> 
+  separate(name, into = c("param", "A"), sep = "\\[") |> 
+  mutate(A = gsub("\\]", "", A)) |> 
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+
+  mutate(
+    avg_t2 = beta2_x,   # avg log odds effect of baseline t2
+    avg_t4 = beta4_x,   # avg log odds ... t4
+    txd_t2 = beta2_xtx, # diff in slope between tx groups t2
+    txd_t4 = beta4_xtx, # diff in slope between tx groups t2
+      ) |> 
+  
+    select(A, avg_t2:txd_t4) |> 
+    pivot_longer(cols = avg_t2:txd_t4) |> 
+  
+  
+  summarise(.by = c(A, name), 
+            mlo = mean(value), 
+            lwr = quantile(value, 0.025), 
+            upr = quantile(value, 0.975)) |> 
+  
+  mutate(stat = paste0(sprintf("%.2f", round(mlo, 2)), 
+                       " [", 
+                       sprintf("%.2f", round(lwr, 2)), 
+                       ", ", 
+                       sprintf("%.2f", round(upr, 2)), 
+                       "]"), 
+         A = as.integer(A)) |> 
+  dplyr::select(A, name, stat) |> 
+  inner_join(
+    miss_dat2 |> 
+      distinct(A, analyte) |> 
+      mutate(
+        Outcome = case_when(
+          analyte == "age" ~ "Age (years)", 
+          analyte == "waist" ~ "Waist circumference (cm)", 
+          analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
+          analyte == "bp" ~ "Blood pressure (MAP)", 
+          analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)",
+          analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+          analyte == "fat.rel" ~ "Relative fat mass (%)", 
+          analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
+          analyte == "HOMA2IR" ~ "Insulin resistance index (log)")))|>  
+  pivot_wider(names_from = name, 
+              values_from = stat) |> 
+  dplyr::select(Outcome, avg_t2, txd_t2, avg_t4, txd_t4) |> 
+  gt() |> 
+  fmt_markdown(columns = Outcome) |> 
+  tab_spanner(label = "T2", 
+              columns = c(avg_t2, txd_t2)) |> 
+  tab_spanner(label = "T4", 
+              columns = c(avg_t4, txd_t4)) |> 
+  cols_label(
+    avg_t2 = "Slope",
+    txd_t2 = md("&Delta; Treatment"), 
+    avg_t4 = "Slope",
+    txd_t4 = md("&Delta; Treatment")
+    ) |> 
+  opt_table_font( font = list(
+      google_font(name = "Merriweather"),
+      "Cochin", "serif"
+    ), 
+    size = 10)
+  
+```
+
+Age was negatively associated with probability of drop-out at T2 with now robust difference between treatment groups (@fig-dropout-across A; @tbl-dropout). Resting glucose at baseline tended to predict drop-out to T4 with no strong difference between treatment groups (@fig-dropout-across B; @tbl-dropout).
+
+
+```{r}
+#| label: fig-dropout-treat
+#| include: false
+#| eval: false
+#| fig-height: 8
+#| fig-width: 6
+#| fig-cap: "Effects of one SD-uniut change in baseline value on log-odds probability of droup-out per treatment group. Estimates are adjusted for sex, intervals are 90% percentile interval."
+
+draws.m1 |> 
+  filter(.chain == 1) |> 
+  pivot_longer(cols = starts_with(c("alpha", "beta"))) |> 
+  separate(name, into = c("param", "A"), sep = "\\[") |> 
+  mutate(A = gsub("\\]", "", A), 
+         time = if_else(grepl("4", param), "T4", "T2"), 
+         param = gsub("[0-9]", "", param)) |> 
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  # Adding predictor variables
+  expand_grid(x = seq(from = -3, to = 3, by = 0.1), 
+                TX = c(-0.5, 0.5)) |>
+  
+  mutate(log_odds = beta_x + beta_xtx * TX , 
+         prob = plogis(log_odds), 
+         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+  
+  summarise(.by = c(A, Treatment, time), 
+            mprob = mean(log_odds), 
+            lwr = quantile(log_odds, 0.05), 
+            upr = quantile(log_odds, 0.95)) |> 
+    inner_join(
+    miss_dat2 |> 
+  distinct(A, analyte) |> 
+  mutate(
+    
+    A = as.character(A),
+    
+    Outcome = case_when(
+    analyte == "age" ~ "Age (years)", 
+    analyte == "waist" ~ "Waist circumference (cm)", 
+    analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
+    analyte == "bp" ~ "Blood pressure (MAP)", 
+    analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
+    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+    analyte == "fat.rel" ~ "Relative fat mass (%)", 
+    analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
+    analyte == "HOMA2IR" ~ "Insulin resistance index (log)")) |> 
+  inner_join(
+    baseline_cent
+   )
+  ) |> 
+ 
+  ggplot(aes(Treatment, mprob, 
+             ymin = lwr, ymax = upr, 
+             color = time)) + 
+  geom_pointrange(position = position_dodge(width = 0.2)) + 
+  facet_wrap(~ Outcome) +
+    theme(strip.text = element_markdown()) + 
+  labs(x = "", 
+       y = "Log-odds change in drop-out probability\nper SD-unit change in predictor")
+```
+
+
+```{r}
+#| label: fig-dropout-treatcomp
+#| fig-height: 8
+#| fig-width: 6
+#| eval: false
+#| fig-cap: "Differences in the effect of baseline value on drop-out probability between treatments groups. Estimates are adjusted for sex, intervals are 90% percentile interval."
+
+
+
+draws.m1 |> 
+  filter(.chain == 1) |> 
+  pivot_longer(cols = starts_with(c("alpha", "beta"))) |> 
+  separate(name, into = c("param", "A"), sep = "\\[") |> 
+   mutate(A = gsub("\\]", "", A), 
+         time = if_else(grepl("4", param), "T4", "T2"), 
+         param = gsub("[0-9]", "", param)) |> 
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  # Adding predictor variables
+  expand_grid(x = seq(from = -3, to = 3, by = 0.1), 
+                TX = c(-0.5, 0.5)) |>
+  
+  mutate(log_odds = beta_xtx, 
+         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+  
+  summarise(.by = c(A, Treatment, time), 
+            mprob = mean(log_odds), 
+            lwr = quantile(log_odds, 0.05), 
+            upr = quantile(log_odds, 0.95)) |> 
+    inner_join(
+    miss_dat2 |> 
+  distinct(A, analyte) |> 
+  mutate(
+    
+    A = as.character(A),
+    
+    Outcome = case_when(
+    analyte == "age" ~ "Age (years)", 
+    analyte == "waist" ~ "Waist circumference (cm)", 
+    analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
+    analyte == "bp" ~ "Blood pressure (MAP)", 
+    analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
+    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+    analyte == "fat.rel" ~ "Relative fat mass (%)", 
+    analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
+    analyte == "HOMA2IR" ~ "Insulin resistance index (log)")) |> 
+  inner_join(
+    baseline_cent
+   )
+  ) |> 
+ 
+  ggplot(aes(Outcome, mprob, color = time,
+             ymin = lwr, ymax = upr)) + 
+  geom_pointrange(position = position_dodge(width = 0.1)) + 
+  labs(x = "", 
+       y = "Log-odds (N-3 - Placebo, 90% PI)", 
+       color = "Time-point") +
+  coord_flip() + 
+  theme(axis.text.y = element_markdown())
+  
+  
+
+```
+
+
+
+
 
 
