@@ -10,3 +10,8 @@
 *.Rproj
 /.Rproj.user
 
+# Ignore model executables
+*.exe
+
+/.quarto/
+**/*.quarto_ipynb

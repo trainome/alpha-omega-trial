@@ -14,15 +14,15 @@ increasing the predictor by 1 standard deviation.
 
 // 
 data {
-  int<lower=0> N;
-  int<lower=0> N_A;
-  int<lower=0> N_P;
-  int<lower=0> N_TX;
-  int<lower=0> N_S;
+  int<lower=0> N;                               // Number of obs
+  int<lower=0> N_A;                             // Number of measure types
+  int<lower=0> N_P;                             // Number of participants
+  int<lower=0> N_TX;                            // Number of treatments (2)
+  int<lower=0> N_S;                             // Number of sex (2)
   
   // Index vars
-  array[N] int<lower=1, upper=N_P> P; 
-  array[N] int<lower=1, upper=N_A> A;
+  array[N] int<lower=1, upper=N_P> P;           // Participant
+  array[N] int<lower=1, upper=N_A> A;           // Analyte (type of measurement)
 
   
   // Predictors
@@ -31,7 +31,7 @@ data {
   array[N] real TX;                              // Treatment .5 coding
   
   array[N] int<lower=0, upper=1> do4;            // Drop-out to T4
-  array[N] int<lower=0, upper=1> do2;            // T2   
+  array[N] int<lower=0, upper=1> do2;            // Drop-out to T2   
   
   // Prior flag
   int<lower=0, upper=1> prior_only;
@@ -39,6 +39,8 @@ data {
 }
 
 parameters {
+  
+  // Parameters for T2 and T4 models
   vector[N_A] alpha4;
   vector[N_A] beta4_x;
   vector[N_A] beta4_s;

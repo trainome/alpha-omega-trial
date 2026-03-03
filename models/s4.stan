@@ -1,35 +1,41 @@
-/* */
+/* 
+Including missing data data imputation in joint model. 
+*/
+
 
 data {
-  int<lower=0> N;
-  int<lower=0> N_part;
-  int<lower=0> K;
+  int<lower=0> N;                             // Number of obs. 
+  int<lower=0> N_P;                           // Number of participants
+  int<lower=0> K;                             // Number of measures
   
-  vector[N] y_obs;
-  vector[N] pre_obs;
+  vector[N] y_obs;                            // Data (incl missing w. placehol)
+  vector[N] pre_obs;                          // Pre-int dat (incl miss)
   
-  array[N] int<lower=0, upper=1> y_miss;
-  array[N] int<lower=0, upper=1> pre_miss;
+  array[N] int<lower=0, upper=1> y_miss;      // Missing data indicator (miss=0)
+  array[N] int<lower=0, upper=1> pre_miss;    // Miss dat ind for pre (miss=0)
   
-  array[N] int<lower=1, upper=K> type;
-  array[N] int<lower=1, upper=N_part> P;
-  array[N] int<lower=1, upper=2> treat;
+  array[N] int<lower=1, upper=K> type;        // Measurement type
+  array[N] int<lower=1, upper=N_P> P;         // Participant 
+  array[N] int<lower=1, upper=2> treat;       // Treatment index
   
-  vector[N] age;
-  array[N] int<lower=1, upper=2> sex;
+  array[N] real<lower=-0.5, upper=0.5> sex;   // Sex
   
-  int<lower=0, upper=1> prior_only;
+  int<lower=0, upper=1> prior_only;           // Prior only flag
 }
 transformed data {
-  int n_miss_y = N - sum(y_miss);
+  int n_miss_y = N - sum(y_miss);             // Count the number of missing
   int n_miss_pre = N - sum(pre_miss);
 }
 parameters {
+  
+  // Parameters for the main model 
+  
+  // Type (k)
   matrix[K, 2] alpha;
   vector[K] beta;
-  vector[K] beta_age;
   vector[K] beta_sex;
   
+  // Correlation matrix and sigma k
   cholesky_factor_corr[K] L_Omega;
   vector<lower=0>[K] sigma;
   
@@ -37,21 +43,21 @@ parameters {
   vector[n_miss_y] y_impute;
   vector[n_miss_pre] pre_impute;
   
-  // Pre-value imputation model
   vector[K] mu_pre;
-  vector[K] beta_age_pre;
-  vector[K] beta_sex_pre;
   vector<lower=0>[K] sigma_pre;
   cholesky_factor_corr[K] L_Omega_pre;
 }
 transformed parameters {
   vector[N] y;
   vector[N] pre;
+  matrix[N_P, K] mu_wide;
   
+  // Fill y and pre
   {
     int idx_y = 1;
     int idx_pre = 1;
     
+    // If missing values, use parameter
     for (i in 1:N) {
       if (y_miss[i] == 1) {
         y[i] = y_obs[i];
@@ -69,54 +75,49 @@ transformed parameters {
     }
   }
   
-  // Build wide-format matrices (order independent)
-  matrix[N_part, K] mu_wide;
-  matrix[N_part, K] mu_pre_wide;
+  // Compute mu_wide using pre
   for (i in 1:N) {
-    mu_wide[P[i], type[i]] = alpha[type[i], treat[i]] 
-                              + beta[type[i]] * pre[i]
-                              + beta_age[type[i]] * age[i]
-                              + beta_sex[type[i]] * (sex[i] - 1);
-    
-    mu_pre_wide[P[i], type[i]] = mu_pre[type[i]] 
-                                  + beta_age_pre[type[i]] * age[i]
-                                  + beta_sex_pre[type[i]] * (sex[i] - 1);
+    mu_wide[P[i], type[i]] = alpha[type[i], treat[i]] + 
+    beta[type[i]] * pre[i] + 
+    beta_sex[type[i]] * sex[i];
   }
 }
 model {
-  // Outcome model priors
-  to_vector(alpha) ~ normal(0, 0.5);
-  beta ~ normal(1, 0.2);
-  beta_age ~ normal(0, 0.2);
-  beta_sex ~ normal(0, 0.2);
+  // Priors
+  to_vector(alpha) ~ normal(0, 1);
+  beta ~ normal(1, 0.5);
+  beta_sex ~ normal(0, 0.5);
   sigma ~ exponential(1);
   L_Omega ~ lkj_corr_cholesky(4);
   
-  // Pre-value model priors
   mu_pre ~ normal(0, 1);
-  beta_age_pre ~ normal(0, 0.2);
-  beta_sex_pre ~ normal(0, 0.2);
   sigma_pre ~ exponential(1);
-  L_Omega_pre ~ lkj_corr_cholesky(2);
+  L_Omega_pre ~ lkj_corr_cholesky(4);
+  
+  // Weak prior on imputed values
+  y_impute ~ normal(0, 2);
+  pre_impute ~ normal(0, 2);
+  
+  
   
   if (prior_only == 0) {
     // Pre-value imputation model
     matrix[K, K] L_Sigma_pre = diag_pre_multiply(sigma_pre, L_Omega_pre);
-    matrix[N_part, K] pre_wide;
+    matrix[N_P, K] pre_wide;
     for (i in 1:N) {
       pre_wide[P[i], type[i]] = pre[i];
     }
-    for (p in 1:N_part) {
-      pre_wide[p]' ~ multi_normal_cholesky(mu_pre_wide[p]', L_Sigma_pre);
+    for (p in 1:N_P) {
+      pre_wide[p]' ~ multi_normal_cholesky(mu_pre, L_Sigma_pre);
     }
     
     // Outcome model
     matrix[K, K] L_Sigma = diag_pre_multiply(sigma, L_Omega);
-    matrix[N_part, K] y_wide;
+    matrix[N_P, K] y_wide;
     for (i in 1:N) {
       y_wide[P[i], type[i]] = y[i];
     }
-    for (p in 1:N_part) {
+    for (p in 1:N_P) {
       y_wide[p]' ~ multi_normal_cholesky(mu_wide[p]', L_Sigma);
     }
   }
@@ -126,30 +127,27 @@ generated quantities {
   matrix[K, K] Omega_pre = multiply_lower_tri_self_transpose(L_Omega_pre);
   
   vector[N] y_rep;
-  vector[N_part] log_lik_part;
+  vector[N_P] log_lik_part;
+  vector[N] y_expect;
   
   {
     matrix[K, K] L_Sigma = diag_pre_multiply(sigma, L_Omega);
-    matrix[N_part, K] y_wide;
-    for (i in 1:N) {
-      y_wide[P[i], type[i]] = y[i];
+    matrix[N_P, K] y_rep_wide;
+    
+    for (p in 1:N_P) {
+      y_rep_wide[p] = multi_normal_cholesky_rng(mu_wide[p]', L_Sigma)';
+      log_lik_part[p] = 0;
     }
     
-    for (p in 1:N_part) {
-      vector[K] y_part = multi_normal_cholesky_rng(mu_wide[p]', L_Sigma);
-      log_lik_part[p] = multi_normal_cholesky_lpdf(y_wide[p]' | mu_wide[p]', L_Sigma);
+    // Log-lik only for observed y
+    for (i in 1:N) {
+      y_rep[i] = y_rep_wide[P[i], type[i]];
+      y_expect[i] = mu_wide[P[i], type[i]];
       
-      for (i in 1:N) {
-        if (P[i] == p) {
-          y_rep[i] = y_part[type[i]];
-        }
+      if (y_miss[i] == 1) {
+        log_lik_part[P[i]] += normal_lpdf(y[i] | mu_wide[P[i], type[i]], sigma[type[i]]);
       }
     }
-  }
-  
-  vector[N] y_expect;
-  for (i in 1:N) {
-    y_expect[i] = mu_wide[P[i], type[i]];
   }
 }
 

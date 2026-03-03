@@ -25,9 +25,14 @@ transformed data {
   int n_miss_pre = N - sum(pre_miss);
 }
 parameters {
+  
+  // Parameters for the main model 
+  
+  // Type (k)
   matrix[K, 2] alpha;
   vector[K] beta;
   
+  // Correlation matrix and sigma k
   cholesky_factor_corr[K] L_Omega;
   vector<lower=0>[K] sigma;
   
@@ -45,11 +50,12 @@ transformed parameters {
   vector[N] pre;
   matrix[N_P, K] mu_wide;
   
-  // First: fill y and pre
+  // Fill y and pre
   {
     int idx_y = 1;
     int idx_pre = 1;
     
+    // If missing values, use parameter
     for (i in 1:N) {
       if (y_miss[i] == 1) {
         y[i] = y_obs[i];
@@ -67,21 +73,21 @@ transformed parameters {
     }
   }
   
-  // Then: compute mu_wide using pre
+  // Compute mu_wide using pre
   for (i in 1:N) {
     mu_wide[P[i], type[i]] = alpha[type[i], treat[i]] + beta[type[i]] * pre[i];
   }
 }
 model {
   // Priors
-  to_vector(alpha) ~ normal(0, 0.5);
-  beta ~ normal(1, 0.2);
+  to_vector(alpha) ~ normal(0, 1);
+  beta ~ normal(1, 0.5);
   sigma ~ exponential(1);
   L_Omega ~ lkj_corr_cholesky(4);
   
   mu_pre ~ normal(0, 1);
   sigma_pre ~ exponential(1);
-  L_Omega_pre ~ lkj_corr_cholesky(2);
+  L_Omega_pre ~ lkj_corr_cholesky(4);
   
   // Weak prior on imputed values
   y_impute ~ normal(0, 2);

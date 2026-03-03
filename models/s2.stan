@@ -1,4 +1,12 @@
-/* */
+/* A joint model for outcome scores. 
+A multivariate normal distribution is used for the participant-level outcomes
+estimating a correlation structur between outcome types. 
+
+The model uses the Cholesky factor parameterzation for stability.
+See Stan User guide 
+(https://mc-stan.org/docs/stan-users-guide/regression.html#multivariate-outcomes)
+
+*/
 
 data {
   int<lower=0> N;

@@ -26,7 +26,8 @@ parameters {
   vector<lower=0>[K] sigma;
 }
 transformed parameters {
-   // Linear model 
+   // Linear model. Keeping it here to make mu and sigma available 
+   // in the gc block.
   vector[N] mu;
   vector[N] sig;
   
@@ -55,9 +56,12 @@ generated quantities {
   vector[N] y_rep;
   vector[N_P] log_lik_part;
   
+  // Y rep using the row indicies
   for(i in 1:N)
     y_rep[i] = normal_rng(mu[i], sig[i]);
   
+  // Log lik using participant to correspond to 
+  // later models.
   for (p in 1:N_P)
     log_lik_part[p] = 0;
   for (i in 1:N)

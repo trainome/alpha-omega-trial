@@ -1,0 +1,162 @@
+---
+title: Analytic approach and data description
+execute:
+  echo: false
+  warning: false
+  message: false
+editor_options: 
+  chunk_output_type: console
+---
+
+## Data analysis
+
+Descriptive data are presented as mean and standard deviations (SD). 
+
+Bayesian models were constructed using the Stan probabilistic programming language [@stanpaper] and fitted using the `cmdstanr` interface [@cmdstanr] in R [@R]. All sampling from the prior and joint posterior distribution was done using the Hamiltonian Monte Carlo (HMC) no-U-turn sampler ([Stan Reference Manual: MCMC sampling](https://mc-stan.org/docs/reference-manual/mcmc.html)). A general workflow was adopted where models were incrementally built and tested for validity through simulations. First, consequences of prior distributions were evaluated using prior predictive simulations. Priors where selected to constrain model predictions and parameter values to *a priori* plausible ranges. Samples from the joint posterior distribution where used to create posterior predictive checks where model implications where simulated and compared to observed data [@gelman2014, pp. 141].
+Performance of the HMC algorithm was assessed by inspecting chain convergence statistics (R-hat) and visually inspecting convergence and stationary sampling across multiple HMC chains.   
+
+## Description of the data set
+
+The overall objective of the present analysis is to determine the effect of N-3 supplementation in combination with resistance training on indications of metabolic health. Main outcome variables in the this analysis are:
+
+- Metabolic syndrome (with sub-scores) (primary)
+   * Triglycerides
+   * Waist circumference
+   * Blood pressure 
+   * HDL Cholesterol
+   * Resting glucose
+- Body mass index
+- Relative fat mass
+- HOMA2-IR
+- OGTT
+
+```{r}
+
+# Source figure options 
+source("./R/fig-opt-fun.R")
+source("./R/packages.R")
+
+```
+
+
+### Participants
+
+```{r}
+#| label: tbl-participants
+#| tbl-cap: "Participant characteristics."
+
+
+
+part <- AOData::idkeys  
+  
+## Descriptives data 
+baseline_dat <- AOData::bodycomp |>
+  select(participant, time, lean.whole, BMC.whole, fat.whole)  |>
+  mutate(weight = lean.whole + BMC.whole + fat.whole) |>
+  inner_join(part) |>
+  filter(time == "T1") |>
+  ## Calculate height based on weight (DXA) and BMI 
+  mutate(height = 100 * sqrt((weight/1000) / bmi)) |>
+  ## Calculate relative lean and fat
+  mutate(lean.rel = 100 * (lean.whole / weight), 
+         fat.rel = 100 * (fat.whole/weight), 
+         # Weight in kg
+         weight = weight / 1000) |>
+  select(participant, 
+         treat, 
+         completed, 
+         sex, 
+         age, 
+         height, 
+         weight, 
+         bmi) |>
+  pivot_longer(cols = age:bmi)
+  
+  
+## Included participants 
+total_participants <- baseline_dat |> 
+  distinct(participant) |> 
+  pull(participant)
+
+
+
+
+# Per completed period
+# dat |> 
+#   summarise(.by = c(completed, treat, sex, name), 
+#             m = mean(value), 
+#             s = sd(value), 
+#             min = min(value), 
+#             max = max(value))
+  
+# Total
+
+# Calculate n
+n_total <- baseline_dat |> 
+  filter(name == "age") |> 
+  summarise(.by = c(treat, sex), 
+            n = n()) 
+
+n_male_omega <- n_total[1,3][[1]]
+n_female_omega <- n_total[3,3][[1]]
+n_male_ctrl <-  n_total[2,3][[1]]
+n_female_ctrl <-  n_total[4,3][[1]]
+
+
+
+
+
+baseline_dat |> 
+  summarise(.by = c(treat, sex, name), 
+            m = mean(value), 
+            s = sd(value), 
+            min = min(value), 
+            max = max(value), 
+            n = n()) |> 
+  mutate(stats = paste0(
+    sprintf("%.0f", round(m, 0)), 
+    " (", 
+    sprintf("%.0f", round(s, 0)), 
+    ") [",
+    sprintf("%.0f", round(min, 0)), 
+    " - ", 
+    sprintf("%.0f", round(max, 0)), 
+    "]"), 
+    n = n) |> 
+  
+  dplyr::select(treat, sex, name,n, stats) |> 
+  
+
+  
+  dplyr::select(-n) |> 
+  
+  pivot_wider(names_from = treat, 
+              values_from = stats) |> 
+  
+  mutate(sex = if_else(sex == "m", "Male", "Female"), 
+         name = case_when(
+           name == "age" ~ "Age (years)", 
+           name == "height" ~ "Stature (cm)", 
+           name == "weight" ~ "Body mass (kg)", 
+           name == "bmi" ~ "Body mass index (kg&times;m^-2^)", 
+           TRUE ~ NA )) |> 
+
+  group_by(sex) |> 
+  gt() |> 
+  fmt_markdown() |> 
+  
+  cols_label(omega = md(paste0("N-3<br>(&male; n = ", 
+                               n_male_omega, 
+                               "; &female; n = ", 
+                               n_female_omega, ")")),
+             ctrl = md(paste0("Placebo<br>(&male; n = ", 
+                              n_male_ctrl, 
+                              "; &female; n = ",
+                              n_female_ctrl, ")")), 
+             sex = "", 
+             name = "") |> 
+  tab_footnote(footnote = "Data are presnted as Mean (SD) [Min-Max]")
+
+```
+
+
