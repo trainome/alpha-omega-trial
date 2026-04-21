@@ -7,7 +7,7 @@ project:
 book:
   output-file: "supplementary-data"
   title: "Effects of N-3 on metabolic syndrome: Supplementary data"
-  author: "..., Hamarsland, Hammarström, Ellefsen"
+  author: "..."
   date: "5/9/2021"
   chapters:
     - index.qmd

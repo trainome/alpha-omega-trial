@@ -44,7 +44,7 @@ model {
   for (ty in 1:K)
    for (tx in 1:N_TX)
       alpha[ty, tx] ~ normal(0, 1);  
-  beta ~ normal(1, 0.5);
+  beta ~ normal(1, 0.4);
   sigma ~ exponential(1);
   
   if (prior_only == 0) {

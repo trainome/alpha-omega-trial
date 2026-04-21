@@ -1,444 +1,2154 @@
 ---
-title: "archive-metabolism-analysis"
-format: html
+output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 
 
 
 
+
 ```{r}
-#| label: fig-dropout
-#| message: false
-#| warning: false
-#| echo: false
+
+
+
+
+```
+
+
+
+```{r}
+#| label: data-prep-obs
+
+
+
+# 
+
+
+  
+
+distinct(d_full, analyte)
+
+d_nomiss <- d_full |> 
+  filter(!is.na(value_std)) 
+
+# Using complete cases for T2 and T4
+dat <- d_nomiss |> 
+ 
+  filter(time %in% c("T1", "T4")) |> 
+  filter(.by = participant, 
+         sum(!is.na(value_std)) == 16) |> 
+  
+  mutate(type = dense_rank(analyte), 
+         participant = dense_rank(participant), 
+         treat_seq = dense_rank(treat) ) |> 
+  select(-value) |> 
+  pivot_wider(names_from = time, 
+              values_from = value_std) |> 
+  arrange(participant, type)
+
+
+
+
+
+d <- list(P = dat$participant, 
+          y = dat$T4, 
+          pre = dat$T1, 
+          type = dat$type, 
+          K = length(unique(dat$type)),
+          N_P = length(unique(dat$participant)),
+          N_TX = 2,
+          treat = dat$treat_seq, 
+          N = nrow(dat))
+
+
+
+
+
+```
+
+
+
+```{r}
+
+
+
+```
+
+
+
+```{r}
+#| label: fig-s1-synth
+#| fig-cap: "Assessing model S1 with synthetic data. The model captures the simulated effect (in type 1 and 2) with no preference between treatment groups. Densities are contrats treatment 2 - treatment 1 divided by the residual standard deviation."
+
+# Compiling the model
+s1 <- cmdstan_model(stan_file = "models/s1.stan", 
+                      exe_file = "models/s1.exe")
+
+
+dl1 <- d1$dl_compl_single
+dl1$prior_only <- 0
+
+fit_wrap(s1, DATA = dl1, fit = "fit.s1.synth")
+
+draws.synth1 <- fit.s1.synth$draws(format = "df")
+
+p1 <- draws.synth1 |> 
+  filter(.chain == 1) |> 
+  select(.iteration,  starts_with("alpha")) |> 
+
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "type", "treat")) |> 
+  mutate(treat = paste0("treat", treat)) |> 
+
+  
+  ggplot(aes(value, color = treat)) + geom_line(stat = "density") + 
+  facet_wrap(~ type)
+
+
+alphas_contr <- draws.synth1 |> 
+  filter(.chain == 1) |> 
+  select(.iteration,  starts_with("alpha")) |> 
+
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "type", "treat")) |> 
+  mutate(treat = paste0("treat", treat)) |> 
+  pivot_wider(names_from = treat, values_from = value) |> 
+  mutate(contr = treat2 - treat1) 
+
+
+# True effects
+true_es <- data.frame(type = as.character(c(1, 2, 3, 4, 5, 6, 7, 8)), 
+                      es = c(0.5, -0.5, 0, 0, 0, 0, 0, 0))
+
+
+draws.synth1 |> 
+  filter(.chain == 1) |> 
+  select(.iteration,  starts_with("sigma")) |> 
+
+  pivot_longer(cols = starts_with("sigma")) |> 
+  separate(name, into = c("param", "type")) |> 
+  mutate(sigma = value) |> 
+  select(-param, -value) |> 
+  inner_join(alphas_contr) |> 
+  mutate(es = contr / sigma, 
+         ) |> 
+  ggplot(aes(es)) + geom_line(stat = "density") + 
+  
+  geom_vline(aes(xintercept = es), 
+             data = true_es) +
+  
+  facet_wrap(~ type, scales = "free") +
+  alpha_theme(yaxis = FALSE) + 
+  labs(x = "Effect size [(&alpha;~2~ - &alpha;~1~)/&sigma;]", 
+       y = "") + 
+  theme(axis.title.x = element_markdown())
+  
+ 
+
+
+```
+
+```{r}
+# Full posterior
+d$prior_only <- 0
+fit_wrap(s1, DATA = d, fit = "fit.s1p", refit = TRUE)
+```
+
+Sampling from the posterior using observed data gives us satisfactory performance metrics (@fig-s1-modelperformance). The posterior predictive check (@fig-s1-posteriorpredict) indicate that the model capture the general pattern of the observed data. 
+
+```{r}
+#| fig-width: 6
 #| fig-height: 6
-#| fig-width: 8
-#| fig-cap: "Comparisons of baseline characteristics between treatment groups in participants included/excluded from complete-case analysis. Error bars show minimum and maximum values together with first and thirt quartile, points are medians. P-values from comparisons of average differences between included/excluded and treatment with inclusion interactions."
+#| fig-cap: "Model performance metrics from Model s1."
+#| label: fig-s1-modelperformance
 
 
-# Test if drop-outs differ from the rest
-library(nlme)
-library(marginaleffects)
+# Model performance
+s1_sum <- fit.s1p$summary()
+
+# Get (most) problematic parameters
+vars <- s1_sum |> 
+  arrange(-rhat) |> 
+   filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  slice_head(n = 3) |> 
+  pull(variable)
+
+
+
+p1 <- s1_sum |> 
+  filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  mutate(variable_type = variable) |> 
+  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+  
+  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
+  
+  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
+  geom_point() + 
+  
+  geom_text_repel(aes(label = highlight, 
+                color = NULL, 
+                size = NULL), 
+                show.legend = FALSE) +
+  
+  labs(x = "(Bulk) effective sample size", 
+       y = "R-hat", 
+       color = "Parameter type", 
+       size = "(Tail) effective sample size") +
+  scale_color_manual(values = colscale)
 
 
 
 
+draws.s1 <- fit.s1p$draws(format = "df")
 
 
-dat <- criteria_dat |> 
-  inner_join(idkeys |> 
-               select(participant, completed)) |> 
-  pivot_wider(names_from = analyte, 
+p2  <- draws.s1 |> 
+  select(.iteration, .chain, all_of(vars)) |> 
+  pivot_longer(cols = all_of(vars)) |> 
+  ggplot(aes(.iteration, value, 
+             color = as.factor(.chain))) + 
+  geom_line(alpha = 0.5) + 
+  facet_wrap(~ name, ncol = 1, 
+             scales = "free_y") + 
+  scale_color_manual(values = colscale) + 
+  labs(x = "Iteration", 
+       color = "Chain", 
+       y = "Parameter value")
+
+
+
+p1 / p2
+
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior predictive check of Model s1 using data from T4."
+#| label: fig-s1-posteriorpredict
+
+
+# Extract log_lik
+log_lik.s1 <- fit.s1$draws("log_lik_part", format = "matrix") |> 
+  loo::loo(cores = 12)
+
+
+draws.s1 |> 
+  filter(.chain == 1, .draw %in% 1:50) |> 
+  select(starts_with("y_rep"), .chain, .draw) |> 
+  pivot_longer(cols = starts_with("y_rep")) |> 
+
+  
+  mutate(type = rep(d$type, 50), 
+         treat = rep(d$treat, 50), 
+         treat = if_else(treat == 1, "Placebo", "N-3")) |> 
+  
+  
+  inner_join(dat |> 
+  distinct(type, analyte)) |> 
+
+  ggplot(aes(value, group = paste(.draw,treat), 
+             color = as.factor(treat))) + 
+  geom_line(stat = "density", 
+            aes(), 
+            alpha = 0.2)  +
+  geom_line(stat = "density", 
+            # Sort data category for treat
+            data = data.frame(y = d$y, 
+                              type = d$type, 
+                              treat = d$treat) |> 
+              mutate(treat = if_else(treat == 1, "Placebo", "N-3")), 
+            
+               aes(y, group = treat, color = as.factor(treat)), 
+            linewidth = 1.5)  +
+  facet_wrap(~ analyte) + 
+  alpha_theme(yaxis = FALSE) + 
+  labs(y = "Density", 
+       x = "Predicted/Observed values", 
+       color = "Treatment") +
+  scale_color_manual(values = colscale) 
+
+
+```
+
+
+
+Prior predictive simulations give the expected association between pre- and post-treatment scores (@fig-s2-priorpredict). Using synthetic data confirms that the model captures the same effect as in the simpler model S1 (@fig-s2-synth).
+
+Sampling from the posterior gives us satisfactory statistics for convergence (@fig-s2-modelperformance). Three samples had Pareto k estimates above 0.7, indicating influential data points.
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Prior predictive check of Model s2."
+#| label: fig-s2-priorpredict
+
+
+### Model 2
+
+# Compiling the model
+s2 <- cmdstan_model(stan_file = "models/s2.stan", 
+                      exe_file = "models/s2.exe")
+
+
+
+# For prior predictive checking
+d$prior_only <- 1
+
+fit_wrap(s2, DATA = d, fit = "fit.s2")
+
+
+draws.s2 <- fit.s2$draws(format = "df")
+
+
+draws.s2 |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+  pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+
+  mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
               values_from = value) |> 
-  pivot_longer(cols = c(age, HDL:HOMA2IR), 
-               names_to = "name", 
-               values_to = "value") |> 
-  # Compare baseline values
-  filter(time == "T1") |> 
-  # Standardize 
-  mutate(
-    .by = name,
-    value_std = if_else(name %in% c("TG", "HOMA2IR"), log(value), value), 
-    value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE) 
-  )
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.4)) |> 
   
+  rowwise() |> 
   
+  mutate(placebo = rnorm(1, alpha1 + beta * pre, sigma), 
+         omega = rnorm(1,   alpha2 + beta * pre, sigma)) |> 
   
+  pivot_longer(cols = placebo:omega, 
+               names_to = "treat") |> 
 
-
-names <- unique(dat$name) 
-results <- list()
-comp <- list()
-
-
-
-
-for(i in seq_along(names)) {
+  summarise(.by = c(pre, treat, type), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
   
-  dat_temp <- dat |>
-    filter(name == names[i]) |>
-    mutate(included = if_else(participant %in% participant_complete, "incl", "excl"), 
-           sex = factor(sex, levels = c("f", "m"))) |> 
-    # fail-safe remove na
-    filter(!is.na(value))
-
-  
-  m <- nlme::gls(value_std ~ included + sex, 
-                 weights = varIdent(form = ~ 1|included*sex),
-                 data = dat_temp)
-
-
-  m2 <- nlme::gls(value_std ~ included*treat + sex, 
-                 weights = varIdent(form = ~ 1|included*sex),
-                 data = dat_temp)
-
-
- comp[[i]] <-  data.frame(predictions(m2, newdata = expand_grid(included = c( "incl", "excl"), 
-                                                    treat = c("omega", "ctrl"), 
-                                                    sex = c("m", "f")), 
-                         by = c("included", "treat"))) |>
-    mutate(name = names[i])
-  
-  
-  results[[i]] <- cbind(name = names[i],
-                   comp = "included vs. excluded",
-                   data.frame(est = coef(summary(m))[2,1], 
-                   se = coef(summary(m))[2,2], 
-                   tval = coef(summary(m))[2,3], 
-                   pval = coef(summary(m))[2,4],
-                   pval.treat.interact = coef(summary(m2))[5,4]),
-        data.frame(lwr = intervals(m)$coef[2,][1], 
-                   upr = intervals(m)$coef[2,][3])) |>
-    data.frame(row.names = NULL) 
-  
-  
-}
-
-
-stats <- bind_rows(results)  %>%
-  select(name, pval, pval.treat.interact) %>%
-  mutate(name = factor(name, levels = c("age", 
-                                        "waist",
-                                        "glucose",
-                                        "HOMA2IR",
-                                        "bp",
-                                        "TG", 
-                                        "HDL", 
-                                        "fat.rel",
-                                        "bmi" ), 
-                       labels = c("Age", 
-                                  
-                                  "Waist circumference",
-                                  "Resting glucose" ,
-                                  "HOMA2-IR",
-                                  "Blood pressure", 
-                                  "Triglycerides", 
-                                  "HDL Cholesterol", 
-                                  "Relative fat mass", 
-                                  "Body mass index"))) %>%
-  mutate(pval = sprintf("%.3f",round(pval, 3)), 
-         pval.treat.interact = sprintf("%.3f",round(pval.treat.interact,3))) 
-
-
-
-
-dat |>
-  mutate(name = factor(name, levels = c("age", 
-                                        "waist",
-                                        "glucose",
-                                        "HOMA2IR",
-                                        "bp",
-                                        "TG", 
-                                        "HDL", 
-                                        "fat.rel",
-                                        "bmi" ), 
-                       labels = c("Age", 
-                                  
-                                  "Waist circumference",
-                                  "Resting glucose" ,
-                                  "HOMA2-IR",
-                                  "Blood pressure", 
-                                  "Triglycerides", 
-                                  "HDL Cholesterol", 
-                                  "Relative fat mass", 
-                                  "Body mass index")), 
-         sex = factor(sex, levels = c("m", "f"), 
-                      labels = c("Male", "Female"))) |>
-      mutate(included = if_else(participant %in% participant_complete, 
-                                "incl", "excl")) |> 
-  
-  filter(time == "T1") |> 
-  
-  
-  summarise(.by = c(included, treat, name), 
-            m = median(value, na.rm = TRUE), 
-            q25 = quantile(value, 0.25, na.rm = TRUE), 
-            q75 = quantile(value, 0.75, na.rm = TRUE), 
-            min = min(value, na.rm = TRUE),
-            max = max(value, na.rm = TRUE)) |>
-
-
-  
-  inner_join(stats) %>%
-  mutate(name = if_else(name == "Age", 
-                        paste(name, 
-                      "<br><span style = 'color:#0072B2; font-size:12px;'>Incl vs. Excl: p = ",
-                      pval, 
-                      "</span><br><span style = 'color:#D55E00; font-size:12px;'>Treat interact: p = ",
-                      pval.treat.interact, 
-                      "</span>"),
-                        paste(name, 
-                      "<br><span style = 'color:#0072B2; font-size:12px;'>p = ",
-                      pval, 
-                      "</span><br><span style = 'color:#D55E00; font-size:12px;'>p = ",
-                      pval.treat.interact, 
-                      "</span>"))) |> 
-
-  mutate(treat = if_else(treat == "omega", "N-3", "Placebo")) |>
-  
-  mutate(grp = paste(treat, included)) |> 
-
-  ggplot(aes(grp, m,
-             group = grp,
-             color = treat, 
-             alpha = included)) + 
-  
-  
-  geom_errorbar(aes(ymin = min, ymax = max), width = 0, 
-                position = position_dodge(width = 0.2)) +
-  geom_errorbar(aes(ymin = q25, ymax = q75), width = 0, linewidth = 2, 
-                position = position_dodge(width = 0.2)) +
-  geom_point(position = position_dodge(width = 0.2), 
-             shape = 22, fill = "white", color = "black")  +
-  scale_alpha_manual(values = c(0.45, 0.9), guide = "none") +
-  
-  scale_color_manual(values = c(colscale[1], colscale[4])) +
-  
-  theme_classic() + 
-  facet_wrap(~ name, scales = "free_x", 
-             ncol = 3) + 
-  coord_flip() +
-    theme_classic() + 
-  theme(strip.background = element_rect(color = "white"), 
-        strip.text = element_markdown(hjust = 0), 
-        legend.title = element_blank(), 
-        axis.text.x = element_text(),
-        axis.title = element_text(), 
-        legend.position = "bottom")
-```
-
-
-```{r}
-#| label: fig-dropout2
-#| message: false
-#| warning: false
-#| echo: false
-#| fig-height: 6
-#| fig-width: 8
-#| fig-cap: "Drop-out analysis of baseline characteristics. Estimates show differences in baseline characteristics between included and excluded participants in complete-case analysis (included vs. excluded). Error bars are 95% CI. P-values from average differences between included and excluded, treatment interaction indicate interaction between treatment groups and drop-out." 
-
-
-
-bind_rows(results) |> 
-  mutate(name = factor(name, levels = c("age", 
-                                        "waist",
-                                        "glucose",
-                                        "HOMA2IR",
-                                        "bp",
-                                        "TG", 
-                                        "HDL", 
-                                        "fat.rel",
-                                        "bmi" ), 
-                       labels = c("Age", 
-                                  
-                                  "Waist circumference",
-                                  "Resting glucose" ,
-                                  "HOMA2-Insulin resistance",
-                                  "Blood pressure", 
-                                  "Triglycerides", 
-                                  "HDL Cholesterol", 
-                                  "Relative fat mass", 
-                                  "Body mass index"))) |> 
-  
-  mutate(stat_incl = paste("p = ", 
-                           sprintf("%.3f",round(pval, 3) )), 
-         stat_interact = paste("p = ", 
-                               sprintf("%.3f",round(pval.treat.interact, 3)))) |>
-  
-
-  
-  mutate(stat_incl = if_else(name == "Body mass index", paste("Included vs. excluded: ", stat_incl), stat_incl), 
-         stat_interact= if_else(name == "Body mass index", paste("Treatment interaction: ", stat_interact), stat_interact)) |>
-  
-           ggplot(aes(name, est)) + 
-   geom_hline(yintercept = 0, lty = 2, color = "gray30") +
-           geom_errorbar(aes(ymin = lwr, ymax = upr), 
-                         width = 0.1) +
-  
-  geom_text(aes(name, Inf, label = stat_incl), 
-            vjust = -1, 
-            hjust = 1, 
-            color = colscale[1]) +
-    geom_text(aes(name, Inf, label = stat_interact), 
-            vjust = 1, 
-            hjust = 1, 
-            color = colscale[4]) +
-  
-  scale_y_continuous(limits = c(-1, 1)) +
-  
-            geom_point(shape = 21, size = 3,
-                       fill = colscale[2], size = 2) + 
-  
-
-
-      theme_classic() + 
-  theme(strip.background = element_rect(color = "white"), 
-        strip.text = element_text(hjust = 0), 
-        legend.title = element_blank(), 
-        legend.position = "bottom") + 
-  coord_flip() +
-  labs(y = "Included vs. excluded (standardized units)", 
-       x = "")
-  
-
-
-```
-
-
-
-
-
-```{r}
-
-
-
-
-## Set up loop to model fatty acids 
-target <- d |> 
-  distinct(fa) |> 
-  pull(fa)
-
-
-
-coefs <- list()
-preds <- list()
-
-for(i in seq_along(target)) {
-  
-  dsub <- d |> 
-  filter(fa == target[i]) |> 
-    mutate(lnvalue = log(value))
-  
-  
-  # Fit model log-transformed data
-  m <- lmerTest::lmer(lnvalue ~ time + time:treat + (1|participant), 
-                      data = dsub)
-  
-  out <- bind_rows(
-    broom.mixed::tidy(m, conf.int = TRUE), 
-    marginaleffects::avg_comparisons(m, variables = "treat", by = "time", 
-                                   transform = function(x) 100  * (exp(x) - 1)) |> 
-    data.frame() |> 
-    mutate(effect = "comp", 
-           group = NA, 
-           std.error = NA, 
-           statistic = NA, 
-           df = NA, 
-           term = paste0(contrast,":", time)) |> 
-    select(effect, 
-           group,
-          term,
-           estimate,
-           std.error, 
-           statistic, 
-           df, 
-           conf.low, 
-           conf.high) 
-    ) |> 
-    mutate(fa = target[i]) |> 
-    select(fa, effect:conf.high)
-  
-  
-
-  
-  
-  coefs[[i]] <- out
-  preds[[i]] <- marginaleffects::avg_predictions(m, variables = c("time", "treat"), 
-                                   transform = "exp", 
-                                   conf_level = 0.99) |> 
-    mutate(fa = target[i]) |> 
-    data.frame()
-  
-}
-
-
-res <- bind_rows(coefs)
-
-preds <- bind_rows(preds) |> 
-  mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3")))
-
-
-
-
-stats  <- res |> 
-  filter(term %in% c("timeT2:treatomega", "timeT4:treatomega")) |> 
-  select(fa, term, p.value) |> 
-  mutate(fdr = p.adjust(p.value), 
-         sign = if_else(fdr < 0.05, "*", ""), 
-         term = gsub("time", "", term), 
-         term = gsub(":treatomega", "", term)) |> 
-  select(fa, time = term, p.value, sign) |> 
-  inner_join(preds |> 
-  summarise(.by = c(time, fa), 
-  m = max(estimate))) |> 
-  inner_join(d |> 
-  summarise(.by = c(fa), 
-          m.obs = quantile(value, 0.95))) |> 
-  mutate(sign.place = m + ((m.obs - m) / 2))
-
-
-
-
-AOData::omega3  |>
-  inner_join(idkeys) |>
-  filter(time %in% c("T1", "T2", "T4")) |>
-  select(participant, time, treat, C16:C226n3) |>
-  pivot_longer(cols =  C16:C226n3, 
-               names_to = "fa", 
-               values_to = "value") |>
-    mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
+  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
                         labels = c("Placebo", "N-3"))) |> 
   
   
-  ggplot(aes(time, value, color = treat, group = paste(participant, fa))) + 
-  geom_line(alpha = 0.2) + 
-  
-  ## Add model predictions
-
-  geom_errorbar(data = preds, 
-                aes(time, estimate, 
-                    ymin = conf.low, 
-                    ymax = conf.high, 
-                    group = treat,
-                    color = NULL), 
-                width = 0.1, 
-                position = position_dodge(width = 0.2)) +
-  
-  geom_line(data = preds, 
-            aes(time, estimate, group = treat, color = NULL), 
-            alpha = 1, 
-                position = position_dodge(width = 0.2)) +
-    geom_point(data = preds, 
-             aes(time, estimate, fill = treat, group = NULL),
-             color = "black",
-             size = 3,
-             alpha = 1,
-             shape = 21, 
-                position = position_dodge(width = 0.2)) +
-  # Plot statistical significance 
-  geom_text(data = stats, 
-            aes(time, sign.place, label = sign, 
-                color = NULL, group = NULL),
-        size = 6,
-        show.legend = FALSE) + 
-
-  scale_color_manual(values = colscale) +
-  scale_fill_manual(values = colscale) +
-  
-   facet_wrap(~ fa, ncol = 3, scales = "free_y") +
-  
-  labs(y = "Fatty acid concentration (&mu;g ml<sup>-1</sup>)", 
-       x = "Time point", 
-       fill = "Treatment", 
-       color = "Treatment") + 
-  theme_classic() +
-  theme(axis.title.y = element_markdown(), 
-        strip.background = element_rect(color = "white"),   
-        strip.text = element_text(hjust = 0, size = 12), 
-        legend.position = "inside", 
-        legend.position.inside = c(0.85, 0.1)) 
-
-  
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr)) + 
+  geom_line() + 
+  geom_ribbon(alpha = 0.2) +
+  facet_grid(type ~ treat) +
+  scale_x_continuous(limits = c(-2,2)) + 
+  scale_y_continuous(limits = c(-6,6)) + 
+  labs(y = "Prior predictive (90% prediction intervals)", 
+       x = "Pre-intervention scores") +
+  alpha_theme()
 ```
+
+
+
+
+
+```{r}
+#| label: fig-s2-synth
+#| fig-cap: "Assessing model S2 with synthetic data. The model captures the simulated effect (in type 1 and 2) with no preference between treatment groups. Densities are contrats treatment 2 - treatment 1 divided by the residual standard deviation."
+
+s2 <- cmdstan_model(stan_file = "models/s2.stan", 
+                      exe_file = "models/s2.exe")
+
+
+
+fit_wrap(s2, DATA = dl1, fit = "fit.s2.synth")
+
+
+draws.synth2 <- fit.s2.synth$draws(format = "df")
+
+p1 <- draws.synth2 |> 
+  filter(.chain == 1) |> 
+  select(.iteration,  starts_with("alpha")) |> 
+
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "type", "treat")) |> 
+  mutate(treat = paste0("treat", treat)) |> 
+
+  
+  ggplot(aes(value, color = treat)) + geom_line(stat = "density") + 
+  facet_wrap(~ type) + 
+  alpha_theme(yaxis = FALSE)
+
+
+alphas_contr <- draws.synth2 |> 
+  filter(.chain == 1) |> 
+  select(.iteration,  starts_with("alpha")) |> 
+
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "type", "treat")) |> 
+  mutate(treat = paste0("treat", treat)) |> 
+  pivot_wider(names_from = treat, values_from = value) |> 
+  mutate(contr = treat2 - treat1) 
+
+
+# True effects
+true_es <- data.frame(type = as.character(c(1, 2, 3, 4, 5, 6, 7, 8)), 
+                      es = c(0.5, -0.5, 0, 0, 0, 0, 0, 0))
+
+
+draws.synth2 |> 
+  filter(.chain == 1) |> 
+  select(.iteration,  starts_with("sigma")) |> 
+
+  pivot_longer(cols = starts_with("sigma")) |> 
+  separate(name, into = c("param", "type")) |> 
+  mutate(sigma = value) |> 
+  select(-param, -value) |> 
+  inner_join(alphas_contr) |> 
+  mutate(es = contr / sigma, 
+         ) |> 
+  ggplot(aes(es)) + geom_line(stat = "density") + 
+  
+  geom_vline(aes(xintercept = es), 
+             data = true_es) +
+  
+  facet_wrap(~ type, scales = "free") +
+  alpha_theme(yaxis = FALSE) + 
+  labs(x = "Effect size [(&alpha;~2~ - &alpha;~1~)/&sigma;]", 
+       y = "") + 
+  theme(axis.title.x = element_markdown())
+  
+ 
+
+
+```
+
+
+```{r}
+# Full posterior
+d$prior_only <- 0
+
+fit_wrap(s2, DATA = d, fit = "fit.s2p")
+
+# Log lik comp
+log_lik.s2 <- fit.s2p$draws("log_lik_part", format = "matrix") |> 
+  loo::loo(cores = 12)
+```
+
+
+
+```{r}
+#| fig-width: 10
+#| fig-height: 8
+#| fig-cap: "Model performance metrics from Model s2."
+#| echo: false
+#| label: fig-s2-modelperformance
+#| message: false
+#| warning: false
+#| output: false
+
+
+
+## Pareto K diagnostics
+p3 <- data.frame(
+  P = d$P,
+  y = d$y, 
+  type = d$type, 
+  pre = d$pre, 
+  paretok = rep(log_lik.s2$diagnostics$pareto_k, each = 8)) |> 
+  
+  
+  mutate(pareto_flag = if_else(paretok > 0.7, "Bad (> 0.7)", "Good (< 0.7)")) |> 
+  inner_join(
+    dat |> 
+      distinct(type, analyte)
+  ) |> 
+
+  
+
+  ggplot(aes(pre, y, color = pareto_flag)) + geom_point() + 
+  facet_wrap(~ analyte)  +
+  scale_color_manual(values = colscale[c(2, 1)]) + 
+  labs(x = "Pre-intervention scores (std)", 
+       y = "Post-intervention scores (std)", 
+       color = "Pareto k diagnostic values") +
+  theme(legend.position = c(0.85, 0.15))
+  
+
+
+# Model performance
+s2_sum <- fit.s2p$summary()
+
+# Get (most) problematic parameters
+vars <- s2_sum |> 
+  arrange(-rhat) |> 
+   filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  slice_head(n = 3) |> 
+  pull(variable)
+
+
+
+p1 <- s2_sum |> 
+  filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  mutate(variable_type = variable) |> 
+  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+  
+  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
+  
+  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
+  geom_point() + 
+  
+  geom_text_repel(aes(label = highlight, 
+                color = NULL, 
+                size = NULL), 
+                show.legend = FALSE) +
+  
+  labs(x = "(Bulk) effective sample size", 
+       y = "R-hat", 
+       color = "Parameter type", 
+       size = "(Tail) effective sample size") +
+  scale_color_manual(values = colscale)
+
+
+
+
+draws.s2 <- fit.s2p$draws(format = "df")
+
+
+p2  <- draws.s2 |> 
+  select(.iteration, .chain, all_of(vars)) |> 
+  pivot_longer(cols = all_of(vars)) |> 
+  ggplot(aes(.iteration, value, 
+             color = as.factor(.chain))) + 
+  geom_line(alpha = 0.5) + 
+  facet_wrap(~ name, ncol = 1, 
+             scales = "free_y") + 
+  scale_color_manual(values = colscale) + 
+  labs(x = "Iteration", 
+       color = "Chain", 
+       y = "Parameter value")
+
+
+
+(p1 / p2) | p3
+
+
+```
+
+Posterior predictions indicate that the model captures the observed data patterns (@fig-s2-posteriorpredict). Plotting the observed data on model predictions using the pre-intervention score also indicate reasonable fit (@fig-s2-posteriorpredict2). 
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior predictive check of Model s2 using data from T4."
+#| label: fig-s2-posteriorpredict
+
+
+
+
+draws.s2 |> 
+ 
+  select(starts_with("y_rep"), .chain, .draw) |> 
+  pivot_longer(cols = starts_with("y_rep")) |> 
+  filter(.chain == 1, .draw %in% 1:50) |> 
+  
+  mutate(type = rep(d$type, 50), 
+         treat = rep(d$treat, 50), 
+         treat = if_else(treat == 1, "Placebo", "N-3")) |> 
+  
+  
+  inner_join(dat |> 
+  distinct(type, analyte)) |> 
+
+  ggplot(aes(value, group = paste(.draw,treat), 
+             color = as.factor(treat))) + 
+  geom_line(stat = "density", 
+            aes(), 
+            alpha = 0.2)  +
+  geom_line(stat = "density", 
+            # Sort data category for treat
+            data = data.frame(y = d$y, 
+                              type = d$type, 
+                              treat = d$treat) |> 
+              mutate(treat = if_else(treat == 1, "Placebo", "N-3")), 
+            
+               aes(y, group = treat, color = as.factor(treat)), 
+            linewidth = 1.5)  +
+  facet_wrap(~ analyte + treat, scales = "free_y") + 
+  alpha_theme(yaxis = FALSE) + 
+  labs(y = "Density", 
+       x = "Predicted/Observed values", 
+       color = "Treatment") +
+  scale_color_manual(values = colscale) 
+
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior predictive check of Model s2 using data from T4."
+#| label: fig-s2-posteriorpredict2
+
+
+
+
+dat_plot <- data.frame(
+  treat = d$treat, 
+  pre = d$pre, 
+  y = d$y, 
+  type = d$type) |> 
+  mutate(treat = factor(treat, levels = c("1", "2"), 
+                        labels = c("Placebo", "N-3")))
+  
+
+
+
+
+draws.s2 |> 
+  filter(.chain == 1) |> 
+  
+  filter(.iteration %in% 1:2000) |> 
+  
+  select(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+  pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+
+  mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.1)) |> 
+  
+  rowwise() |> 
+  
+  mutate(placebo_pred = rnorm(1, alpha1 + beta * pre, sigma), 
+         omega_pred = rnorm(1,   alpha2 + beta * pre, sigma), 
+         placebo_mu = alpha1 + beta * pre, 
+         omega_mu = alpha2 + beta * pre) |> 
+ 
+
+  pivot_longer(cols = placebo_pred:omega_mu, 
+               names_to = "treat") |> 
+  separate(treat, into = c("treat", "pred")) |> 
+
+  summarise(.by = c(pre, treat, type, pred), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+
+  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+ 
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
+             group = pred)) + 
+  
+  
+  geom_point(data = dat_plot, 
+             aes(pre, y, 
+                 ymin = NULL, 
+                 ymax = NULL, 
+                 group = NULL), 
+             alpha = 0.2) +
+  
+  
+  
+  geom_ribbon(alpha = 0.4) +
+  facet_grid(type ~ treat) +
+  labs(y = "Posterior predicted mean (90% PI prediction and &mu; interval)", 
+       x = "Pre-intervention scores") +
+  theme(axis.title.y = element_markdown())
+
+```
+
+
+
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| output: false
+
+
+# Model 3 -- Missing data included 
+dat <- d_full |> 
+  filter(time %in% c("T1", "T4")) |> 
+
+  
+  mutate(type = dense_rank(analyte), 
+         participant = dense_rank(participant), 
+         treat_seq = dense_rank(treat), 
+         miss = if_else(is.na(value_std), 0, 1), 
+         value_std = if_else(is.na(value_std), -999, value_std)) |> 
+  select(-value) |> 
+  pivot_wider(names_from = time, 
+              values_from = c(value_std, miss)) |> 
+  mutate(age = (age - mean(age)) / sd(age), 
+         sex = if_else(sex == "m", 1, 2)) |> 
+  
+  
+  
+  select(y_obs = value_std_T4, 
+         pre_obs = value_std_T1, 
+         y_miss = miss_T4, 
+         pre_miss = miss_T1, 
+         P = participant, 
+         age, 
+         sex,
+         type, 
+         treat = treat_seq, 
+         analyte) 
+
+
+
+
+d <- list(
+  N = nrow(dat), 
+  N_P = length(unique(dat$P)),
+  K = length(unique(dat$type)),
+  y_obs = dat$y_obs, 
+  pre_obs = dat$pre_obs, 
+  y_miss = dat$y_miss,
+  pre_miss = dat$pre_miss, 
+  type = dat$type, 
+  treat = dat$treat, 
+  P = dat$P, 
+  prior_only = 1
+)
+
+
+
+s3 <- cmdstan_model(stan_file = "models/s3.stan", 
+                      exe_file = "models/s3.exe")
+
+fit_wrap(s3, DATA = d, fit = "fit.s3")
+
+```
+
+
+Prior predictive checks confirms the expected association between pre- and post-intervention values for two treatments and 8 score types (@fig-s3-priorpredict). 
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 12
+#| fig-cap: "Prior predictive check of Model s3."
+#| label: fig-s3-priorpredict
+
+
+
+
+draws.s3 <- fit.s3$draws(format = "df")
+
+
+draws.s3 |> 
+  filter(.chain == 1, 
+         .iteration %in% 1:1000) |> 
+  select(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+  pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+
+  mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.4)) |> 
+  
+  rowwise() |> 
+  
+  mutate(placebo = rnorm(1, alpha1 + beta * pre, sigma), 
+         omega = rnorm(1,   alpha2 + beta * pre, sigma)) |> 
+  
+  pivot_longer(cols = placebo:omega, 
+               names_to = "treat") |> 
+
+  summarise(.by = c(pre, treat, type), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  
+  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+  
+  
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr)) + 
+  geom_line() + 
+  geom_ribbon(alpha = 0.2) +
+  facet_grid(type ~ treat) +
+  scale_x_continuous(limits = c(-2,2)) + 
+
+  labs(y = "Prior predictive mean (90% percentile prediction interval)", 
+       x = "Pre-intervention scores") +
+  alpha_theme()
+
+
+```
+
+Next we are fitting the model with synthetic data, including rows with missing data. Again, the model captures the simulated treatment effects (@fig-s3-synth).
+
+
+```{r}
+#| label: fig-s3-synth
+#| fig-cap: "Assessing model S3 with synthetic data. The model captures the simulated effect (in type 1 and 2) with no preference between treatment groups. Densities are contrats treatment 2 - treatment 1 divided by the residual standard deviation."
+
+s3 <- cmdstan_model(stan_file = "models/s3.stan", 
+                      exe_file = "models/s3.exe")
+
+
+
+dl1_itt <- d1$dl_itt_single
+dl1_itt$prior_only <- 0
+
+
+fit_wrap(s3, DATA = dl1_itt, fit = "fit.s3.synth")
+
+
+draws.synth3 <- fit.s3.synth$draws(format = "df")
+
+
+p1 <- draws.synth3 |> 
+  filter(.chain == 1) |> 
+  select(.iteration,  starts_with("alpha")) |> 
+
+
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "type", "treat")) |> 
+  mutate(treat = paste0("treat", treat)) |> 
+
+  
+  ggplot(aes(value, color = treat)) + geom_line(stat = "density") + 
+  facet_wrap(~ type)
+
+
+alphas_contr <- draws.synth3 |> 
+  filter(.chain == 1) |> 
+  select(.iteration,  starts_with("alpha")) |> 
+
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "type", "treat")) |> 
+  mutate(treat = paste0("treat", treat)) |> 
+  pivot_wider(names_from = treat, values_from = value) |> 
+  mutate(contr = treat2 - treat1) 
+
+
+# True effects
+true_es <- data.frame(type = as.character(c(1, 2, 3, 4, 5, 6, 7, 8)), 
+                      es = c(0.5, -0.5, 0, 0, 0, 0, 0, 0))
+
+
+draws.synth3 |> 
+  filter(.chain == 1) |> 
+  select(.iteration,  starts_with("sigma")) |> 
+
+  pivot_longer(cols = starts_with("sigma")) |> 
+  separate(name, into = c("param", "type")) |> 
+  mutate(sigma = value) |> 
+  select(-param, -value) |> 
+  inner_join(alphas_contr) |> 
+  mutate(es = contr / sigma, 
+         ) |> 
+  ggplot(aes(es)) + geom_line(stat = "density") + 
+  
+  geom_vline(aes(xintercept = es), 
+             data = true_es) +
+  
+  facet_wrap(~ type, scales = "free") +
+  alpha_theme(yaxis = FALSE) + 
+  labs(x = "Effect size [(&alpha;~2~ - &alpha;~1~)/&sigma;]", 
+       y = "") + 
+  theme(axis.title.x = element_markdown())
+  
+ 
+
+
+
+
+```
+
+
+
+```{r}
+# Full posterior s3 
+
+d$prior_only <- 0
+
+fit_wrap(s3, DATA = d, fit = "fit.s3p", refit = TRUE)
+
+draws.s3 <- fit.s3p$draws(format = "df")
+
+```
+
+
+Sampling from the full posterior indicated good effective sample sizes and R-hat values (@fig-s3-modelperformance). Posterior predictions also indicated reasonable agreement between observed data and model predictions (@fig-s3-posteriorpredict and @fig-s3-posteriorpredict2).   
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Model performance metrics from Model s3."
+#| label: fig-s3-modelperformance
+
+
+
+
+# Model performance
+s3_sum <- fit.s3p$summary(c("alpha","beta", "sigma"))
+
+# No problematic imputed
+# s3_sum_imp <- fit.s3p$summary(c("pre_impute", "y_impute"))
+
+
+# Get (most) problematic parameters
+vars <- s3_sum |> 
+  arrange(-rhat) |> 
+   filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  slice_head(n = 3) |> 
+  pull(variable)
+
+
+
+p1 <- s3_sum |> 
+  filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  mutate(variable_type = variable) |> 
+  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+  
+  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
+  
+  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
+  geom_point() + 
+  
+  geom_text_repel(aes(label = highlight, 
+                color = NULL, 
+                size = NULL), 
+                show.legend = FALSE) +
+  
+  labs(x = "(Bulk) effective sample size", 
+       y = "R-hat", 
+       color = "Parameter type", 
+       size = "(Tail) effective sample size") +
+  scale_color_manual(values = colscale)
+
+
+
+
+draws.s3 <- fit.s3p$draws(format = "df")
+
+
+p2  <- draws.s3 |> 
+  select(.iteration, .chain, all_of(vars)) |> 
+  pivot_longer(cols = all_of(vars)) |> 
+  ggplot(aes(.iteration, value, 
+             color = as.factor(.chain))) + 
+  geom_line(alpha = 0.5) + 
+  facet_wrap(~ name, ncol = 1, 
+             scales = "free_y") + 
+  scale_color_manual(values = colscale) + 
+  labs(x = "Iteration", 
+       color = "Chain", 
+       y = "Parameter value")
+
+
+
+p1 / p2
+
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior predictive check of Model s3 using data from T4."
+#| echo: false
+#| label: fig-s3-posteriorpredict
+#| message: false
+#| warning: false
+
+
+
+draws.s3 |> 
+
+  select(starts_with("y_rep"), .chain, .draw) |> 
+  pivot_longer(cols = starts_with("y_rep")) |> 
+  filter(.chain == 1, .draw %in% 1:50) |> 
+  
+  mutate(type = rep(d$type, 50), 
+         treat = rep(d$treat, 50), 
+         treat = if_else(treat == 1, "Placebo", "N-3")) |> 
+  
+  
+  inner_join(dat |> 
+  distinct(type, analyte)) |> 
+
+  ggplot(aes(value, group = paste(.draw,treat), 
+             color = as.factor(treat))) + 
+  geom_line(stat = "density", 
+            aes(), 
+            alpha = 0.2)  +
+  geom_line(stat = "density", 
+            # Sort data category for treat
+            data = data.frame(y = d$y_obs, 
+                              type = d$type, 
+                              treat = d$treat) |> 
+              mutate(treat = if_else(treat == 1, "Placebo", "N-3")) |> 
+              filter(y > -900), 
+            
+               aes(y, group = treat, color = as.factor(treat)), 
+            linewidth = 1.5)  +
+  facet_wrap(~ analyte + treat) + 
+  alpha_theme(yaxis = FALSE) + 
+  labs(y = "Density", 
+       x = "Predicted/Observed values", 
+       color = "Treatment") +
+  scale_color_manual(values = colscale) 
+
+
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Fitted vs. residual model s3."
+#| echo: false
+#| label: fig-s3-residuals
+#| message: false
+#| warning: false
+#| eval: false
+
+
+draws.s3 |>
+  filter(.chain == 1,
+         .draw %in% 1:50) |>
+  select(starts_with("y_exp"), .chain, .draw) |>
+  pivot_longer(cols = starts_with("y_exp")) |>
+  mutate(type = rep(dat$type, 50),
+         treat = rep(dat$treat, 50),
+         P = rep(dat$P, 50),
+         y_obs = rep(dat$y_obs, 50),
+         pre_obs = rep(dat$pre_obs, 50)) |>
+  summarise(.by = name,
+            resid = mean(y_obs - value),
+            resid.lwr = quantile(y_obs - value, 0.05),
+            resid.upr = quantile(y_obs - value, 0.95),
+            m = mean(value),
+            lwr = quantile(value, 0.05),
+            upr = quantile(value, 0.95)) |>
+  mutate(type = dat$type,
+         treat = dat$treat,
+         P = dat$P,
+         y_obs = dat$y_obs,
+         pre_obs = dat$pre_obs) |>
+  filter(y_obs > -900) |>
+  ggplot(aes(m, resid, ymin = resid.lwr, ymax = resid.upr)) +
+  geom_pointrange() +
+  facet_wrap(~ type)
+
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 12
+#| fig-cap: "Posterior predictive check of Model s3 using data from T4."
+#| label: fig-s3-posteriorpredict2
+
+
+dat_plot <- data.frame(
+  treat = d$treat, 
+  pre = d$pre_obs, 
+  y = d$y_obs, 
+  type = d$type) |> 
+  mutate(treat = factor(treat, levels = c("1", "2"), 
+                        labels = c("Placebo", "N-3"))) |> 
+  filter(y > -900, 
+         pre > -900) 
+  
+
+draws.s3 |> 
+  filter(.chain == 1) |> 
+  
+  filter(.iteration %in% 1:200) |> 
+  
+  select(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+  pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+
+  mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.1)) |> 
+  
+  rowwise() |> 
+  
+  mutate(placebo_pred = rnorm(1, alpha1 + beta * pre, sigma), 
+         omega_pred = rnorm(1,   alpha2 + beta * pre, sigma), 
+         placebo_mu = alpha1 + beta * pre, 
+         omega_mu = alpha2 + beta * pre) |> 
+ 
+
+  pivot_longer(cols = placebo_pred:omega_mu, 
+               names_to = "treat") |> 
+  separate(treat, into = c("treat", "pred")) |> 
+
+  summarise(.by = c(pre, treat, type, pred), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+
+  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+ 
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
+             group = pred)) + 
+  
+  
+  geom_point(data = dat_plot, 
+             aes(pre, y, 
+                 ymin = NULL, 
+                 ymax = NULL, 
+                 group = NULL), 
+             alpha = 0.2) +
+  
+  geom_ribbon(alpha = 0.4) +
+  facet_grid(type ~ treat) +
+  labs(y = "Posterior predictive mean (90% PI prediction and &mu; interval)", 
+       x = "Pre-intervention scores") +
+  theme(axis.title.y = element_markdown())
+```
+
+
+
+```{r}
+#| eval: false
+# These are residual correlations. 
+
+# Correlations among residuals supports the use of the imputation model
+
+bind_rows(
+  
+  draws.s3 |> 
+  filter(.chain == 1) |> 
+   select(starts_with("Omega_"), .chain, .draw) |> 
+  
+  pivot_longer(cols = starts_with("Omega")) |>  
+  
+  mutate(name = gsub("_pre", "", name)) |> 
+  
+  separate(name, into = c("param", "typex", "typey")) |> 
+  
+  mutate(time = "pre"), 
+  
+  draws.s3 |> 
+  filter(.chain == 1) |> 
+   select(starts_with("Omega["), .chain, .draw) |> 
+  
+  pivot_longer(cols = starts_with("Omega")) |>  
+
+  separate(name, into = c("param", "typex", "typey")) |> 
+  
+  mutate(time = "post")) |> 
+  
+  ggplot(aes(value, color = time)) + geom_density() + 
+  facet_grid(typey ~ typex)
+  
+  
+
+
+
+bind_rows(
+  
+  draws.s3 |> 
+  filter(.chain == 1) |> 
+   select(starts_with("Omega_"), .chain, .draw) |> 
+  
+  pivot_longer(cols = starts_with("Omega")) |>  
+  
+  mutate(name = gsub("_pre", "", name)) |> 
+  
+  separate(name, into = c("param", "typex", "typey")) |> 
+  
+  mutate(time = "pre"), 
+  
+  draws.s3 |> 
+  filter(.chain == 1) |> 
+   select(starts_with("Omega["), .chain, .draw) |> 
+  
+  pivot_longer(cols = starts_with("Omega")) |>  
+
+  separate(name, into = c("param", "typex", "typey")) |> 
+  
+  mutate(time = "post")) |> 
+  
+  mutate(cor = paste(typex, typey, sep = ",")) |> 
+  summarise(.by = c(cor, time),
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  filter(m != 1) |> 
+  arrange(m)
+```
+
+
+```{r}
+#| eval: false
+
+d_full |> 
+  distinct(analyte) |> 
+  mutate(typex = dense_rank(analyte), 
+         typey = dense_rank(analyte))
+
+
+draws.s3 |> 
+  filter(.chain == 1, 
+         .draw %in% 1:50) |> 
+  select(starts_with("y_exp"), .chain, .draw) |> 
+  pivot_longer(cols = starts_with("y_exp")) |> 
+  
+  summarise(.by = name, 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  mutate(type = dat$type, 
+         treat = dat$treat, 
+         P = dat$P, 
+         y_obs = dat$y_obs, 
+         pre_obs = dat$pre_obs) |> 
+  
+  filter(y_obs > -900) |> 
+
+  ggplot(aes(y_obs, m)) +
+  geom_pointrange(aes(ymin = lwr, ymax = upr)) +
+  facet_wrap(~ type)
+  
+
+```
+
+
+
+
+
+```{r}
+
+## Model 4 --- Including Sex for predictions
+
+d <- list(
+  N = nrow(dat), 
+  N_P = length(unique(dat$P)),
+  K = length(unique(dat$type)),
+  y_obs = dat$y_obs, 
+  pre_obs = dat$pre_obs, 
+  y_miss = dat$y_miss,
+  pre_miss = dat$pre_miss, 
+  type = dat$type, 
+  treat = dat$treat, 
+  P = dat$P, 
+  prior_only = 1,
+  # Adding age and sex to data structure
+  age = dat$age, 
+  sex = dat$sex - 1.5 # Making this 
+)
+
+s4 <- cmdstan_model(stan_file = "models/s4.stan", 
+                      exe_file = "models/s4.exe")
+
+fit_wrap(s4, DATA = d, fit = "fit.s4")
+
+
+```
+
+
+```{r}
+#| fig-width: 10
+#| fig-height: 12
+#| fig-cap: "Prior predictive check of Model s4."
+#| label: fig-s4-priorpredict
+
+
+
+
+
+draws.s4 <- fit.s4$draws(format = "df")
+
+
+
+draws.s4 |> 
+  filter(.chain == 1, 
+         .iteration %in% 1:1000) |> 
+  select(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+  pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+
+  mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.4)) |> 
+  
+  rowwise() |> 
+  
+  mutate(male_placebo = rnorm(1, alpha1 + beta * pre + beta_sex * -0.5, sigma), 
+         male_omega = rnorm(1,   alpha2 + beta * pre + beta_sex * -0.5, sigma), 
+         female_placebo = rnorm(1, alpha1 + beta * pre + beta_sex * 0.5, sigma), 
+         female_omega = rnorm(1,   alpha2 + beta * pre + beta_sex * 0.5, sigma)
+         
+         ) |> 
+  
+  pivot_longer(cols = male_placebo:female_omega, 
+               names_to = "treat") |> 
+  separate(treat, into = c("sex", "treat")) |> 
+
+
+  summarise(.by = c(pre, sex,treat, type), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+
+  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+  
+  
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr)) + 
+  geom_line() + 
+  geom_ribbon(alpha = 0.2) +
+  facet_grid(type ~ treat + sex) +
+  scale_x_continuous(limits = c(-2,2)) + 
+
+  labs(y = "Prior predictive mean (90% PI)", 
+       x = "Pre-intervention scores") +
+  alpha_theme()
+
+
+```
+
+
+Prior predictive checks confirmed that the model now predicts for males and females over all type and treatment combinations (@fig-s4-priorpredict).
+
+```{r}
+#| label: fig-s4-synth
+#| fig-cap: "Assessing model S4 with synthetic data. The model captures the simulated non-zero effect (in type 1 and 2) with no preference between treatment groups. Densities are contrats treatment 2 - treatment 1 divided by the residual standard deviation."
+
+s4 <- cmdstan_model(stan_file = "models/s4.stan", 
+                      exe_file = "models/s4.exe")
+
+
+
+dl1_itt <- d1$dl_itt_single
+dl1_itt$prior_only <- 0
+dl1_itt$sex <- dl1_itt$sex - 1.5 # Fixing the predictor variable
+
+fit_wrap(s4, DATA = dl1_itt, fit = "fit.s4.synth")
+
+
+draws.synth4 <- fit.s4.synth$draws(format = "df")
+
+
+
+p1 <- draws.synth4 |> 
+
+  select(.iteration,  starts_with("alpha")) |> 
+
+
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "type", "treat")) |> 
+  mutate(treat = paste0("treat", treat)) |> 
+
+  
+  ggplot(aes(value, color = treat)) + geom_line(stat = "density") + 
+  facet_wrap(~ type)
+
+
+alphas_contr <- draws.synth4 |> 
+  filter(.chain == 1) |> 
+  select(.iteration,  starts_with("alpha")) |> 
+
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "type", "treat")) |> 
+  mutate(treat = paste0("treat", treat)) |> 
+  pivot_wider(names_from = treat, values_from = value) |> 
+  mutate(contr = treat2 - treat1) 
+
+
+# True effects
+true_es <- data.frame(type = as.character(c(1, 2, 3, 4, 5, 6, 7, 8)), 
+                      es = c(0.5, -0.5, 0, 0, 0, 0, 0, 0))
+
+
+draws.synth4 |> 
+  filter(.chain == 1) |> 
+  select(.iteration,  starts_with("sigma")) |> 
+
+  pivot_longer(cols = starts_with("sigma")) |> 
+  separate(name, into = c("param", "type")) |> 
+  mutate(sigma = value) |> 
+  select(-param, -value) |> 
+  inner_join(alphas_contr) |> 
+  mutate(es = contr / sigma, 
+         ) |> 
+  ggplot(aes(es)) + geom_line(stat = "density") + 
+  
+  geom_vline(aes(xintercept = es), 
+             data = true_es) +
+  
+  facet_wrap(~ type, scales = "free") +
+  alpha_theme(yaxis = FALSE) + 
+  labs(x = "Effect size [(&alpha;~2~ - &alpha;~1~)/&sigma;]", 
+       y = "") + 
+  theme(axis.title.x = element_markdown())
+  
+ 
+
+
+
+
+```
+
+
+
+Posterior model performance was satisfactory (@fig-s4-modelperformance), and similar to model s3, the posterior predictions are OK (@fig-s4-posteriorpredict).  
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+
+d$prior_only <- 0
+fit_wrap(s4, DATA = d, fit = "fit.s4p")
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Model performance metrics from Model s4."
+#| label: fig-s4-modelperformance
+
+
+
+
+# Model performance
+s4_sum <- fit.s4p$summary(c("alpha","beta", "sigma"))
+
+# No problematic imputed
+# s4_sum_imp <- fit.s4p$summary(c("pre_impute", "y_impute")) |> 
+#  arrange(-rhat)
+
+
+# Get (most) problematic parameters
+vars <- s4_sum |> 
+  arrange(-rhat) |> 
+   filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  slice_head(n = 3) |> 
+  pull(variable)
+
+
+
+p1 <- s4_sum |> 
+  filter(grepl(paste(
+    c("alpha","beta", "sigma"), collapse = "|"), 
+               variable)) |> 
+  mutate(variable_type = variable) |> 
+  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+  
+  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
+  
+  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
+  geom_point() + 
+  
+  geom_text_repel(aes(label = highlight, 
+                color = NULL, 
+                size = NULL), 
+                show.legend = FALSE) +
+  
+  labs(x = "(Bulk) effective sample size", 
+       y = "R-hat", 
+       color = "Parameter type", 
+       size = "(Tail) effective sample size") +
+  scale_color_manual(values = colscale)
+
+
+
+
+draws.s4 <- fit.s4p$draws(format = "df")
+
+
+p2  <- draws.s4 |> 
+  select(.iteration, .chain, all_of(vars)) |> 
+  pivot_longer(cols = all_of(vars)) |> 
+  ggplot(aes(.iteration, value, 
+             color = as.factor(.chain))) + 
+  geom_line(alpha = 0.5) + 
+  facet_wrap(~ name, ncol = 1, 
+             scales = "free_y") + 
+  scale_color_manual(values = colscale) + 
+  labs(x = "Iteration", 
+       color = "Chain", 
+       y = "Parameter value")
+
+
+
+p1 / p2
+
+
+```
+
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Posterior predictive check of Model s4 using data from T4."
+#| label: fig-s4-posteriorpredict
+
+
+
+
+draws.s4 |> 
+
+  select(starts_with("y_rep"), .chain, .draw) |> 
+  pivot_longer(cols = starts_with("y_rep")) |> 
+  filter(.chain == 1, .draw %in% 1:50) |> 
+  
+  mutate(type = rep(d$type, 50), 
+         treat = rep(d$treat, 50), 
+         treat = if_else(treat == 1, "Placebo", "N-3")) |> 
+  
+  
+  inner_join(dat |> 
+  distinct(type, analyte)) |> 
+
+  ggplot(aes(value, group = paste(.draw,treat), 
+             color = as.factor(treat))) + 
+  geom_line(stat = "density", 
+            aes(), 
+            alpha = 0.2)  +
+  geom_line(stat = "density", 
+            # Sort data category for treat
+            data = data.frame(y = d$y_obs, 
+                              type = d$type, 
+                              treat = d$treat) |> 
+              mutate(treat = if_else(treat == 1, "Placebo", "N-3")) |> 
+              filter(y > -900), 
+            
+               aes(y, group = treat, color = as.factor(treat)), 
+            linewidth = 1.5)  +
+  facet_wrap(~ analyte + treat) + 
+  alpha_theme(yaxis = FALSE) + 
+  labs(y = "Density", 
+       x = "Predicted/Observed values", 
+       color = "Treatment") +
+  scale_color_manual(values = colscale) 
+
+
+
+```
+
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| eval: false
+
+## Under development -- Needs right indexing of participants...
+
+log_lik.s4 <- fit.s4p$draws("log_lik_part", format = "matrix") |> 
+  loo::loo(cores = 12)
+
+# Investigate if high pareto K comes from 
+pareto_k <- log_lik.s4$diagnostics$pareto_k
+
+dat |> 
+  arrange(P) |> 
+  
+  summarise(.by = P, 
+            miss_y = 8 - sum(y_miss), 
+            miss_pre = 8 - sum(pre_miss), 
+            miss = miss_y + miss_pre,
+            sex = mean(sex)) |> 
+  
+  mutate(pareto_k = pareto_k) |> 
+  
+  ggplot(aes(miss, pareto_k)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0.7, lty = 2)
+  
+
+## Compare models on complete data 
+
+compl_part <- dat |> 
+  arrange(P) |> 
+  
+  summarise(.by = P, 
+            miss_y = 8 - sum(y_miss), 
+            miss_pre = 8 - sum(pre_miss), 
+            miss = miss_y + miss_pre,
+            sex = mean(sex)) |> 
+  filter(miss == 0 ) |> 
+  pull(P)
+
+log_lik.s3 <- fit.s3$draws("log_lik_part", format = "matrix")[,compl_part] |> 
+  loo::loo(cores = 12)
+
+log_lik.s4 <- fit.s4$draws("log_lik_part", format = "matrix")[,compl_part] |> 
+  loo::loo(cores = 12)
+
+loo::loo_compare(log_lik.s3, log_lik.s4)
+
+
+```
+
+
+
+
+
+
+```{r}
+#| eval: false
+#| echo: false
+#| message: false
+#| warning: false
+
+
+## Model 5 and 6 --- Including both time-point ##
+dat <- d_full |> 
+  filter(time %in% c("T1", "T2","T4")) |> 
+  
+
+  mutate(type = dense_rank(analyte), 
+         participant = dense_rank(participant), 
+         treat_seq = dense_rank(treat), 
+         value_std = if_else(is.na(value_std), -999, value_std)) |> 
+
+    select(-value) |> 
+  
+  pivot_wider(names_from = time, 
+              values_from = c(value_std)) |> 
+  
+  pivot_longer(cols = T2:T4, 
+               names_to = "time",
+               values_to = "y_obs") |> 
+  rename(pre_obs = T1) |> 
+  
+
+  
+  mutate(time = if_else(time == "T2", 1, 2), 
+         sex = if_else(sex == "m", -0.5, 0.5), 
+         y_miss = if_else(y_obs == -999, 0, 1), 
+         pre_miss= if_else(pre_obs == -999, 0, 1)) |> 
+
+  select(y_obs, 
+         pre_obs, 
+         y_miss, 
+         pre_miss, 
+         P = participant, 
+         sex,
+         type,
+         type,
+         time,
+         treat = treat_seq) |> 
+
+  arrange(P, time, type) 
+
+
+
+d <- list(
+  N = nrow(dat), 
+  N_P = length(unique(dat$P)),
+  K = length(unique(dat$type)),
+  y_obs = dat$y_obs, 
+  pre_obs = dat$pre_obs, 
+  y_miss = dat$y_miss,
+  pre_miss = dat$pre_miss, 
+  type = dat$type, 
+  treat = dat$treat, 
+  P = dat$P, 
+  prior_only = 1,
+  # Adding sex and time to data structure
+  time = dat$time,
+  sex = dat$sex
+)
+
+
+s5 <- cmdstan_model(stan_file = "models/s5.stan", 
+                      exe_file = "models/s5.exe")
+
+s6 <- cmdstan_model(stan_file = "models/s6a.stan", 
+                      exe_file = "models/s6.exe")
+
+
+# Fit the prior model
+d$prior_only <- 1
+fit_wrap(s5, DATA = d, fit = "fit.s5")
+fit_wrap(s6, DATA = d, fit = "fit.s6", refit = TRUE)
+
+draws.s5 <- fit.s5$draws(format = "df")
+draws.s6 <- fit.s6$draws(format = "df")
+
+
+# Uniform treatment effect over all 
+draws.s6 |> 
+  filter(.chain == 1) |> 
+  select(
+         starts_with("alpha"), 
+
+         .draw
+         ) |> 
+  pivot_longer( starts_with("alpha")) |> 
+  
+  separate(name, into = c("parameter", "time", "type", "treat")) |> 
+  
+  
+  summarise(.by = c(time, treat, type), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  
+  ggplot(aes(type, m, ymin = lwr, ymax = upr, color = treat, 
+             group = treat)) + 
+  geom_point(position = position_dodge(width = 0.2)) + 
+  geom_errorbar(width = 0.1, 
+                position = position_dodge(width = 0.2)) +
+  facet_wrap(~time, ncol = 1)
+
+
+
+## Fitting with simulated data 
+
+dl1_itt <- d1$dl_itt
+dl1_itt$sex <- dl1_itt$sex - 1.5
+dl1_itt$prior_only <- 0
+
+fit_wrap(s5, DATA = dl1_itt, fit = "fit.s5synth")
+fit_wrap(s6, DATA = dl1_itt, fit = "fit.s6synth")
+
+draws.s5 <- fit.s5synth$draws(format = "df")
+draws.s6 <- fit.s6synth$draws(format = "df")
+
+bind_rows(
+draws.s6 |> 
+   filter(.chain == 1) |> 
+  select(
+         starts_with("alpha"), 
+
+         .draw
+         ) |> 
+  pivot_longer( starts_with("alpha")) |> 
+  
+  separate(name, into = c("parameter", "time", "type", "treat")) |> 
+  mutate(model = "Model S6"), 
+draws.s5 |> 
+   filter(.chain == 1) |> 
+  select(
+         starts_with("alpha"), 
+
+         .draw
+         ) |> 
+  pivot_longer( starts_with("alpha")) |> 
+  
+  separate(name, into = c("parameter", "time", "type", "treat")) |> 
+  mutate(model = "Model S5")) |> 
+
+  summarise(.by = c(time, treat, type, model), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  
+  ggplot(aes(type, m, ymin = lwr, ymax = upr, color = paste(treat,model), 
+          shape = model)) + 
+  geom_point(position = position_dodge(width = 0.2)) + 
+  geom_errorbar(width = 0.1, 
+                position = position_dodge(width = 0.2)) +
+  facet_wrap(~time, ncol = 1)
+
+
+
+
+```
+
+
+```{r}
+#| eval: false
+#| echo: false
+#| message: false
+#| warning: false
+
+
+
+
+
+```
+
+
+
+
+
+```{r}
+#| eval: false
+#| echo: false
+#| message: false
+#| warning: false
+
+## Comparing completers with drop-out in pre scores
+
+d_full |> 
+  filter(time == "T1") |> 
+  
+  mutate(completer = if_else(dense_rank(participant ) %in% compl_dat_id, 
+                             1, 0)) |> 
+  
+  
+  
+  ggplot(aes(value, color = as.factor(completer))) + geom_density() +
+  facet_wrap(~ analyte, scales = "free")
+  
+
+  
+  
+
+```
+
+
+
+
+
+
+
+```{r}
+#| eval: false
+
+## Comparing treatments
+
+
+bind_rows(
+  
+  draws.s3 |> 
+  filter(.chain == 1 ) |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+
+  rowwise() |> 
+  
+  mutate(placebo_pred = rnorm(1, alpha1 , sigma), 
+         omega_pred = rnorm(1,   alpha2 , sigma), 
+         placebo_mu = alpha1 , 
+         omega_mu = alpha2 ) |> 
+  ungroup() |> 
+
+  pivot_longer(cols = placebo_pred:omega_mu, 
+               names_to = "treat") |> 
+  separate(treat, into = c("treat", "pred")) |> 
+
+  summarise(.by = c(treat, type, pred), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  
+  filter(pred == "mu") |> 
+    mutate(model = "m3"),
+  
+  draws.s4 |> 
+  filter(.chain == 1 ) |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+
+  rowwise() |> 
+  
+  mutate(placebo_pred = rnorm(1, alpha1 , sigma), 
+         omega_pred = rnorm(1,   alpha2 , sigma), 
+         placebo_mu = alpha1 , 
+         omega_mu = alpha2 ) |> 
+  ungroup() |> 
+
+  pivot_longer(cols = placebo_pred:omega_mu, 
+               names_to = "treat") |> 
+  separate(treat, into = c("treat", "pred")) |> 
+
+  summarise(.by = c(treat, type, pred), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  
+  filter(pred == "mu") |> 
+    mutate(model = "m4")) |> 
+
+  ggplot(aes(treat, m, color = model)) + 
+  geom_pointrange(aes(ymin = lwr, ymax = upr), 
+                  position = position_dodge(width = 0.1)) + 
+  
+  facet_wrap(~ type, ncol = 1)
+  
+## Calculate constrats
+
+
+ bind_rows(
+   ## Model S1
+  draws.s1 |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+    
+    
+  pivot_wider(names_from = parameter, 
+              values_from = value)  |> 
+    
+  mutate(contrast = alpha2 - alpha1) |> 
+    select(.draw, type, contrast) |> 
+
+  summarise(.by = c(type), 
+            m = mean(contrast), 
+            lwr = quantile(contrast, 0.025), 
+            upr = quantile(contrast, 0.975)) |> 
+  mutate(model = "s1"),
+  ## Model S2
+  draws.s2 |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+    
+    
+  pivot_wider(names_from = parameter, 
+              values_from = value)  |> 
+    
+  mutate(contrast = alpha2 - alpha1) |> 
+    select(.draw, type, contrast) |> 
+
+  summarise(.by = c(type), 
+            m = mean(contrast), 
+            lwr = quantile(contrast, 0.025), 
+            upr = quantile(contrast, 0.975)) |> 
+  mutate(model = "s2"), 
+  
+  ## Model S3
+  draws.s3 |> 
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  mutate(contrast = alpha2 - alpha1) |> 
+  select(.draw, type, contrast) |> 
+
+  summarise(.by = c(type), 
+            m = mean(contrast), 
+            lwr = quantile(contrast, 0.025), 
+            upr = quantile(contrast, 0.975)) |> 
+    mutate(model = "s3"), 
+  
+  draws.s4 |> 
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), 
+         starts_with("sigma"),
+         .draw
+         ) |> 
+    pivot_longer(cols = c(starts_with("beta"), 
+         starts_with("alpha"), 
+         starts_with("sigma"))) |> 
+  separate(name, into = c("parameter", "type"), 
+           sep = "\\[") |> 
+   separate(type, into = c("type", "treat"), 
+           sep = ",") |> 
+    mutate(type = gsub("\\]", "", type), 
+         treat = gsub("\\]", "", treat)) |> 
+  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
+                             parameter)) |> 
+  select(-treat) |> 
+
+  pivot_wider(names_from = parameter, 
+              values_from = value) |> 
+  mutate(contrast = alpha2 - alpha1) |> 
+  select(.draw, type, contrast) |> 
+
+  summarise(.by = c(type), 
+            m = mean(contrast), 
+            lwr = quantile(contrast, 0.025), 
+            upr = quantile(contrast, 0.975)) |> 
+    mutate(model = "s4")) |> 
+  
+  ggplot(aes("Contrast", m, color = model)) + 
+  geom_pointrange(aes(ymin = lwr, ymax = upr), 
+                  position = position_dodge(width = 0.1)) + 
+  
+  facet_wrap(~ type, ncol = 2, 
+             scales = "free_y") + 
+  geom_hline(yintercept = 0, lty = 2)
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+

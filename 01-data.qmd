@@ -169,7 +169,6 @@ baseline_dat |>
 
 
 
-
 ```{r}
 #| label: fig-descriptive-data
 #| fig-height: 8

@@ -95,11 +95,12 @@ criteria_dat <- bind_rows(
     ) |>
     filter(analyte == "HDL") |>
     # Convert to mg/dl: 1 mmol/L = 38,6654 mg/dL
+    # Keeping on mmol/L
     mutate(
       hdl = if_else(
         sex == "m",
-        if_else(value * 38.6654 < 40, TRUE, FALSE),
-        if_else(value * 38.6654 < 50, TRUE, FALSE)
+        if_else(value < 1.03, TRUE, FALSE),
+        if_else(value < 1.29, TRUE, FALSE)
       )
     ) |>
     select(participant, time, sex, analyte, value, threshold = hdl),
@@ -115,8 +116,9 @@ criteria_dat <- bind_rows(
         select(participant, sex)
     ) |>
     # Convert to mg/dl: 1 mmol/L = 18,0156 mg/dL
+    # Keep on mmol/L glucose
     mutate(
-      threshold = if_else(glucose * 18.0156 > 100, TRUE, FALSE),
+      threshold = if_else(glucose >= 5.6, TRUE, FALSE),
       analyte = "glucose"
     ) |>
     select(participant, time, sex, analyte, value = glucose, threshold),
@@ -130,18 +132,20 @@ criteria_dat <- bind_rows(
         select(participant, sex)
     ) |>
     # Convert to mg/dl: 1 mmol/L = 88.57 mg/dL
-    mutate(tg = if_else(value * 88.57 > 150, TRUE, FALSE)) |>
+
+    mutate(tg = if_else(value > 1.7, TRUE, FALSE)) |>
     select(participant, time, sex, analyte, value, threshold = tg),
 
-  # Waist circumference: >40 inches (102 cm) for men, >35 inches (88 cm) for women.
+  # Waist circumference: >40 inches (94 cm) for men,
+  # >35 inches (80 cm) for women.
 
   AOData::waist_bp |>
     filter(measure == "waist") |>
     mutate(
       waist = if_else(
         sex == "m",
-        if_else(value > 102, TRUE, FALSE),
-        if_else(value > 88, TRUE, FALSE)
+        if_else(value > 94, TRUE, FALSE),
+        if_else(value > 80, TRUE, FALSE)
       )
     ) |>
     select(

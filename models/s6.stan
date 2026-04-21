@@ -1,73 +1,57 @@
+/* 
+Joint model with missing data imputation, sex predictor,
+time-specific intercepts, and a single 2K-dimensional MVN 
+with LKJ prior on the full correlation structure.
+*/
+
 data {
-  int<lower=0> N;
-  int<lower=0> N_part;
-  int<lower=0> K;
+  int<lower=0> N;                             // Number of obs. 
+  int<lower=0> N_P;                           // Number of participants
+  int<lower=0> K;                             // Number of measures
   
-  vector[N] y_obs;
-  vector[N] pre_obs;
+  vector[N] y_obs;                            // Data (incl missing w. placehol)
+  vector[N] pre_obs;                          // Pre-int dat (incl miss)
   
-  array[N] int<lower=0, upper=1> y_miss;
-  array[N] int<lower=0, upper=1> pre_miss;
+  array[N] int<lower=0, upper=1> y_miss;      // Missing data indicator (miss=0)
+  array[N] int<lower=0, upper=1> pre_miss;    // Miss dat ind for pre (miss=0)
   
-  array[N] int<lower=1, upper=K> score;
-  array[N] int<lower=1, upper=N_part> P;
-  array[N] int<lower=1, upper=2> treat;
-  array[N] int<lower=1, upper=2> time;
+  array[N] int<lower=1, upper=2> time;        // Time indicator
+  array[N] int<lower=1, upper=K> type;        // Measurement type
+  array[N] int<lower=1, upper=N_P> P;         // Participant 
+  array[N] int<lower=1, upper=2> treat;       // Treatment index
   
-  int<lower=0, upper=1> prior_only;
+  array[N] real<lower=-0.5, upper=0.5> sex;   // Sex
+  
+  int<lower=0, upper=1> prior_only;           // Prior only flag
 }
 transformed data {
   int n_miss_y = N - sum(y_miss);
   int n_miss_pre = N - sum(pre_miss);
   int M = 2 * K;
   
-  array[n_miss_y] int miss_y_idx;
-  array[n_miss_y] int miss_y_score;
-  array[n_miss_y] int miss_y_time;
-  array[n_miss_pre] int miss_pre_idx;
-  array[n_miss_pre] int miss_pre_score;
-  
-  {
-    int jy = 1;
-    int jp = 1;
-    for (i in 1:N) {
-      if (y_miss[i] == 0) {
-        miss_y_idx[jy] = i;
-        miss_y_score[jy] = score[i];
-        miss_y_time[jy] = time[i];
-        jy += 1;
-      }
-      if (pre_miss[i] == 0) {
-        miss_pre_idx[jp] = i;
-        miss_pre_score[jp] = score[i];
-        jp += 1;
-      }
-    }
-  }
-  
-  array[N_part, M] int obs_idx;
-  array[N_part] int obs_count;
-  for (p in 1:N_part) obs_count[p] = 0;
+  // Participant observation index for generated quantities
+  array[N_P, M] int obs_idx;
+  array[N_P] int obs_count;
+  for (p in 1:N_P) obs_count[p] = 0;
   for (i in 1:N) {
     obs_count[P[i]] += 1;
     obs_idx[P[i], obs_count[P[i]]] = i;
   }
 }
 parameters {
-  matrix[K, 2] alpha_mid;
-  matrix[K, 2] alpha_post;
+  // Time-specific intercepts: alpha[time][type, treat]
+  array[2] matrix[K, 2] alpha;
   vector[K] beta;
+  // Time-specific sex parameters
+  matrix[K, 2] beta_sex;
   
-  cholesky_factor_corr[K] L_Omega_mid;
-  cholesky_factor_corr[K] L_Omega_post;
-  vector<lower=0>[K] sigma_mid;
-  vector<lower=0>[K] sigma_post;
+  // Single 2K-dimensional correlation and scale
+  cholesky_factor_corr[M] L_Omega;
+  vector<lower=0>[M] sigma;               // sigma[1:K] = time 1, sigma[K+1:M] = time 2
   
-  vector<lower=-1, upper=1>[K] rho_time;
-  
-  // Non-centered imputation
-  vector[n_miss_y] y_impute_raw;
-  vector[n_miss_pre] pre_impute_raw;
+  // Missing data parameters
+  vector[n_miss_y] y_impute;
+  vector[n_miss_pre] pre_impute;
   
   // Pre-value imputation model
   vector[K] mu_pre;
@@ -77,184 +61,161 @@ parameters {
 transformed parameters {
   vector[N] y;
   vector[N] pre;
+  matrix[N_P, K] mu_wide_1 = rep_matrix(0.0, N_P, K); 
+  matrix[N_P, K] mu_wide_2 = rep_matrix(0.0, N_P, K); 
   
+  // Fill y and pre
   {
+    int idx_y = 1;
     int idx_pre = 1;
+    
     for (i in 1:N) {
+      if (y_miss[i] == 1) {
+        y[i] = y_obs[i];
+      } else {
+        y[i] = y_impute[idx_y];
+        idx_y += 1;
+      }
+      
       if (pre_miss[i] == 1) {
         pre[i] = pre_obs[i];
       } else {
-        pre[i] = mu_pre[miss_pre_score[idx_pre]] 
-                 + sigma_pre[miss_pre_score[idx_pre]] * pre_impute_raw[idx_pre];
+        pre[i] = pre_impute[idx_pre];
         idx_pre += 1;
       }
     }
   }
   
-  {
-    int idx_y = 1;
-    for (i in 1:N) {
-      if (y_miss[i] == 1) {
-        y[i] = y_obs[i];
-      } else {
-        if (miss_y_time[idx_y] == 1) {
-          y[i] = alpha_mid[miss_y_score[idx_y], treat[i]] 
-                 + beta[miss_y_score[idx_y]] * pre[i]
-                 + sigma_mid[miss_y_score[idx_y]] * y_impute_raw[idx_y];
-        } else {
-          y[i] = alpha_post[miss_y_score[idx_y], treat[i]] 
-                 + beta[miss_y_score[idx_y]] * pre[i]
-                 + sigma_post[miss_y_score[idx_y]] * y_impute_raw[idx_y];
-        }
-        idx_y += 1;
-      }
-    }
-  }
-  
-  matrix[N_part, K] mu_wide_mid = rep_matrix(0, N_part, K);
-  matrix[N_part, K] mu_wide_post = rep_matrix(0, N_part, K);
-  
+  // Compute mu_wide for each time-point
   for (i in 1:N) {
-    if (time[i] == 1) {
-      mu_wide_mid[P[i], score[i]] = alpha_mid[score[i], treat[i]] + beta[score[i]] * pre[i];
-    } else {
-      mu_wide_post[P[i], score[i]] = alpha_post[score[i], treat[i]] + beta[score[i]] * pre[i];
-    }
+    real mu_i = alpha[time[i]][type[i], treat[i]] +
+                beta[type[i]] * pre[i] +
+                beta_sex[type[i], time[i]] * sex[i];
+    if (time[i] == 1)
+      mu_wide_1[P[i], type[i]] = mu_i;
+    else
+      mu_wide_2[P[i], type[i]] = mu_i;
   }
 }
 model {
-  to_vector(alpha_mid) ~ normal(0, 0.5);
-  to_vector(alpha_post) ~ normal(0, 0.5);
-  beta ~ normal(1, 0.2);
-  sigma_mid ~ exponential(1);
-  sigma_post ~ exponential(1);
-  L_Omega_mid ~ lkj_corr_cholesky(4);
-  L_Omega_post ~ lkj_corr_cholesky(4);
-  rho_time ~ normal(0, 0.5);
+  // Priors
+  for (t in 1:2) to_vector(alpha[t]) ~ normal(0, 1);
+  beta ~ normal(1, 0.4);
+  to_vector(beta_sex) ~ normal(0, 0.5);
   
+  sigma ~ exponential(1);
+  L_Omega ~ lkj_corr_cholesky(2); 
   mu_pre ~ normal(0, 1);
   sigma_pre ~ exponential(1);
   L_Omega_pre ~ lkj_corr_cholesky(2);
   
-  y_impute_raw ~ std_normal();
-  pre_impute_raw ~ std_normal();
+  // Weak prior on imputed values
+  //if (prior_only == 1) {
+    y_impute ~ normal(0, 2);
+    pre_impute ~ normal(0, 2);
+  //}
   
   if (prior_only == 0) {
-    // Pre-value model
+    // Pre-value imputation model
     matrix[K, K] L_Sigma_pre = diag_pre_multiply(sigma_pre, L_Omega_pre);
-    matrix[N_part, K] pre_wide = rep_matrix(0, N_part, K);
+    matrix[N_P, K] pre_wide;
     for (i in 1:N) {
-      pre_wide[P[i], score[i]] = pre[i];
-    }
-    for (p in 1:N_part) {
-      pre_wide[p]' ~ multi_normal_cholesky(mu_pre, L_Sigma_pre);
+      pre_wide[P[i], type[i]] = pre[i];
     }
     
-    // Build structured 2K x 2K covariance
-    matrix[K, K] L_Sigma_mid = diag_pre_multiply(sigma_mid, L_Omega_mid);
-    matrix[K, K] L_Sigma_post = diag_pre_multiply(sigma_post, L_Omega_post);
-    matrix[K, K] Sigma_mid = multiply_lower_tri_self_transpose(L_Sigma_mid);
-    matrix[K, K] Sigma_post = multiply_lower_tri_self_transpose(L_Sigma_post);
+    array[N_P] vector[K] pre_vec;
+    for (p in 1:N_P) pre_vec[p] = pre_wide[p]';
     
-    matrix[M, M] Sigma_full = rep_matrix(0, M, M);
-    Sigma_full[1:K, 1:K] = Sigma_mid;
-    Sigma_full[(K+1):M, (K+1):M] = Sigma_post;
-    for (k in 1:K) {
-      Sigma_full[k, K + k] = rho_time[k] * sigma_mid[k] * sigma_post[k];
-      Sigma_full[K + k, k] = Sigma_full[k, K + k];
-    }
+    pre_vec ~ multi_normal_cholesky(mu_pre, L_Sigma_pre);
     
-    matrix[M, M] L_Sigma_full = cholesky_decompose(Sigma_full);
+    // Outcome model: single 2K-dimensional MVN
+    matrix[M, M] L_Sigma = diag_pre_multiply(sigma, L_Omega);
     
-    // Build stacked wide matrices
-    matrix[N_part, K] y_wide_mid = rep_matrix(0, N_part, K);
-    matrix[N_part, K] y_wide_post = rep_matrix(0, N_part, K);
+    matrix[N_P, K] y_wide_1;
+    matrix[N_P, K] y_wide_2;
     for (i in 1:N) {
       if (time[i] == 1) {
-        y_wide_mid[P[i], score[i]] = y[i];
+        y_wide_1[P[i], type[i]] = y[i];
       } else {
-        y_wide_post[P[i], score[i]] = y[i];
+        y_wide_2[P[i], type[i]] = y[i];
       }
     }
     
-    // Single 2K-dimensional MVN per participant
-    for (p in 1:N_part) {
-      vector[M] y_stacked;
-      vector[M] mu_stacked;
-      
-      y_stacked[1:K] = y_wide_mid[p]';
-      y_stacked[(K+1):M] = y_wide_post[p]';
-      mu_stacked[1:K] = mu_wide_mid[p]';
-      mu_stacked[(K+1):M] = mu_wide_post[p]';
-      
-      y_stacked ~ multi_normal_cholesky(mu_stacked, L_Sigma_full);
+    array[N_P] vector[M] y_arr;
+    array[N_P] vector[M] mu_arr;
+    for (p in 1:N_P) {
+      y_arr[p][1:K]      = y_wide_1[p]';
+      y_arr[p][(K+1):M]  = y_wide_2[p]';
+      mu_arr[p][1:K]     = mu_wide_1[p]';
+      mu_arr[p][(K+1):M] = mu_wide_2[p]';
     }
+    
+    y_arr ~ multi_normal_cholesky(mu_arr, L_Sigma);
   }
 }
 generated quantities {
-  matrix[K, K] Omega_mid = multiply_lower_tri_self_transpose(L_Omega_mid);
-  matrix[K, K] Omega_post = multiply_lower_tri_self_transpose(L_Omega_post);
+  // Full 2K x 2K correlation matrix
+  matrix[M, M] Omega = multiply_lower_tri_self_transpose(L_Omega);
   matrix[K, K] Omega_pre = multiply_lower_tri_self_transpose(L_Omega_pre);
   
+  // Extract interpretable sub-blocks
+  matrix[K, K] Omega_1   = Omega[1:K, 1:K];           // Within time 1
+  matrix[K, K] Omega_2   = Omega[(K+1):M, (K+1):M];   // Within time 2
+  matrix[K, K] Omega_cross = Omega[1:K, (K+1):M];     // Cross-timepoint
+  
+  // Per-outcome cross-timepoint correlations (diagonal of cross block)
+  vector[K] rho_time;
+  for (k in 1:K)
+    rho_time[k] = Omega[k, K + k];
+  
   vector[N] y_rep;
-  vector[N_part] log_lik_part;
+  vector[N_P] log_lik_part;
+  vector[N] y_expect;
   
   {
-    matrix[K, K] L_Sigma_mid = diag_pre_multiply(sigma_mid, L_Omega_mid);
-    matrix[K, K] L_Sigma_post = diag_pre_multiply(sigma_post, L_Omega_post);
-    matrix[K, K] Sigma_mid = multiply_lower_tri_self_transpose(L_Sigma_mid);
-    matrix[K, K] Sigma_post = multiply_lower_tri_self_transpose(L_Sigma_post);
+    matrix[M, M] L_Sigma = diag_pre_multiply(sigma, L_Omega);
     
-    matrix[M, M] Sigma_full = rep_matrix(0, M, M);
-    Sigma_full[1:K, 1:K] = Sigma_mid;
-    Sigma_full[(K+1):M, (K+1):M] = Sigma_post;
-    for (k in 1:K) {
-      Sigma_full[k, K + k] = rho_time[k] * sigma_mid[k] * sigma_post[k];
-      Sigma_full[K + k, k] = Sigma_full[k, K + k];
-    }
-    matrix[M, M] L_Sigma_full = cholesky_decompose(Sigma_full);
-    
-    matrix[N_part, K] y_wide_mid = rep_matrix(0, N_part, K);
-    matrix[N_part, K] y_wide_post = rep_matrix(0, N_part, K);
+    matrix[N_P, K] y_wide_1 = rep_matrix(0, N_P, K);
+    matrix[N_P, K] y_wide_2 = rep_matrix(0, N_P, K);
     for (i in 1:N) {
       if (time[i] == 1) {
-        y_wide_mid[P[i], score[i]] = y[i];
+        y_wide_1[P[i], type[i]] = y[i];
       } else {
-        y_wide_post[P[i], score[i]] = y[i];
+        y_wide_2[P[i], type[i]] = y[i];
       }
     }
     
-    for (p in 1:N_part) {
+    for (p in 1:N_P) {
       vector[M] mu_stacked;
-      mu_stacked[1:K] = mu_wide_mid[p]';
-      mu_stacked[(K+1):M] = mu_wide_post[p]';
+      mu_stacked[1:K]     = mu_wide_1[p]';
+      mu_stacked[(K+1):M] = mu_wide_2[p]';
       
-      vector[M] y_part = multi_normal_cholesky_rng(mu_stacked, L_Sigma_full);
+      // Posterior predictive draw
+      vector[M] y_part = multi_normal_cholesky_rng(mu_stacked, L_Sigma);
       
+      // Log-likelihood
       vector[M] y_stacked;
-      y_stacked[1:K] = y_wide_mid[p]';
-      y_stacked[(K+1):M] = y_wide_post[p]';
+      y_stacked[1:K]     = y_wide_1[p]';
+      y_stacked[(K+1):M] = y_wide_2[p]';
+      log_lik_part[p] = multi_normal_cholesky_lpdf(y_stacked | mu_stacked, L_Sigma);
       
-      log_lik_part[p] = multi_normal_cholesky_lpdf(y_stacked | mu_stacked, L_Sigma_full);
-      
+      // Map back to long format
       for (j in 1:obs_count[p]) {
         int i = obs_idx[p, j];
         if (time[i] == 1) {
-          y_rep[i] = y_part[score[i]];
+          y_rep[i] = y_part[type[i]];
         } else {
-          y_rep[i] = y_part[K + score[i]];
+          y_rep[i] = y_part[K + type[i]];
         }
       }
     }
-  }
-  
-  vector[N] y_expect;
-  for (i in 1:N) {
-    if (time[i] == 1) {
-      y_expect[i] = mu_wide_mid[P[i], score[i]];
-    } else {
-      y_expect[i] = mu_wide_post[P[i], score[i]];
+    
+    for (i in 1:N) {
+      if (time[i] == 1) {
+        y_expect[i] = mu_wide_1[P[i], type[i]];
+      } else {
+        y_expect[i] = mu_wide_2[P[i], type[i]];
+      }
     }
   }
 }
-

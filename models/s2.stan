@@ -37,9 +37,9 @@ transformed parameters {
 }
 model {
   to_vector(alpha) ~ normal(0, 1);
-  beta ~ normal(1, 0.5);
+  beta ~ normal(1, 0.4);
   sigma ~ exponential(1);
-  L_Omega ~ lkj_corr_cholesky(4);
+  L_Omega ~ lkj_corr_cholesky(2);
   
   if (prior_only == 0) {
     matrix[K, K] L_Sigma = diag_pre_multiply(sigma, L_Omega);

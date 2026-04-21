@@ -1,5 +1,6 @@
 /* 
-Including missing data data imputation in joint model. 
+Including missing data data imputation in joint model, 
+adding sex as a predictor. 
 */
 
 
@@ -85,19 +86,20 @@ transformed parameters {
 model {
   // Priors
   to_vector(alpha) ~ normal(0, 1);
-  beta ~ normal(1, 0.5);
+  beta ~ normal(1, 0.4);
   beta_sex ~ normal(0, 0.5);
   sigma ~ exponential(1);
-  L_Omega ~ lkj_corr_cholesky(4);
+  L_Omega ~ lkj_corr_cholesky(2);
   
   mu_pre ~ normal(0, 1);
   sigma_pre ~ exponential(1);
-  L_Omega_pre ~ lkj_corr_cholesky(4);
+  L_Omega_pre ~ lkj_corr_cholesky(2);
   
   // Weak prior on imputed values
+  if (prior_only == 1) {
   y_impute ~ normal(0, 2);
   pre_impute ~ normal(0, 2);
-  
+  }
   
   
   if (prior_only == 0) {

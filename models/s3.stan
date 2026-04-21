@@ -81,18 +81,19 @@ transformed parameters {
 model {
   // Priors
   to_vector(alpha) ~ normal(0, 1);
-  beta ~ normal(1, 0.5);
+  beta ~ normal(1, 0.4);
   sigma ~ exponential(1);
-  L_Omega ~ lkj_corr_cholesky(4);
+  L_Omega ~ lkj_corr_cholesky(2);
   
   mu_pre ~ normal(0, 1);
   sigma_pre ~ exponential(1);
-  L_Omega_pre ~ lkj_corr_cholesky(4);
+  L_Omega_pre ~ lkj_corr_cholesky(2);
   
+  if (prior_only == 1) {
   // Weak prior on imputed values
-  y_impute ~ normal(0, 2);
-  pre_impute ~ normal(0, 2);
-  
+    y_impute ~ normal(0, 2);
+    pre_impute ~ normal(0, 2);
+  }
   
   
   if (prior_only == 0) {

@@ -4,10 +4,10 @@ execute:
   echo: false
   warning: false
   message: false
+  cache: false
 editor_options: 
   chunk_output_type: console
 ---
-
 
 ```{r}
 
@@ -16,23 +16,23 @@ source("./R/fig-opt-fun.R")
 source("./R/packages.R")
 source("./R/data-prep.R")
 source("./R/helpers.R")
+source("./R/sim-fun.R")
 
 # Settings
-refit.models <- FALSE
-
+refit.models <- FALSE # Should fit_wrap refit models.
 ```
 
 
-## Does omega-3 supplementation, strength training, or their combination reduce the prevalence of metabolic syndrome compared to placebo?
+## Effects of N-3 supplementation on metabolic syndrome 
 
-A first analysis defines metabolic syndrome prevalence as the proportion of participants identified as having at least three out of five diagnostic criteria for metabolic syndrome. The analysis is complete-case analysis including individuals with at least three out of five criteria measurements over three studies time-point (pre-intervention, T1; post-supplementation, T2; post-supplementation + strength training, T4 @tbl-logregparticipants). 
+Here, we aim to model the sub-scores for the metabolic syndrome diagnostic criteria, along with related measurements (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. The analysis will assess the probability of meeting criteria thresholds for having at least 3 of 5 diagnostic criteria for metabolic syndrome in each treatment group. 
+
+Descriptive analysis of complete cases indicates variation in the proportion of participants meeting criteria thresholds between treatment groups and post-intervention time-points. @tbl-logregparticipants and  @fig-metsyndrome shows the proportions of participants who have three or more diagnostic criteria for metabolic syndrome among complete cases.
 
 
 ```{r}
-#| echo: false
-#| message: false
-#| warning: false
 #| label: tbl-logregparticipants
+#| tbl-cap: "Participants in the complete-case analysis of metabolic syndrome indications."
 
 
 # Counting up the number of participants in the complete-case analysis 
@@ -94,24 +94,23 @@ d |>
               columns = 2:5) |> 
   
   cols_label(treat = "") |> 
-  tab_footnote(footnote = "Data are presnted as n (Metabolic syndrom proportion)")
+  tab_footnote(footnote = "Data are presented as n (Metabolic syndrome proportion)")
+
+
+# A vector of participants 
+
+
 
 ```
 
-
-
-
 ```{r}
-#| echo: false
-#| message: false
-#| warning: false
 #| label: fig-metsyndrome
 #| fig-cap: "Proportion of participants with metabolic syndrome (at least three criteria thresholds)."
-#| eval: false
+#| eval: true
 
 
 d |> 
-  filter(participant %in% participant_complete) |> 
+  filter(participant %in% participant_complete_T4) |> 
   
   filter(n >= 5) |> 
   
@@ -132,7 +131,7 @@ d |>
   
   
   
-  labs(y = "Occurance of metabolic syndrome (%)", 
+  labs(y = "Proportion of participants with metabolic syndrome (%)", 
        x = "Time point", 
        fill = "Treatment") + 
   
@@ -152,101 +151,9 @@ d |>
         legend.background = element_rect(color = "black"))
 ```
 
-
 ```{r}
-#| echo: false
-#| message: false
-#| warning: false
-#| label: model1
-#| eval: false
-
-# A model for Met Sym data
-dat <- d |> 
-    filter(participant %in% participant_complete) 
-
-
-
-m1 <- glmmTMB(met_syn ~  time * treat + (1|participant), 
-             family = binomial, 
-             data = dat)
-
-
-nobs <- nrow(m1$frame)
-npart <- m1$frame |> distinct(participant) |> nrow()
-
-```
-
-
-
-
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-#| label: tbl-metsyndrome-model
-#| eval: false
-
-
-# #| tbl-cap: !expr 'paste("Logistic regression model for metabolic syndrome occurance. Time: T1 and  Treatment: Placebo where set as reference levels. Total number of observations: ", nobs, ". Total number of participants: ", npart, ".")'
-
-
-
-broom.mixed::tidy(m1) |> 
-  select(term:p.value) |> 
-  filter(!grepl("sd__", term)) |> 
-  
-  mutate(Parameter = c(
-    "Intercept", 
-    "Time:T2", 
-    "Time:T4", 
-    "Treatment:N-3", 
-    "Time:T2 &times; Treatment:N-3", 
-    "Time:T4 &times; Treatment:N-3" 
-    
-  )) |> 
-  select(Parameter, 
-         Estimate = estimate,
-         SE = std.error, 
-         Z = statistic, 
-         "P-value" = p.value) |> 
-  
-  gt() |> 
-  fmt_markdown(columns = Parameter)  |> 
-  fmt_auto() 
-  
-
-
-```
-
-The proportion of individuals identified as having metabolic syndrome (three out of five criteria thresholds) did not differ between Placebo and N-3 supplementation after the supplementation period or after the period with supplementation and strength training. 
-
-
-
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-#| eval: false
-
-
-
-
-```
-
-
-
-
-### Metabolic syndrome 
-
-Here we aim to model the sub-scores for the metabolic syndrome diagnostic criteria together with related measurements (@tbl-metsyn-scores). The goal is to build a model that allows for imputation of missing data to enable analysis of all randomized participants. As a first step, a model is created to capture treatment effects in all measurements ignoring any correlations among them and missing data. The first model is also restricted to a single time-point. Data are standardized prior to modelling.   
-
-
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
 #| label: tbl-metsyn-scores
-#| tbl-cap: "Components of the metabolic syndrom diagnostic criteria and related measurements used in modelling."
+#| tbl-cap: "Components of the metabolic syndrome diagnostic criteria and related measurements used in modelling."
 
 
 
@@ -258,7 +165,7 @@ Here we aim to model the sub-scores for the metabolic syndrome diagnostic criter
 
 
 data.frame(
-  Subscore = c("HDL Choleterol", 
+  Subscore = c("HDL Cholesterol", 
                "Fasting glucose", 
                "Triglycerides", 
                "Waist circumference", 
@@ -278,34 +185,18 @@ data.frame(
 
 
 
-
-
-
 ```
 
-
-
-$$
-\begin{align}
-y_i &\sim \operatorname{Normal}(\mu_i, \sigma_i) \\
-\mu_i &= \alpha_{\text{type,TX}} + \beta_{\text{type}} \times \text{pre}_i \\
-\alpha_{\text{type,TX}} &\sim \operatorname{Normal}(0,1) \\
-\beta_{\text{type}} &\sim \operatorname{Normal}(1, 0.5) \\
-\sigma_{\text{type}} &\sim \operatorname{Exponential}(1)
-\end{align}
-$$
-
-Where $\alpha_{\text{type,TX}}$ is the measurement-type and treatment-specific intercept and $pre_i$ is the row-specific pre-treatment value.
-
-A prior predictive check confirms that the model expects a positive relationship between pre- and post-treatment scores in two treatments and eight measurement types (@fig-s1-priorpred).
-
+Variables in the observed data are correlated between time-points within variables and between variables at different time-points. To describe approximate variation and co-variation patterns, naive linear models were fitted with sex as a single predictor at time-point T1, sex, baseline values, and treatment as predictors for values at time-points T2 and T4. Residuals were extracted from the models and estimates were plotted in @fig-var-cor.
 
 ```{r}
-#| echo: false
-#| message: false
-#| warning: false
-#| label: fig-s1-priorpred
-#| fig-cap: "Prior predictive check of model s1. "
+#| label: fig-var-cor
+#| fig-cap: "Residual variation and correlation pattern within and between variables in the observed data."
+#| eval: true
+#| fig-height: 6
+#| fig-width: 12
+
+
 
 
 
@@ -332,271 +223,654 @@ d_full <- criteria_dat |>
   
   mutate(.by = analyte, 
          value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE)) |> 
-  # To make all variables similarly signed HDL is reversed. 
-  # Expected improvement in scores will be in the negative direction 
-  # for all criteria markers
-  mutate(value_std = if_else(analyte == "HDL", 
-                         -value_std, value_std)) |> 
+
   mutate(participant = paste0("p", participant)) 
 
+
+# A function for producing correlations between variables 
+# from a full observed (or synthetic) data set using no missing 
+# values.
+#
+# d, a data set with participant, treat, sex, 
+# age, time, analyte, value.
+cor_plot <- function(d) {
   
-
-distinct(d_full, analyte)
-
-d_nomiss <- d_full |> 
-  filter(!is.na(value_std)) 
-
-
-
-# Using complete cases for T2 and T4
-dat <- d_nomiss |> 
- 
-  filter(time %in% c("T1", "T4")) |> 
-  filter(.by = participant, 
-         sum(!is.na(value_std)) == 16) |> 
-  
-  mutate(type = dense_rank(analyte), 
-         participant = dense_rank(participant), 
-         treat_seq = dense_rank(treat) ) |> 
+  compl_temp  <- d |>
+  filter(!is.na(value_std)) |> 
+  mutate(.by = participant, 
+         n = n()) |> 
+  filter(n == 24) |> 
   select(-value) |> 
-  pivot_wider(names_from = time, 
-              values_from = value_std) |> 
-  arrange(participant, type)
-
-
-
-
-
-d <- list(P = dat$participant, 
-          y = dat$T4, 
-          pre = dat$T1, 
-          type = dat$type, 
-          K = length(unique(dat$type)),
-          N_P = length(unique(dat$participant)),
-          N_TX = 2,
-          treat = dat$treat_seq, 
-          N = nrow(dat))
-
-
-## Compile the first model 
-
-# Compiling the model
-s1 <- cmdstan_model(stan_file = "models/s1.stan", 
-                      exe_file = "models/s1.exe")
-
-
-# For prior predictive checking
-d$prior_only <- 1
-fit_wrap(s1, DATA = d, fit = "fit.s1")
-
-draws.s1 <- fit.s1$draws(format = "df")
-
-draws.s1 |> 
-  filter(.chain == 1) |> 
-  select(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-  pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-
-  mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-  pivot_wider(names_from = parameter, 
-              values_from = value) |> 
-  expand_grid(pre = seq(from = -2, to = 2, by = 0.4)) |> 
+  pivot_wider(names_from = time, values_from = value_std) 
   
-  rowwise() |> 
+  # 
+  resids0 <- list()
+  resids1 <- list()
+  resids2 <- list()
+  resids_time <- list()
+  sigmas <- list()
+  analytes <- unique(compl_temp$analyte)
+  for(i in 1:8) {
+    
+    temp <- compl_temp |> 
+      filter(analyte == analytes[i]) 
+    m0 <- lm(T1 ~ sex, data = temp)
+    m1 <- lm(T2 ~ T1 + sex + treat, data = temp)
+    m2 <- lm(T4 ~ T1 + sex + treat, data = temp)
+    
+    resids0[[i]] <- resid(m0)
+    resids1[[i]] <- resid(m1)
+    resids2[[i]] <- resid(m2)
+    
+    resids_time[[i]] <- data.frame(analyte = rep(analytes[i], nrow(temp)), 
+               t1 = resid(m0),
+               t2 = resid(m1), 
+               t4 = resid(m2))
+    
+   sigmas[[i]] <-  data.frame(analyte = analytes[i], 
+               t1 = sigma(m0),                
+               t2 = sigma(m1), 
+               t4 = sigma(m2))
+    
+  }
   
-  mutate(placebo_pred = rnorm(1, alpha1 + beta * pre, sigma), 
-         omega_pred =   rnorm(1,   alpha2 + beta * pre, sigma)) |> 
-  ungroup() |> 
-  mutate(placebo = alpha1 + beta * pre, 
-         omega = alpha1 + beta * pre) |> 
+  resids0 <- bind_cols(resids0)
+  resids1 <- bind_cols(resids1)
+  resids2 <- bind_cols(resids2)
   
-  pivot_longer(cols = placebo_pred:omega, 
-               names_to = "treat") |>
-  separate(treat, into = c("treat", "interval")) |> 
-  mutate(interval = if_else(is.na(interval), "mean", interval)) |> 
-
-  summarise(.by = c(pre, treat, type, interval), 
-            m = mean(value), 
-            lwr = quantile(value, 0.05), 
-            upr = quantile(value, 0.95)) |> 
-
   
-  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
+  colnames(resids0) <- analytes
+  colnames(resids1) <- analytes
+  colnames(resids2) <- analytes
+  
+  p1 <- bind_rows(resids_time) |> 
+    summarise(.by = analyte, 
+              c = cor(t2, t4)) |> 
+    ggplot(aes(c, analyte)) + 
+    geom_point(size = 3, shape = 21, fill = colscale[1]) + 
+    alpha_theme() + 
+    theme(panel.grid.major.y  = element_line(color = "gray80")) +
+    labs(x = "Residual Correlation T2 and T4", 
+         y = "Analyte", 
+         subtitle = "Correlation of residuals between T2 and T4")
+  
+  p2 <- bind_rows(sigmas) |> 
+    pivot_longer(names_to = "time", 
+                 values_to = "sigma", 
+                 cols = t1:t4) |> 
+      ggplot(aes(sigma, analyte)) + 
+    geom_point(size = 3, shape = 21, 
+               aes(fill = time)) + 
+    alpha_theme() + 
+    theme(panel.grid.major.y  = element_line(color = "gray80")) +
+    labs(x = "Residual sigma", 
+         y = "Analyte", 
+         subtitle = "Residuals sigma at each time-point", 
+         fill = "Time") + 
+    scale_fill_manual(values = colscale)
+  
+  p3 <- bind_rows(
+    resids0 |> 
+    correlate(quiet = TRUE) |> 
+    pivot_longer(names_to = "xterm", values_to = "c", 
+                 cols = -one_of("term")) |> 
+    mutate(time = "T1"), 
+    resids1 |> 
+     correlate(quiet = TRUE) |> 
+    pivot_longer(names_to = "xterm", values_to = "c", 
+                cols = -one_of("term")) |> 
+      mutate(time = "T2"), 
+    resids2 |> 
+   correlate(quiet = TRUE) |> 
+    pivot_longer(names_to = "xterm", values_to = "c", 
+                 cols = -one_of("term")) |> 
+      mutate(time = "T4")) |> 
+    mutate(cor.label = if_else(is.na(c), "", as.character(round(c, 2)))) |> 
+  
+  
+    
+    ggplot(aes(xterm, term)) + 
+  
+    geom_tile(aes(fill = c)) + 
+      geom_text(aes(label = cor.label), 
+                size = 3) +
+    scale_fill_gradient2(low = colscale[1], 
+                         mid = "white", 
+                         high = colscale[2]) +
+    
+    facet_wrap(~ time, ncol = 3) + 
+    alpha_theme() + 
+    theme(axis.title = element_blank()) +
+    labs(fill = "Correlation (residual)", 
+         subtitle = "Correlation (residuals) between analytes")
+  
+  return(list(p1 = p1, p2 = p2, p3 = p3))
+  
+}
 
-  ggplot(aes(pre, m, ymin = lwr, ymax = upr, group = interval)) + 
-  geom_line() + 
-  geom_ribbon(alpha = 0.2) +
-  facet_grid(type ~ treat) +
-  scale_x_continuous(limits = c(-3,3)) + 
-  scale_y_continuous(limits = c(-6,6)) + 
-  labs(y = "Prior predictive mean (90% prediction and mean PI)", 
-       x = "Pre-intervention scores") + 
-  alpha_theme() + 
-  theme(strip.text.y = element_text(angle = 0))
+ps <- cor_plot(d_full)
+
+(ps$p2 | ps$p1) / ps$p3
+
+
+
 ```
+
+### Synthetic data
+
+Synthetic data is generated with known parameter values to validate models and enable exploration of the effects of model misspecification and missing data. The data simulation function uses a multivariate normal distribution to simulate conditional means for *K* measurement types and *N* participants.
+
+$$
+\begin{align}
+y_{i,j} &\sim \operatorname{MVNormal}(\mu_{k[i,j]}, \Sigma) \\
+\mu_{k[i,j]} &= \alpha + \beta_k X_{i}
+\end{align}
+$$
+
+Where $y_i$ will be a vector of outcome values for participant *i* in time-point *j*, simulated from a multivariate normal with conditional means ($\mu_{k[i,j]}$ and a variance-covariance matrix ($\Sigma$). The conditional means are simulated using a linear predictor with parameter vector $\beta$ and design matrix $X$.
+
+The covariance matrix is constructed from two separate correlation matrices and a cross-time-point vector of correlations within each measurement type. Residual standard deviations for each type (and time) are used to combine standard deviations and correlations into the variance-covariance matrix[^note-on-code].   
+
+$$
+\begin{align}
+\rho_{t2} &=  \begin{bmatrix}
+  1 & \rho_{12} & \cdots \\
+  \rho_{21} & 1 & \cdots \\
+  \vdots & \vdots & \ddots
+\end{bmatrix} \\
+\rho_{t4} &=  \begin{bmatrix}
+  1 & \rho_{12} & \cdots \\
+  \rho_{21} & 1 & \cdots \\
+  \vdots & \vdots & \ddots
+\end{bmatrix} \\
+\rho_{\text{cross}} &= \operatorname{diag}(p_{k,\text{time}}) \\
+R &=  \begin{bmatrix}
+  \rho_{t2} & \rho_{\text{cross}} \\
+  \rho_{\text{cross}}^T & \rho_{t4} \\
+  \end{bmatrix} \\
+S &= \operatorname{diag}(\sigma_{k,\text{time}}) \\
+\Sigma &= S \times R \times S
+\end{align}
+$$
+
+
+We will be able to control the within-time *residual* correlations between measurement types and between-time *residual* correlations within measurement types. The full correlation matrix ($R$) will set the residual correlation between measurement types at different time points to 0. These will, however, be correlated through within-time-point and pre-intervention correlations.
+
+The pre-intervention values are also conditionally constructed using a separate multivariate normal distribution. 
+
+$$
+\begin{align}
+y_{\text{pre}[i]} &\sim \operatorname{MVNormal}(\mu_{k[i]}, \Sigma) \\
+\mu_{k[i]} &= \alpha + \beta_k X_i \\
+R &=  \begin{bmatrix}
+  1 & \rho_{12} & \cdots \\
+  \rho_{21} & 1 & \cdots \\
+  \vdots & \vdots & \ddots
+\end{bmatrix} \\
+S &= \operatorname{diag}(\sigma_{k}) \\
+\Sigma &= S \times R \times S \\
+\end{align}
+$$
+Using this definition, we can control the correlations among measurement types (at baseline) and their variation. We can also make the means conditional on a set of predictors (design matrix $X$) with corresponding parameter values ($\beta_k$).
+
+[^note-on-code]: In the simulation function (`./R/sim-fun/sim-type.R`) separate variance-covariance matrices are constructed and then combined. But separate correlation matrices are the function's input. 
+
+The approach detailed above is convenient as we are able to define each pairwise correlation. However, this comes with two caveats. First, for 8 variables we need to set $((8 \times 8 - 8) / 2) \times 3 = 84$ correlation coefficients to capture between variable correlations at each time-point. Second, this approach does not guarantee a positive definite covariance matrix. An alternative is to use a factor loading approach. For each variable we can specify a loading onto a factor and a residual variance for each variable (type). This approach is determined by $\lambda$, a $K \times F$ matrix where $k_i$ are variables and $f_j$ are latent factors, and $\psi$, a vector of length $K$ defining residual variation.
+
+$$
+\begin{align}
+\Sigma_\text{raw} &= \lambda \times \lambda^T + \text{diag}(\psi) \\
+D &= \sqrt{\text{diag}(\Sigma_\text{raw})} \\
+R &= D^{-1} \times \Sigma_\text{raw} \times D^{-1} \\ 
+S &= \operatorname{diag}(\sigma_{k}) \\
+\Sigma &= S \times R \times  S
+\end{align}
+$$
+
+This approach is used in `sim_type2` where $\Sigma$ is built from the factor approach. Lambda is a matrix with K rows, representing variable types and F columns representing factors.
+
+```{r}
+#| echo: true
+#| eval: true
+
+build_sigma_factor <- function(Lambda, psi, S) {
+  K <- nrow(Lambda)
+  R_raw <- Lambda %*% t(Lambda) + diag(psi)
+  d <- sqrt(diag(R_raw))
+  R <- R_raw / outer(d, d)
+  diag(S) %*% R %*% diag(S)
+}
+
+```
+
+As an example, $K=5$ variable types are defined using $F=3$ factors below. Approximate "variance explained" can be used to define the relationship between variables and factors where for $k_1$ we aim for 50%, 20% and 10% explained by $f_1$ to $f_3$ and the remaining 20% is error. The squared loadings plus error sum to 1: $0.5 + 0.2 + 0.1 + 0.2 = 1$.$. In code: 
 
 
 ```{r}
+#| echo: true
+
+# Loadings as proportions
+l1 <- c(0.5,  0.2,  0.1)
+# Transforms to loadings
+l1 <- sqrt(l1)
+error <- 0.2
+
+sum(l1^2) + error
+
+```
+
+The above example first defines loadings as proportions (summing to 1 with errors) and then adds a step to transform the proportions to loadings. For a full $K \times F$ &lambda; matrix we populate the matrix and use &psi; for errors.
+
+```{r}
+#| echo: true
+
+
+# Defining a matrix of proportions explained by factors
+Lambda <- matrix(
+  c(0.5, 0.2, 0.1,
+    0.8, 0.1, 0.05,  
+    0.1, 0.15, 0.1,
+    0.05, 0.05, 0.2,
+    0.05, 0.1, 0.01
+    ), 
+                 ncol = 3,
+                 byrow = TRUE)
+# Defining remaining error
+psi <- c(0.2, 0.05, 0.65, 0.7, 0.84)
+
+# Transform from proportions to loadings
+Lambda <- sqrt(Lambda)
+
+# Check total proportions
+rowSums(Lambda^2) + psi
+
+```
+
+Each row of the &lambda; matrix plus errors now sum to 1. Next, we can use the &lambda; matrix to construct $\Sigma$ with unit standard deviations. The full covariance matrix ($\Sigma$) is used in calling `MASS::mvnorm` to produce the multivariate normal variable. As we are using standard deviations equal to 1, the covariance matrix equals the correlation matrix.
+
+```{r}
+#| echo: true
+
+S <- rep(1, 5)
+Sigma <- build_sigma_factor(Lambda, psi, S)
+
+out <- MASS::mvrnorm(1000, rep(0, 5), Sigma = Sigma)
+
+colnames(out) <- paste0("k", 1:5)
+```
+
+```{r}
+#| label: tbl-sigma-out
+#| tbl-cap: "Correlations used to simulate data built using a factor approach."
+colnames(Sigma) <-  paste0("k", 1:5)
+rownames(Sigma) <-  paste0("k", 1:5)
+
+data.frame(Sigma) |> 
+  gt(rownames_to_stub = TRUE) |> 
+  fmt_number(decimals = 3)
+
+```
+
+```{r}
+#| label: tbl-corr-out
+#| tbl-cap: "Correlations from simulated data (n=1000) built using a factor approach."
+
+data.frame(out) |> 
+  correlate(quiet = TRUE) |> 
+  gt() |> 
+  fmt_number(decimals = 3)
+
+```
+
+In the loadings we defined $k_1$ and $k_2$ to be highly correlated through being influenced to a large degree by factors $f_1$ and $f_2$. In contrast, $k_5$ was given a lot of variation not explained by the factors which resulted in lower correlations with the other variables. 
+
+#### Missing data
+
+Two mechanisms for including missing values are used in the simulation functions. First, a proportion of pre- and post-intervention values are set to missing, affecting single observations (e.g., a single measurement within a single participant). Second, the probability of missing observations from a whole participant is simulated using a Bernoulli model. This mechanism can connect baseline predictors to missing values. A Bernoulli simulation is performed, with $p_i$ modeled linearly by $\alpha$, which controls the average probability of complete missing observations, and the additional parameters $\beta$ linked to predictors in a predictor data frame.
+
+$$
+\begin{align}
+y_{\text{miss}[i]} &\sim \operatorname{Bernoulli}(p_i) \\
+\operatorname{logit}(p_i) &= \alpha + \beta X
+\end{align}
+$$
+
+Simulating a full data set of synthetic data, with missing values, results in observed patterns similar to the observed data (@fig-synth-data-example and @fig-synth-data-missing).
+
+
+```{r}
+#| label: synthetic-data-example
 #| echo: false
 #| message: false
 #| warning: false
 
-# Full posterior
-d$prior_only <- 0
-fit_wrap(s1, DATA = d, fit = "fit.s1p")
+  N <- 148 # Number of participants
+  K <- 8 # number of measurement types
+
+  # The formula for the pre-intervention variables
+  form_pre <- ~ 1 +  age + sex
+
+  # beta_pre is a p * K matrix of parameter (p in 1 to P)
+  # values for each type (k in 1:K).
+  # fmt: skip
+  betas_pre <- matrix(
+  c(rep(0, K), # intercepts
+    0.2, -0.2, 0.1, -0.1, 0.1, -0.1, 0, 0,  # age
+    0.2, -0.2, 0, 0, -0.2, 0.2, 0, 0  # sex
+  ),
+  nrow = 3,
+  ncol = K,
+  byrow = TRUE
+)
+
+  # The same formula for both time-points
+  form_main <- ~  pre + group + sex
+
+  # betas matrix are p * K
+  # fmt: skip
+  betas_t1 <- matrix(
+  c(rep(0, K), # intercepts
+    0.95, 0.95, 0.95, 0.95, 0.86, 0.85, 0.86, 0.85,  # pre_k effect 
+    0, 0.5, 0, 0, 0, 0, 0, 0, # group
+    0.1, 0.2, -0.1, -0.2, 0.1, 0.2, 0.1, 0.1  # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  # fmt: skip
+  betas_t2 <- matrix(
+  c(rep(0, K), # intercepts
+   0.95, 0.95, 0.95, 0.95, 0.86, 0.85, 0.86, 0.85,  # pre_k effect 
+    0, 0.4, 0, 0, 0, 0, 0, 0, # group
+    0.1, 0.2, -0.1, 0, 0, 0, 0, 0  # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  
+  
+  # Predictor variables, used in *all* sims
+  preds_all <- data.frame(
+    group = rep(c(0, 1), each = N / 2),
+    sex = rep(c(0, 1),  N/2 ),
+    age = c(runif(N/2, -1.5, 1.5), rnorm(N/2))
+  )
+
+  # Vector of correlations (upper triangle, fill by column) for the pre int
+  # values. For a K = 8 matrix, this should be (K * K - K) / 2 = 
+  # (8 * 8 - 8) / 2
+  c1 <- c(
+    # E.g., type 1 correlation with type 2 = r12
+    0.2,     # r12
+    0.2,     # r13
+    0.6,     # r23
+    0,     # r14
+    0,     # r24
+    0,     # r34
+    0,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0.2,     # r37
+    0.2,     # r47
+    0.3,     # r57
+    0.5,     # r67
+    0.4,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0,     # r68
+    0      # r78
+  )
+
+  # A list of two (per time-point) residual correlations
+  # (upper triangle, fill by row)
+  c2 <- list(
+    c(
+    # E.g., type 1 correlation with type 2 = r12
+    0,     # r12
+    0,     # r13
+    0,     # r23
+    0,     # r14
+    0,     # r24
+    0,     # r34
+    0,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0,     # r37
+    0,     # r47
+    0,     # r57
+    0,     # r67
+    0,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0,     # r68
+    0      # r78
+  ),
+    c(
+    # E.g., type 1 correlation with type 2 = r12
+    0,     # r12
+    0,     # r13
+    0,     # r23
+    0,     # r14
+    0,     # r24
+    0,     # r34
+    0,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0,     # r37
+    0,     # r47
+    0,     # r57
+    0,     # r67
+    0,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0,     # r68
+    0      # r78
+  )
+  )
+
+  # Pre intervention SD's per type (length K)
+  s1 <- rep(1, K)
+  # Residual SD per type in each time point
+  s2 <- list(
+    c(0.8, 0.9, 1, 1.1, 0.8, 0.9, 1, 1.1),
+     c(0.8, 0.9, 1, 1.1, 0.8, 0.9, 1, 1.1)
+  )
+  # Between time-point (residual) correlations within each type (length K)
+  c_cross <- c(rep(0.5, K))
+
+  # missing_form_t2,  formula specifying the predictor for missing values at t2
+  miss_t2 <- ~ 1 + age
+  miss_t4 <- ~ 1 + age
+
+  # Parameter values for the form complete missingness
+  miss_beta_t2 <- c(-2.5, -0.5)
+  miss_beta_t4 <- c(-2, -0.5)
+
+  # Random missing proportion
+  miss_prop_pre <- 0.02 # e.g., 2% missing of all rows
+  miss_prop_y <- 0.05 # e.g., 5% miss of all rows post-int
+
+  
+  # The simulation function
+  simout <- sim_type(
+    
+    n = N,
+    K = K,
+
+    form_pre = form_pre,
+    betas_pre = betas_pre,
+
+    form = form_main,
+    preds = preds_all,
+    betas = list(betas_t1, betas_t2),
+    C1 = c1,
+    S1 = s1,
+    C2 = c2,
+    S2 = s2,
+    C_cross = c_cross,
+    missing_form_t2 = miss_t2,
+    missing_form_t4 = miss_t4,
+    missing_beta_t2 = miss_beta_t2,
+    missing_beta_t4 = miss_beta_t4,
+    missing_pre_prop = miss_prop_pre,
+    missing_y_prop = miss_prop_y,
+    verbose = FALSE
+  )
+
+
+  d <- struct_sim(simout$miss, verbose = FALSE)
+  
+
 
 ```
 
-Sampling from the posterior gives us satisfactory performance metrics (@fig-s1-modelperformance). The posterior predictive check (@fig-s1-posteriorpredict) indicate that the model capture the general pattern of the observed data. 
-
 ```{r}
+#| label: fig-synth-data-example
+#| fig-cap: "Distribution of (standardized) synthetic data across sex and measurement types."
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-height: 8
 #| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Model performance metrics from Model s1."
-#| echo: false
-#| label: fig-s1-modelperformance
-#| message: false
-#| warning: false
-#| output: false
 
 
-
-# Model performance
-s1_sum <- fit.s1p$summary()
-
-# Get (most) problematic parameters
-vars <- s1_sum |> 
-  arrange(-rhat) |> 
-   filter(grepl(paste(
-    c("alpha","beta", "sigma"), collapse = "|"), 
-               variable)) |> 
-  slice_head(n = 3) |> 
-  pull(variable)
-
-
-
-p1 <- s1_sum |> 
-  filter(grepl(paste(
-    c("alpha","beta", "sigma"), collapse = "|"), 
-               variable)) |> 
-  mutate(variable_type = variable) |> 
-  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+d$raw_df |> 
   
-  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
-  
-  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
-  geom_point() + 
-  
-  geom_text_repel(aes(label = highlight, 
-                color = NULL, 
-                size = NULL), 
-                show.legend = FALSE) +
-  
-  labs(x = "(Bulk) effective sample size", 
-       y = "R-hat", 
-       color = "Parameter type", 
-       size = "(Tail) effective sample size") +
-  scale_color_manual(values = colscale)
 
-
-
-
-draws.s1 <- fit.s1p$draws(format = "df")
-
-
-p2  <- draws.s1 |> 
-  select(.iteration, .chain, all_of(vars)) |> 
-  pivot_longer(cols = all_of(vars)) |> 
-  ggplot(aes(.iteration, value, 
-             color = as.factor(.chain))) + 
-  geom_line(alpha = 0.5) + 
-  facet_wrap(~ name, ncol = 1, 
-             scales = "free_y") + 
-  scale_color_manual(values = colscale) + 
-  labs(x = "Iteration", 
-       color = "Chain", 
-       y = "Parameter value")
-
-
-
-p1 / p2
-
-
-```
-
-
-```{r}
-#| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Posterior predictive check of Model s1 using data from T4."
-#| echo: false
-#| label: fig-s1-posteriorpredict
-#| message: false
-#| warning: false
-#| output: false
-
-
-# Extract log_lik
-log_lik.s1 <- fit.s1$draws("log_lik_part", format = "matrix") |> 
-  loo::loo(cores = 12)
-
-
-draws.s1 |> 
-  select(starts_with("y_rep"), .chain, .draw) |> 
-  pivot_longer(cols = starts_with("y_rep")) |> 
-  filter(.chain == 1, .draw %in% 1:50) |> 
-  
-  mutate(type = rep(d$type, 50), 
-         treat = rep(d$treat, 50), 
-         treat = if_else(treat == 1, "Placebo", "N-3")) |> 
-  
-  
-  inner_join(dat |> 
-  distinct(type, analyte)) |> 
-
-  ggplot(aes(value, group = paste(.draw,treat), 
-             color = as.factor(treat))) + 
-  geom_line(stat = "density", 
-            aes(), 
-            alpha = 0.2)  +
-  geom_line(stat = "density", 
-            # Sort data category for treat
-            data = data.frame(y = d$y, 
-                              type = d$type, 
-                              treat = d$treat) |> 
-              mutate(treat = if_else(treat == 1, "Placebo", "N-3")), 
-            
-               aes(y, group = treat, color = as.factor(treat)), 
-            linewidth = 1.5)  +
-  facet_wrap(~ analyte) + 
+  ggplot(aes(ystd, color = time)) + 
+  geom_line(stat = "density") + 
+  facet_wrap(~type + sex,  scales = "free", labeller = label_both )  + 
   alpha_theme(yaxis = FALSE) + 
-  labs(y = "Density", 
-       x = "Predicted/Observed values", 
-       color = "Treatment") +
-  scale_color_manual(values = colscale) 
+  theme(strip.text = element_markdown(), 
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = "bottom") +
+  labs(color = "Time") + 
+  scale_color_manual(values = colscale)
+  
+  
+```
+
+```{r}
+#| label: fig-synth-data-missing
+#| fig-cap: "Missing data patterns from the data simulation. Missing values are found in specific measurements and in all measurements for a participant at specific time points."
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-height: 12
+#| fig-width: 8
+
+
+
+
+
+d$raw_df |> 
+ arrange(participant, time, type) |> 
+ # Sum up n missing values
+  mutate(.by = participant, 
+         n_miss =  sum(is.na(y))) |> 
+  # Sort participants per missingness
+ mutate(participant = fct_reorder(as.factor(participant), -n_miss)) |>
+  
+ mutate(miss = if_else(is.na(y), "miss", "data"),
+        miss = factor(miss, levels = c("data", "miss"), 
+                       labels = c("Observed data", 
+                                  "Missing data"))) |> 
+  # dense rank within group
+  mutate(.by = group, 
+         participant = dense_rank(participant)) |> 
+
+  # Per group
+  ggplot(aes(type, participant, 
+             color = miss, 
+             fill = as.factor(type), 
+             alpha = miss)) + 
+  
+
+  geom_point(shape = 21, size = 2) + 
+
+  scale_color_manual(values = c("black", "gray")) + 
+  scale_alpha_manual(values = c(1, 0.6)) +
+  scale_fill_manual(values = colscale) + 
+  facet_nested( ~ group + time , scales = "free_y") +
+
+  alpha_theme(yaxis = FALSE) +
+  
+  
+  theme(axis.text.y = element_blank(), 
+        axis.ticks.y  = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x  = element_blank(), 
+        axis.line.x = element_blank(), 
+        panel.background = element_rect(fill = c("gray90"))
+        ) + 
+  labs(x = "",
+       y = "", 
+       fill = "Measurement", 
+       color = "", 
+       alpha = "")
+
 
 
 ```
 
+### Models
 
-The second model for the main outcomes incorporates a multivariate-normal likelihood for the outcomes. Here we model outcomes as sampled from a multivariate-normal distribution with a covariance matrix connecting the outcome types to each other. This model extension models the correlation structure between measurement types enabling partial pooling across measurement types. In further extensions of this model, the correlation structure will provide precision for missing value imputations since observed scores will inform missing values through the correlation structure.
+Models are incrementally developed by incorporating and testing features using prior predictive and posterior predictive checks, using both synthetic and observed data. Model performance (e.g., chain convergence and divergent transitions) is evaluated at relevant steps.
 
-The model is defined as
+The first model (model s1, `models/s1.stan`) is an ANCOVA-type model with pre-intervention values as covariates for estimating the post-intervention treatment- and measurement-type-specific means. The model is defined as:
+
+$$
+\begin{align}
+y_i &\sim \operatorname{Normal}(\mu_i, \sigma_i) \\
+\mu_i &= \alpha_{\text{type,[TX]}} + \beta_{\text{type}} \times \text{pre}_i \\
+\alpha_{\text{type,[TX]}} &\sim \operatorname{Normal}(0,1) \\
+\beta_{\text{type}} &\sim \operatorname{Normal}(1, 0.4) \\
+\sigma_{\text{type}} &\sim \operatorname{Exponential}(1)
+\end{align}
+$$
+
+Where $\alpha_{\text{type,TX}}$ is the measurement-type and treatment ($TX$) -specific intercept, and $pre_i$ is the row-specific pre-treatment value. 
+
+Prior to modeling, observed values are placed on a standardized scale (mean-centered and scaled to the standard deviation). Since the model specification gives the same $\operatorname{Normal}(0,1)$ prior for both treatment groups, the implied prior for the differences between groups is $\operatorname{Normal}(0,\sqrt{2})$. 95% of the prior probability mass therefore captures differences between groups from about `r round(-2 * sqrt(2),1)` to `r round(2 * sqrt(2),1)`. This prior is considered weakly regularizing. Similarly, the prior for the type-specific parameter for the pre-value covariates expects a 1-to-1 relationship between pre- and post-intervention values but with a wide range of possible relationships (95% prior probability mass in the range `r round(1 - 2 * 0.4,1)` to `r round(1 + 2 * 0.4,1)`). The prior for the &sigma; is also considered weakly regularizing allowing for a wide range of possible values but with more prior weight below the average (1).
+
+The second model (model S2, `models/s2.stan`) for the main outcomes uses a multivariate normal likelihood. Here, we model outcomes as sampled from a multivariate normal distribution with a covariance matrix that connects the outcome types. This model extends model S1 by modelling the correlation structure among measurement types, enabling partial pooling across them. In further extensions of this model, the correlation structure will provide precision for imputing missing values, as observed scores will inform them through the structure. The same ANCOVA-type model is used here, in which pre-intervention scores serve as a covariate for the post-intervention group and measurement-type-level averages.
+
+The model is defined as:
 
 $$
 \begin{align}
@@ -620,354 +894,9 @@ R &=   \begin{bmatrix}
 \text{R} &\sim \operatorname{LKJcorr}(4) \\
 \end{align}
 $$
-Where $y_p$ is a participant-level vector of outcome scores. $\Sigma$ is the covariance matrix with standard deviations $\text{S}$ and the correlation matrix $\text{R}$. The prior on $\text{R}$ is defined using the LKJ distribution.
+Where $y_p$ is a participant-level vector of outcome scores. $\Sigma$ is the covariance matrix with standard deviations $\text{S}$ and the correlation matrix $\text{R}$. The prior on $\text{R}$ is defined using the LKJ distribution which provides regularization away from extreme values (-1, 1).
 
-Prior predictive simulations gives the expected association between pre- and post-treatment scores (@fig-s2-priorpredict). Sampling form the posterior gives us satisfactory statistics for convergence (@fig-s2-modelperformance). Three samples had Pareto k estimates above 0.7 indicating influential data points.  
-
-```{r}
-#| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Prior predictive check of Model s2."
-#| echo: false
-#| label: fig-s2-priorpredict
-#| message: false
-#| warning: false
-#| output: false
-
-
-### Model 2
-
-# Compiling the model
-s2 <- cmdstan_model(stan_file = "models/s2.stan", 
-                      exe_file = "models/s2.exe")
-
-
-
-# For prior predictive checking
-d$prior_only <- 1
-
-fit_wrap(s2, DATA = d, fit = "fit.s2")
-
-
-draws.s2 <- fit.s2$draws(format = "df")
-
-
-draws.s2 |> 
-  filter(.chain == 1) |> 
-  select(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-  pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-
-  mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-  pivot_wider(names_from = parameter, 
-              values_from = value) |> 
-  expand_grid(pre = seq(from = -2, to = 2, by = 0.4)) |> 
-  
-  rowwise() |> 
-  
-  mutate(placebo = rnorm(1, alpha1 + beta * pre, sigma), 
-         omega = rnorm(1,   alpha2 + beta * pre, sigma)) |> 
-  
-  pivot_longer(cols = placebo:omega, 
-               names_to = "treat") |> 
-
-  summarise(.by = c(pre, treat, type), 
-            m = mean(value), 
-            lwr = quantile(value, 0.05), 
-            upr = quantile(value, 0.95)) |> 
-  
-  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
-  
-  
-  ggplot(aes(pre, m, ymin = lwr, ymax = upr)) + 
-  geom_line() + 
-  geom_ribbon(alpha = 0.2) +
-  facet_grid(type ~ treat) +
-  scale_x_continuous(limits = c(-2,2)) + 
-  scale_y_continuous(limits = c(-6,6)) + 
-  labs(y = "Prior predictive (90% prediction intervals)", 
-       x = "Pre-intervention scores") +
-  alpha_theme()
-```
-
-
-
-```{r}
-#| message: false
-#| warning: false
-#| output: false
-#| echo: false
-#| eval: false
-
-
-# Full posterior
-d$prior_only <- 0
-
-fit_wrap(s2, DATA = d, fit = "fit.s2p", refit = TRUE)
-
-
-# Log lik comp
-log_lik.s2 <- fit.s2p$draws("log_lik_part", format = "matrix") |> 
-  loo::loo(cores = 12)
-
-
-
-
-## Potentially add Pareto K diagnostics here...
-data.frame(
-  y = d$y, 
-  type = d$type, 
-  pre = d$pre, 
-  paretok = rep(log_lik.s2$diagnostics$pareto_k, each = 8)) |> 
-  
-  mutate(pareto_flag = if_else(paretok > 0.7, "Bad", "Good")) |> 
-  
-
-  ggplot(aes(pre, y, color = pareto_flag)) + geom_point() + 
-  facet_wrap(~ type) 
-  
-
-
-
-```
-
-
-
-```{r}
-#| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Model performance metrics from Model s2."
-#| echo: false
-#| label: fig-s2-modelperformance
-#| message: false
-#| warning: false
-#| output: false
-
-
-
-# Model performance
-s2_sum <- fit.s2p$summary()
-
-# Get (most) problematic parameters
-vars <- s2_sum |> 
-  arrange(-rhat) |> 
-   filter(grepl(paste(
-    c("alpha","beta", "sigma"), collapse = "|"), 
-               variable)) |> 
-  slice_head(n = 3) |> 
-  pull(variable)
-
-
-
-p1 <- s2_sum |> 
-  filter(grepl(paste(
-    c("alpha","beta", "sigma"), collapse = "|"), 
-               variable)) |> 
-  mutate(variable_type = variable) |> 
-  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
-  
-  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
-  
-  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
-  geom_point() + 
-  
-  geom_text_repel(aes(label = highlight, 
-                color = NULL, 
-                size = NULL), 
-                show.legend = FALSE) +
-  
-  labs(x = "(Bulk) effective sample size", 
-       y = "R-hat", 
-       color = "Parameter type", 
-       size = "(Tail) effective sample size") +
-  scale_color_manual(values = colscale)
-
-
-
-
-draws.s2 <- fit.s2p$draws(format = "df")
-
-
-p2  <- draws.s2 |> 
-  select(.iteration, .chain, all_of(vars)) |> 
-  pivot_longer(cols = all_of(vars)) |> 
-  ggplot(aes(.iteration, value, 
-             color = as.factor(.chain))) + 
-  geom_line(alpha = 0.5) + 
-  facet_wrap(~ name, ncol = 1, 
-             scales = "free_y") + 
-  scale_color_manual(values = colscale) + 
-  labs(x = "Iteration", 
-       color = "Chain", 
-       y = "Parameter value")
-
-
-
-p1 / p2
-
-
-```
-
-Posterior predictions indicate that the model captures the observed data patterns (@fig-s2-posteriorpredict). Plotting the raw data on model predictions using the pre-intervention score also indicate reasonable fit (@fig-s2-posteriorpredict2). 
-
-```{r}
-#| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Posterior predictive check of Model s2 using data from T4."
-#| echo: false
-#| label: fig-s2-posteriorpredict
-#| message: false
-#| warning: false
-
-
-
-draws.s2 |> 
- 
-  select(starts_with("y_rep"), .chain, .draw) |> 
-  pivot_longer(cols = starts_with("y_rep")) |> 
-  filter(.chain == 1, .draw %in% 1:50) |> 
-  
-  mutate(type = rep(d$type, 50), 
-         treat = rep(d$treat, 50), 
-         treat = if_else(treat == 1, "Placebo", "N-3")) |> 
-  
-  
-  inner_join(dat |> 
-  distinct(type, analyte)) |> 
-
-  ggplot(aes(value, group = paste(.draw,treat), 
-             color = as.factor(treat))) + 
-  geom_line(stat = "density", 
-            aes(), 
-            alpha = 0.2)  +
-  geom_line(stat = "density", 
-            # Sort data category for treat
-            data = data.frame(y = d$y, 
-                              type = d$type, 
-                              treat = d$treat) |> 
-              mutate(treat = if_else(treat == 1, "Placebo", "N-3")), 
-            
-               aes(y, group = treat, color = as.factor(treat)), 
-            linewidth = 1.5)  +
-  facet_wrap(~ analyte + treat) + 
-  alpha_theme(yaxis = FALSE) + 
-  labs(y = "Density", 
-       x = "Predicted/Observed values", 
-       color = "Treatment") +
-  scale_color_manual(values = colscale) 
-
-
-```
-
-
-```{r}
-#| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Posterior predictive check of Model s2 using data from T4."
-#| echo: false
-#| label: fig-s2-posteriorpredict2
-#| message: false
-#| warning: false
-
-
-
-dat_plot <- data.frame(
-  treat = d$treat, 
-  pre = d$pre, 
-  y = d$y, 
-  type = d$type) |> 
-  mutate(treat = factor(treat, levels = c("1", "2"), 
-                        labels = c("Placebo", "N-3")))
-  
-
-
-
-
-draws.s2 |> 
-  filter(.chain == 1) |> 
-  
-  filter(.iteration %in% 1:2000) |> 
-  
-  select(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-  pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-
-  mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-  pivot_wider(names_from = parameter, 
-              values_from = value) |> 
-  expand_grid(pre = seq(from = -2, to = 2, by = 0.1)) |> 
-  
-  rowwise() |> 
-  
-  mutate(placebo_pred = rnorm(1, alpha1 + beta * pre, sigma), 
-         omega_pred = rnorm(1,   alpha2 + beta * pre, sigma), 
-         placebo_mu = alpha1 + beta * pre, 
-         omega_mu = alpha2 + beta * pre) |> 
- 
-
-  pivot_longer(cols = placebo_pred:omega_mu, 
-               names_to = "treat") |> 
-  separate(treat, into = c("treat", "pred")) |> 
-
-  summarise(.by = c(pre, treat, type, pred), 
-            m = mean(value), 
-            lwr = quantile(value, 0.05), 
-            upr = quantile(value, 0.95)) |> 
-
-  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
- 
-  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
-             group = pred)) + 
-  
-  
-  geom_point(data = dat_plot, 
-             aes(pre, y, 
-                 ymin = NULL, 
-                 ymax = NULL, 
-                 group = NULL), 
-             alpha = 0.2) +
-  
-  
-  
-  geom_ribbon(alpha = 0.4) +
-  facet_grid(type ~ treat) +
-  labs(y = "Prior predictive mean (90% PI prediction and &mu; interval)", 
-       x = "Pre-intervention scores") +
-  theme(axis.title.y = element_markdown())
-
-```
-
-The next model includes all available data and imputes missing data. Imputation is done for both missing pre- and post-intervention observations. The pre-intervention imputation is done using a separate multivariate-normal model, defined as.
+The third (model S3, `models/s3.stan`) includes all available data for one time-point, and imputes missing data. Imputation is done for both missing pre- and post-intervention observations. The pre-intervention imputation is done using a separate multivariate-normal model, defined as:
 
 $$
 \begin{align}
@@ -975,13 +904,14 @@ y_{\text{pre},p}^{\text{all}} &\sim \operatorname{MVNormal}(\mu_{\text{pre},p},\
 y_{\text{pre},\text{type},p}^{\text{all}} &=
 \begin{cases} 
 y_{\text{pre},\text{type},p}^{\text{obs}} & \text{if observed}  \\
-y_{\text{pre},\text{type},p}^{\text{mis}} & \text{if missing}
+y_{\text{pre},\text{type},p}^{\text{miss}} & \text{if missing}
 \end{cases} \\
-y_{\text{pre},\text{type},p}^{\text{obs}} &\sim \operatorname{Normal}(0,2) \\
+y_{\text{pre},\text{type},p}^{\text{miss}} &\sim \operatorname{Normal}(0,2) \\
 \end{align}
 $$
+Where missing values are treated as parameters and given a vague prior (Normal(0,2)) under prior-only sampling to make sampling more efficient. 
 
-The main model uses the $y_{\text{pre},p}^{\text{all}}$ as a covariate in the linear predictor. 
+The main model uses the $y_{\text{pre},p}^{\text{all}}$ as a covariate in the linear predictor. Again, missing values in the outcome are treated as parameters. The prior for missing observation is only included in prior predictive simulations.  
 
 $$
 \begin{align}
@@ -993,7 +923,7 @@ y_{p, \text{type}}^{\text{all}} &=
 y_{p, \text{type}}^{\text{obs}} & \text{if observed}  \\
 y_{p, \text{type}}^{\text{mis}} & \text{if missing}
 \end{cases} \\
-y_{\text{type},p}^{\text{obs}} &\sim \operatorname{Normal}(0,2) \\
+y_{\text{type},p}^{\text{miss}} &\sim \operatorname{Normal}(0,2) \\
 \text{Using imputed pre in the linear model} \\
 \text{pre}_{p,\text{type}} &= y_{\text{pre},p, \text{type}}^{\text{all}} \\
 \mu_{p,\text{type}} &= \alpha_{\text{type,TX}} + \beta_{\text{type}} \times \text{pre}_{p,\text{type}} \\
@@ -1018,1106 +948,814 @@ R &=   \begin{bmatrix}
 \end{align}
 $$
 
+Model S4 (`models/s4.stan`) adds sex as a covariate with the intention to improve predictions. The relevant addition to model s3 is in the linear predictor:
+
+$$
+\begin{align}
+\mu_{p,\text{type}} &= \alpha_{\text{type,TX}} + \beta_{\text{type}} \times \text{pre}_{p,\text{type}} + \beta_{\text{sex}} \times \text{sex}_p \\
+\beta_{\text{sex}} &\sim \operatorname{Normal}(0, 0.5) \\
+\end{align}
+$$
+
+The $\text{sex}_p$ variable is created as $\text{male} = -0.5$ and $\text{female} = 0.5$ which gives that the prior for $\beta_{\text{sex}}$ expects that most of the difference between males and females in post-intervention scores is within &pm; 1 SD. 
+
+Model S5 (`models/s5.stan`) and S6 (`models/s6.stan`) further extends previous models by including both post-intervention time-points. In model S5 residuals are not correlated between time-points. Instead, separate covariance matrices are built for each time-point. The covariance matrices are therefore
+
+$$
+\begin{align}
+\Sigma_\text{time} &= \text{S}_\text{time} \times \text{R}_\text{time} \times \text{S}_\text{time} \\
+S_\text{time} &= 
+  \begin{bmatrix}
+  \sigma_{1\text{[time]}} &0 & .. \\
+  0 & \sigma_{2\text{[time]}} & .. \\
+  .. & .. & ..
+  \end{bmatrix} \\
+R_\text{time} &=   \begin{bmatrix}
+  1 & \rho_{12\text{[time]}} & .. \\
+  \rho_{21\text{[time]}} & 1 & .. \\
+  .. & .. & ..
+  \end{bmatrix} \\
+\sigma_{\text{type}\text{[time]}} &\sim \operatorname{Exponential}(1) \\
+\text{R}_\text{time} &\sim \operatorname{LKJcorr}(4) \\
+\end{align}
+$$
+The total number of parameters in each &Sigma; is 36 for 8 measurement types.
+
+Model 6 includes a full covariance matrix for the multivariate normal model. The total number of parameters in the matrix is 136 for 8 measurements with &sigma; indexed 1 to 16. For $S$:
+
+$$
+\begin{align}
+S &= 
+  \begin{bmatrix}
+  \sigma_{1} &0 & \cdots \\
+  0 & \cdots & \cdots \\
+  \cdots & \cdots & \sigma_{2K}
+  \end{bmatrix} \\
+\end{align}
+$$
+Finally, model S7 (`models/s7.stan`) extends model S1 by including both post-intervention time-points and missing data imputation. No correlation structures are included in the model and parameters (&sigma;, &beta; &alpha; are time- and type-specific).
 
 
 ```{r}
-#| message: false
-#| warning: false
-#| echo: false
-#| output: false
 
+# Compiling each model 
+s1 <- cmdstan_model(stan_file = "models/s1.stan", 
+                      exe_file = "models/s1.exe")
 
-## Model 3 -- Missing data included ##################
-
-dat <- d_full |> 
-  filter(time %in% c("T1", "T4")) |> 
-
-  
-  mutate(type = dense_rank(analyte), 
-         participant = dense_rank(participant), 
-         treat_seq = dense_rank(treat), 
-         miss = if_else(is.na(value_std), 0, 1), 
-         value_std = if_else(is.na(value_std), -999, value_std)) |> 
-  select(-value) |> 
-  pivot_wider(names_from = time, 
-              values_from = c(value_std, miss)) |> 
-  mutate(age = (age - mean(age)) / sd(age), 
-         sex = if_else(sex == "m", 1, 2)) |> 
-  
-  
-  
-  select(y_obs = value_std_T4, 
-         pre_obs = value_std_T1, 
-         y_miss = miss_T4, 
-         pre_miss = miss_T1, 
-         P = participant, 
-         age, 
-         sex,
-         type, 
-         treat = treat_seq, 
-         analyte) 
-
-
-
-
-d <- list(
-  N = nrow(dat), 
-  N_P = length(unique(dat$P)),
-  K = length(unique(dat$type)),
-  y_obs = dat$y_obs, 
-  pre_obs = dat$pre_obs, 
-  y_miss = dat$y_miss,
-  pre_miss = dat$pre_miss, 
-  type = dat$type, 
-  treat = dat$treat, 
-  P = dat$P, 
-  prior_only = 1
-)
-
-
+s2 <- cmdstan_model(stan_file = "models/s2.stan", 
+                      exe_file = "models/s2.exe")
 
 s3 <- cmdstan_model(stan_file = "models/s3.stan", 
                       exe_file = "models/s3.exe")
 
-fit_wrap(s3, DATA = d, fit = "fit.s3", refit = TRUE)
+s4 <- cmdstan_model(stan_file = "models/s4.stan", 
+                      exe_file = "models/s4.exe")
 
+s5 <- cmdstan_model(stan_file = "models/s5.stan", 
+                      exe_file = "models/s5.exe")
+
+s6 <- cmdstan_model(stan_file = "models/s6.stan", 
+                      exe_file = "models/s6.exe")
+
+s7 <- cmdstan_model(stan_file = "models/s7.stan", 
+                      exe_file = "models/s7.exe")
 
 ```
 
+### Prior predictive checks, preliminary models
 
-Prior predictive checks confirms the expected association between pre- and post-intervention values for two treatments and 8 score types (@ fig-s3-priorpredict). 
-
+Prior predictive checks are performed for each model to confirm expected relationships between the pre-intervention covariate (@fig-s1-4-priorpred and @fig-s5-7-priorpred), and prior expectations of treatment means (@fig-s1-7-priorpred-treatmeans). 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 12
-#| fig-cap: "Prior predictive check of Model s3."
-#| echo: false
-#| label: fig-s3-priorpredict
-#| message: false
-#| warning: false
+# prep data sets (from synthetic data)
+ds_cc_single <- d$dl_compl_single # Complete case, single time point
+ds_miss_single <- d$dl_itt_single # Missing data, single time point
+ds_miss <- d$dl_itt # Missing data, both time points
+
+refit.models <- FALSE # Should fit_wrap refit models.
+# 
+fit_wrap(s1, DATA = ds_cc_single, fit = "fit.s1")
+fit_wrap(s2, DATA = ds_cc_single, fit = "fit.s2")
+fit_wrap(s3, DATA = ds_miss_single, fit = "fit.s3")
+fit_wrap(s4, DATA = ds_miss_single, fit = "fit.s4")
+
+fit_wrap(s5, DATA = ds_miss, fit = "fit.s5")
+fit_wrap(s6, DATA = ds_miss, fit = "fit.s6")
+fit_wrap(s7, DATA = ds_miss, fit = "fit.s7")
 
 
 
+# Extract draws 
+draws.s1 <- fit.s1$draws(format="df") 
+draws.s2 <- fit.s2$draws(format="df") 
+draws.s3 <- fit.s3$draws(format="df") 
 
-draws.s3 <- fit.s3$draws(format = "df")
+draws.s4 <- fit.s4$draws(format="df") 
 
 
+draws.s5 <- fit.s5$draws(format="df") 
+draws.s6 <- fit.s6$draws(format="df") 
+draws.s7 <- fit.s7$draws(format="df") 
 
-draws.s3 |> 
-  filter(.chain == 1, 
-         .iteration %in% 1:1000) |> 
-  select(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-  pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
 
-  mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
+# Plot prior/posterior predictions
+#
+# Draws are organized so that pre- to post-treatment associations are shown. 
+# 
+# fit_type, type 1 is models s1-s4, type 2 is models s5-s6 and type 3 is s7. 
+# iter, what draws should be used for plotting predictions?
+pred_fig_1 <- function(draws, fit_type = 1, iter = 1:50) {
+  
+  if(fit_type == 1) {
+  
+  p1 <- bind_rows(
+  # Alpha 
+   draws |> 
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "type", "treat")), 
+  
+  # Beta
+  draws |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), .iteration) |> 
+  pivot_longer(cols = starts_with("beta")) |> 
+  filter(!(grepl("beta_sex", name))) |> 
+    
+  separate(name, into = c("param", "type")) |> 
+    filter(param == "beta") |> 
+  expand_grid(treat = c("1","2"))) |> 
+  
+  filter(.iteration %in% iter) |> 
+ 
 
-  pivot_wider(names_from = parameter, 
+  pivot_wider(names_from = param, 
               values_from = value) |> 
-  expand_grid(pre = seq(from = -2, to = 2, by = 0.4)) |> 
-  
-  rowwise() |> 
-  
-  mutate(placebo = rnorm(1, alpha1 + beta * pre, sigma), 
-         omega = rnorm(1,   alpha2 + beta * pre, sigma)) |> 
-  
-  pivot_longer(cols = placebo:omega, 
-               names_to = "treat") |> 
 
-  summarise(.by = c(pre, treat, type), 
-            m = mean(value), 
-            lwr = quantile(value, 0.05), 
-            upr = quantile(value, 0.95)) |> 
+  expand_grid(x = seq(from = -3, to = 3, by = 3)) |> 
   
-  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
-  
-  
-  ggplot(aes(pre, m, ymin = lwr, ymax = upr)) + 
+  mutate(y = alpha + beta * x)  |> 
+
+  ggplot(aes(x, y, 
+             color = treat,
+             group = paste(.iteration, treat))) +
   geom_line() + 
-  geom_ribbon(alpha = 0.2) +
-  facet_grid(type ~ treat) +
-  scale_x_continuous(limits = c(-2,2)) + 
-
-  labs(y = "Prior predictive mean (90% PI)", 
-       x = "Pre-intervention scores") +
-  alpha_theme()
-
-
-```
-
-
-
-```{r}
-#| message: false
-#| warning: false
-#| echo: false
-#| output: false
-
-
-
-# Full posterior s3 ######################################################
-
-d$prior_only <- 0
-
-fit_wrap(s3, DATA = d, fit = "fit.s3p")
-
-draws.s3 <- fit.s3p$draws(format = "df")
-
-```
-
-
-Sampling from the full posterior indicated good effective sample sizes and R-hat values (@fig-s3-modelperformance). Posterior predictions also indicated resonable agreement between observed data and model predictions (@fig-s3-posteriorpredict and @fig-s3-posteriorpredict2).   
-
-
-```{r}
-#| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Model performance metrics from Model s3."
-#| echo: false
-#| label: fig-s3-modelperformance
-#| message: false
-#| warning: false
-#| output: false
-
-
-
-# Model performance
-s3_sum <- fit.s3p$summary(c("alpha","beta", "sigma"))
-
-# No problematic imputed
-# s3_sum_imp <- fit.s3p$summary(c("pre_impute", "y_impute"))
-
-
-# Get (most) problematic parameters
-vars <- s3_sum |> 
-  arrange(-rhat) |> 
-   filter(grepl(paste(
-    c("alpha","beta", "sigma"), collapse = "|"), 
-               variable)) |> 
-  slice_head(n = 3) |> 
-  pull(variable)
-
-
-
-p1 <- s3_sum |> 
-  filter(grepl(paste(
-    c("alpha","beta", "sigma"), collapse = "|"), 
-               variable)) |> 
-  mutate(variable_type = variable) |> 
-  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+  facet_wrap(~ type, 
+             ncol = 1, 
+             labeller = label_both) +
+  alpha_theme() + 
+   scale_color_manual(values = colscale)
+   
+    
+  }
   
-  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
-  
-  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
-  geom_point() + 
-  
-  geom_text_repel(aes(label = highlight, 
-                color = NULL, 
-                size = NULL), 
-                show.legend = FALSE) +
-  
-  labs(x = "(Bulk) effective sample size", 
-       y = "R-hat", 
-       color = "Parameter type", 
-       size = "(Tail) effective sample size") +
-  scale_color_manual(values = colscale)
-
-
-
-
-draws.s3 <- fit.s3p$draws(format = "df")
-
-
-p2  <- draws.s3 |> 
-  select(.iteration, .chain, all_of(vars)) |> 
-  pivot_longer(cols = all_of(vars)) |> 
-  ggplot(aes(.iteration, value, 
-             color = as.factor(.chain))) + 
-  geom_line(alpha = 0.5) + 
-  facet_wrap(~ name, ncol = 1, 
-             scales = "free_y") + 
-  scale_color_manual(values = colscale) + 
-  labs(x = "Iteration", 
-       color = "Chain", 
-       y = "Parameter value")
-
-
-
-p1 / p2
-
-
-```
-
-
-```{r}
-#| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Posterior predictive check of Model s3 using data from T4."
-#| echo: false
-#| label: fig-s3-posteriorpredict
-#| message: false
-#| warning: false
-
-
-
-draws.s3 |> 
-
-  select(starts_with("y_rep"), .chain, .draw) |> 
-  pivot_longer(cols = starts_with("y_rep")) |> 
-  filter(.chain == 1, .draw %in% 1:50) |> 
-  
-  mutate(type = rep(d$type, 50), 
-         treat = rep(d$treat, 50), 
-         treat = if_else(treat == 1, "Placebo", "N-3")) |> 
-  
-  
-  inner_join(dat |> 
-  distinct(type, analyte)) |> 
-
-  ggplot(aes(value, group = paste(.draw,treat), 
-             color = as.factor(treat))) + 
-  geom_line(stat = "density", 
-            aes(), 
-            alpha = 0.2)  +
-  geom_line(stat = "density", 
-            # Sort data category for treat
-            data = data.frame(y = d$y_obs, 
-                              type = d$type, 
-                              treat = d$treat) |> 
-              mutate(treat = if_else(treat == 1, "Placebo", "N-3")) |> 
-              filter(y > -900), 
-            
-               aes(y, group = treat, color = as.factor(treat)), 
-            linewidth = 1.5)  +
-  facet_wrap(~ analyte + treat) + 
-  alpha_theme(yaxis = FALSE) + 
-  labs(y = "Density", 
-       x = "Predicted/Observed values", 
-       color = "Treatment") +
-  scale_color_manual(values = colscale) 
-
-
-
-```
-
-
-```{r}
-#| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Fitted vs. residual model s3."
-#| echo: false
-#| label: fig-s3-residuals
-#| message: false
-#| warning: false
-#| eval: false
-
-
-draws.s3 |>
-  filter(.chain == 1,
-         .draw %in% 1:50) |>
-  select(starts_with("y_exp"), .chain, .draw) |>
-  pivot_longer(cols = starts_with("y_exp")) |>
-  mutate(type = rep(dat$type, 50),
-         treat = rep(dat$treat, 50),
-         P = rep(dat$P, 50),
-         y_obs = rep(dat$y_obs, 50),
-         pre_obs = rep(dat$pre_obs, 50)) |>
-  summarise(.by = name,
-            resid = mean(y_obs - value),
-            resid.lwr = quantile(y_obs - value, 0.05),
-            resid.upr = quantile(y_obs - value, 0.95),
-            m = mean(value),
-            lwr = quantile(value, 0.05),
-            upr = quantile(value, 0.95)) |>
-  mutate(type = dat$type,
-         treat = dat$treat,
-         P = dat$P,
-         y_obs = dat$y_obs,
-         pre_obs = dat$pre_obs) |>
-  filter(y_obs > -900) |>
-  ggplot(aes(m, resid, ymin = resid.lwr, ymax = resid.upr)) +
-  geom_pointrange() +
-  facet_wrap(~ type)
-
-
-```
-
-
-```{r}
-#| fig-width: 6
-#| fig-height: 12
-#| fig-cap: "Posterior predictive check of Model s3 using data from T4."
-#| echo: false
-#| label: fig-s3-posteriorpredict2
-#| message: false
-#| warning: false
-
-
-dat_plot <- data.frame(
-  treat = d$treat, 
-  pre = d$pre_obs, 
-  y = d$y_obs, 
-  type = d$type) |> 
-  mutate(treat = factor(treat, levels = c("1", "2"), 
-                        labels = c("Placebo", "N-3"))) |> 
-  filter(y > -900, 
-         pre > -900) 
-  
-
-draws.s3 |> 
+    if(fit_type == 2) {
+      
+       p1 <-  bind_rows(
+  # Alpha 
+   draws |> 
   filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "time", "type", "treat")), 
   
-  filter(.iteration %in% 1:200) |> 
+  # Beta
+  draws |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), .iteration) |> 
+  pivot_longer(cols = starts_with("beta")) |>
+  filter(!(grepl("beta_sex", name))) |> 
+  separate(name, into = c("param", "type")) |> 
+  expand_grid(treat = c("1","2")) |> 
+  expand_grid(time = c("1", "2")))   |> 
+         
   
-  select(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-  pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
+  filter(.iteration %in% iter) |> 
 
-  mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-  pivot_wider(names_from = parameter, 
+  pivot_wider(names_from = param, 
               values_from = value) |> 
-  expand_grid(pre = seq(from = -2, to = 2, by = 0.1)) |> 
   
-  rowwise() |> 
+  expand_grid(x = seq(from = -3, to = 3, by = 3)) |> 
   
-  mutate(placebo_pred = rnorm(1, alpha1 + beta * pre, sigma), 
-         omega_pred = rnorm(1,   alpha2 + beta * pre, sigma), 
-         placebo_mu = alpha1 + beta * pre, 
-         omega_mu = alpha2 + beta * pre) |> 
+  mutate(y = alpha + beta * x)  |> 
+
+  ggplot(aes(x, y, 
+             color = treat,
+             group = paste(.iteration, treat))) +
+  geom_line() + 
+  facet_wrap(~ type + time, 
+             ncol = 2, 
+             labeller = label_both) +
+  alpha_theme() + 
+   scale_color_manual(values = colscale)
+      
+    }
+  
+  if(fit_type == 3) {
+      
+       p1 <-  bind_rows(
+  # Alpha 
+   draws |> 
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "time", "type", "treat")), 
+  
+  # Beta
+  draws |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), .iteration) |> 
+  pivot_longer(cols = starts_with("beta")) |>
+  filter(!(grepl("beta_sex", name))) |> 
+  separate(name, into = c("param", "type", "time")) |> 
+  expand_grid(treat = c("1","2")))   |> 
+         
+  
+  filter(.iteration %in% iter) |> 
+
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  
+  expand_grid(x = seq(from = -3, to = 3, by = 3)) |> 
+  
+  mutate(y = alpha + beta * x)  |> 
+
+  ggplot(aes(x, y, 
+             color = treat,
+             group = paste(.iteration, treat))) +
+  geom_line() + 
+  facet_wrap(~ type + time, 
+             ncol = 2, 
+             labeller = label_both) +
+  alpha_theme() + 
+   scale_color_manual(values = colscale)
+      
+    }
+  return(p1)
+  
+}
+
+
+
+
+
+# Extract data for plotting/analyzing group-wise comparisons per type.
+#
+# 
+#
+pred_dat_1 <- function(draws, fit_type = 1, chains = c(1)) {
+
+    if(fit_type == 1) {
+   dat <-  draws |> 
+     filter(.chain %in% chains) |> 
+    select(.iteration, .chain, starts_with("alpha")) |> 
+    pivot_longer(cols = starts_with("alpha")) |> 
+    separate(name, into = c("parameter", "type", "treat")) |> 
+    mutate(time = "1") |> 
+    select(.iteration, .chain, parameter, type, time, treat, value) |> 
+    mutate(treat = paste0("treat", treat)) |> 
+      pivot_wider(names_from = treat, values_from = value)
+    
+
+  }
+  
+  if(fit_type == 2) {
+    dat <- draws |> 
+      filter(.chain %in% chains) |> 
+    select(.iteration, .chain, starts_with("alpha")) |> 
+    pivot_longer(cols = starts_with("alpha")) |> 
+    separate(name, into = c("parameter", "time", "type", "treat")) |> 
+
+    select(.iteration, .chain, parameter, type, time, treat, value) |> 
+    mutate(treat = paste0("treat", treat)) |> 
+      pivot_wider(names_from = treat, values_from = value)
+    
+    }
+  return(dat)
+  
+}
+
+
+```
+
+
+
+```{r}
+#| label: fig-s1-4-priorpred
+#| fig-cap: "Prior predictive check of pre- to post-intervention associations in model S1-S4. "
+#| fig-width: 8
+#| fig-height: 12
+
+
+
+p1 <- pred_fig_1(draws.s1, fit_type = 1) + 
+  theme(axis.title.x = element_blank(), 
+        legend.position = "none")  +
+  labs(subtitle = "Model S1")
+  
+  
+p2 <- pred_fig_1(draws.s2, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") +
+  labs(subtitle = "Model S2")
+p3 <- pred_fig_1(draws.s3, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") +
+  labs(subtitle = "Model S3")
+p4 <- pred_fig_1(draws.s4, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") +
+  labs(subtitle = "Model S4")
+
+
+
+p1|p2|p3|p4
+ 
+ 
+  
+
+```
+
+
+```{r}
+#| label: fig-s5-7-priorpred
+#| fig-cap: "Prior predictive check of pre- to post-intervention associations in model S5-S7. "
+#| fig-width: 8
+#| fig-height: 12
+
+p5 <- pred_fig_1(draws.s5, fit_type = 2) + 
+  theme(axis.title.x = element_blank(), 
+        legend.position = "none") + labs(title = "Model S5")
+  
+  
+p6 <- pred_fig_1(draws.s6, fit_type = 2)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") + labs(title = "Model S6")
+p7 <- pred_fig_1(draws.s7, fit_type = 3)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") + labs(title = "Model S7")
+
+
+
+p5|p6|p7
  
 
-  pivot_longer(cols = placebo_pred:omega_mu, 
-               names_to = "treat") |> 
-  separate(treat, into = c("treat", "pred")) |> 
 
-  summarise(.by = c(pre, treat, type, pred), 
-            m = mean(value), 
-            lwr = quantile(value, 0.05), 
-            upr = quantile(value, 0.95)) |> 
-
-  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
- 
-  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
-             group = pred)) + 
-  
-  
-  geom_point(data = dat_plot, 
-             aes(pre, y, 
-                 ymin = NULL, 
-                 ymax = NULL, 
-                 group = NULL), 
-             alpha = 0.2) +
-  
-  geom_ribbon(alpha = 0.4) +
-  facet_grid(type ~ treat) +
-  labs(y = "Posterior predictive mean (90% PI prediction and &mu; interval)", 
-       x = "Pre-intervention scores") +
-  theme(axis.title.y = element_markdown())
 ```
 
 
-
 ```{r}
-#| eval: false
-#| echo: false
-# These are residual correlations. 
-
-# Correlations among residuals supports the use of the imputation model
-
-bind_rows(
-  
-  draws.s3 |> 
-  filter(.chain == 1) |> 
-   select(starts_with("Omega_"), .chain, .draw) |> 
-  
-  pivot_longer(cols = starts_with("Omega")) |>  
-  
-  mutate(name = gsub("_pre", "", name)) |> 
-  
-  separate(name, into = c("param", "typex", "typey")) |> 
-  
-  mutate(time = "pre"), 
-  
-  draws.s3 |> 
-  filter(.chain == 1) |> 
-   select(starts_with("Omega["), .chain, .draw) |> 
-  
-  pivot_longer(cols = starts_with("Omega")) |>  
-
-  separate(name, into = c("param", "typex", "typey")) |> 
-  
-  mutate(time = "post")) |> 
-  
-  ggplot(aes(value, color = time)) + geom_density() + 
-  facet_grid(typey ~ typex)
-  
-  
+#| label: fig-s1-7-priorpred-treatmeans
+#| fig-cap: "Prior predictive distributions of treatment means in models S1-S7."
+#| fig-width: 8
+#| fig-height: 12
 
 
 
 bind_rows(
+  pred_dat_1(draws.s1, fit_type = 1) |> 
+    mutate(model = "s1"), 
+  pred_dat_1(draws.s2, fit_type = 1) |> 
+    mutate(model = "s2"),
+  pred_dat_1(draws.s3, fit_type = 1) |> 
+    mutate(model = "s3"),
+  pred_dat_1(draws.s4, fit_type = 1) |> 
+    mutate(model = "s4"),
+  pred_dat_1(draws.s5, fit_type = 2) |> 
+    mutate(model = "s5"),
+  pred_dat_1(draws.s6, fit_type = 2) |> 
+    mutate(model = "s6"),
+  pred_dat_1(draws.s7, fit_type = 2) |> 
+    mutate(model = "s7") ) |> 
+  pivot_longer(cols = treat1:treat2) |> 
   
-  draws.s3 |> 
-  filter(.chain == 1) |> 
-   select(starts_with("Omega_"), .chain, .draw) |> 
-  
-  pivot_longer(cols = starts_with("Omega")) |>  
-  
-  mutate(name = gsub("_pre", "", name)) |> 
-  
-  separate(name, into = c("param", "typex", "typey")) |> 
-  
-  mutate(time = "pre"), 
-  
-  draws.s3 |> 
-  filter(.chain == 1) |> 
-   select(starts_with("Omega["), .chain, .draw) |> 
-  
-  pivot_longer(cols = starts_with("Omega")) |>  
+  ggplot(aes(name, value, fill = model)) + geom_boxplot() + 
+  facet_wrap(~type + time, labeller = label_both) + 
+  alpha_theme() + 
+  scale_fill_manual(values = colscale) + 
+  labs(x = "Treatment", 
+       y = "Prior predictive means")
 
-  separate(name, into = c("param", "typex", "typey")) |> 
-  
-  mutate(time = "post")) |> 
-  
-  mutate(cor = paste(typex, typey, sep = ",")) |> 
-  summarise(.by = c(cor, time),
-            m = mean(value), 
-            lwr = quantile(value, 0.05), 
-            upr = quantile(value, 0.95)) |> 
-  filter(m != 1) |> 
-  arrange(m)
+
+
+
+
 ```
 
 
 ```{r}
-#| eval: false
-#| echo: false
+#| label: clean-up-s1-s7-synth-prior
 
-d_full |> 
-  distinct(analyte) |> 
-  mutate(typex = dense_rank(analyte), 
-         typey = dense_rank(analyte))
+# To save some space, clean up environment here
+fits <- paste0("fit.s", 1:7)
+draws <- paste0("draws.s", 1:7)
+plots <- paste0("p", 1:7)
 
-
-draws.s3 |> 
-  filter(.chain == 1, 
-         .draw %in% 1:50) |> 
-  select(starts_with("y_exp"), .chain, .draw) |> 
-  pivot_longer(cols = starts_with("y_exp")) |> 
-  
-  summarise(.by = name, 
-            m = mean(value), 
-            lwr = quantile(value, 0.05), 
-            upr = quantile(value, 0.95)) |> 
-  mutate(type = dat$type, 
-         treat = dat$treat, 
-         P = dat$P, 
-         y_obs = dat$y_obs, 
-         pre_obs = dat$pre_obs) |> 
-  
-  filter(y_obs > -900) |> 
-
-  ggplot(aes(y_obs, m)) +
-  geom_pointrange(aes(ymin = lwr, ymax = upr)) +
-  facet_wrap(~ type)
-  
+rm(list = c(fits, draws, plots)); gc()
 
 ```
 
 
 
 
+
+
 ```{r}
-#| eval: false
-#| echo: false
-#| message: false
-#| warning: false
+#| label: synthetic-data1
 
 
+set.seed(1)
 
-## Model 4 --- Including Sex for predictions ####
+  N <- 148 # Number of participants
+  K <- 8 # number of measurement types
 
-d <- list(
-  N = nrow(dat), 
-  N_P = length(unique(dat$P)),
-  K = length(unique(dat$type)),
-  y_obs = dat$y_obs, 
-  pre_obs = dat$pre_obs, 
-  y_miss = dat$y_miss,
-  pre_miss = dat$pre_miss, 
-  type = dat$type, 
-  treat = dat$treat, 
-  P = dat$P, 
-  prior_only = 1,
-  # Adding age and sex to data structure
-  age = dat$age, 
-  sex = dat$sex - 1.5 # Making this 
+  # The formula for the pre-intervention variables
+  form_pre <- ~ 1 +  age + sex
+
+  # beta_pre is a p * K matrix of parameter (p in 1 to P)
+  # values for each type (k in 1:K).
+  # fmt: skip
+  betas_pre <- matrix(
+  c(rep(0, K), # intercepts
+    0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,  # age
+    0, 0, 0, 0, 0, 0, 0, 0  # sex
+  ),
+  nrow = 3,
+  ncol = K,
+  byrow = TRUE
 )
+
+  # The same formula for both time-points
+  form_main <- ~  pre + group + sex
+
+  # betas matrix are p * K
+  # fmt: skip
+  betas_t1 <- matrix(
+  c(rep(0, K), # intercepts
+    0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95,  # pre_k effect 
+    0.5, -0.5, 0, 0, 0, 0, 0.5, -0.5, # group
+    0, 0, 0, 0, 0, 0, 0, 0  # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  # fmt: skip
+  betas_t2 <-  matrix(
+  c(rep(0, K), # intercepts
+    0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95,  # pre_k effect 
+     0.5, -0.5, 0, 0, 0, 0, 0.5, -0.5, # group
+    0, 0, 0, 0, 0, 0, 0, 0  # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  
+  
+  # Predictor variables, used in *all* sims
+  preds_all <- data.frame(
+    group = rep(c(0, 1), each = N / 2),
+    sex = rep(c(0, 1),  N/2 ),
+    age = c(runif(N/2, -1.5, 1.5), rnorm(N/2))
+  )
+
+  # Vector of correlations (upper triangle, fill by column) for the pre int
+  # values. For a K = 8 matrix, this should be (K * K - K) / 2 = 
+  # (8 * 8 - 8) / 2
+  c1 <- c(
+    # E.g., type 1 correlation with type 2 = r12
+    0,   # r12
+    0.4,   # r13
+    0,   # r23
+    0,     # r14
+    0.4,     # r24
+    0,     # r34
+    0.4,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0.4,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0,     # r37
+    0,     # r47
+    0.2,     # r57
+    0,     # r67
+    0,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0.2,     # r68
+    0      # r78
+  )
+
+  # A list of two (per time-point) residual correlations
+  # (upper triangle, fill by row)
+  c2 <- list(
+    c(
+    # E.g., type 1 correlation with type 2 = r12
+    0,     # r12
+    0,     # r13
+    0,     # r23
+    0,     # r14
+    0,     # r24
+    0,     # r34
+    0,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0,     # r37
+    0,     # r47
+    0,     # r57
+    0,     # r67
+    0,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0,     # r68
+    0      # r78
+  ),
+    c(
+    # E.g., type 1 correlation with type 2 = r12
+    0,     # r12
+    0,     # r13
+    0,     # r23
+    0,     # r14
+    0,     # r24
+    0,     # r34
+    0,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0,     # r37
+    0,     # r47
+    0,     # r57
+    0,     # r67
+    0,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0,     # r68
+    0      # r78
+  )
+  )
+
+  # Pre intervention SD's per type (length K)
+  s1 <- rep(1, K)
+  # Residual SD per type in each time point
+  s2 <- list(
+    c(0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2),
+    c(0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2)
+  )
+  # Between time-point (residual) correlations within each type (length K)
+  c_cross <- c(rep(0.7, K))
+
+  # missing_form_t2,  formula specifying the predictor for missing values at t2
+  miss_t2 <- ~ 1 + age
+  miss_t4 <- ~ 1 + age
+
+  # Parameter values for the form complete missingness
+  miss_beta_t2 <- c(-2.5, -0.5)
+  miss_beta_t4 <- c(-2.5, -0.5)
+
+  # Random missing proportion
+  miss_prop_pre <- 0.02 # e.g., 2% missing of all rows
+  miss_prop_y <- 0.05 # e.g., 5% miss of all rows post-int
+
+
+  simout <- sim_type(
+    
+    n = N,
+    K = K,
+
+    form_pre = form_pre,
+    betas_pre = betas_pre,
+
+    form = form_main,
+    preds = preds_all,
+    betas = list(betas_t1, betas_t2),
+    C1 = c1,
+    S1 = s1,
+    C2 = c2,
+    S2 = s2,
+    C_cross = c_cross,
+    missing_form_t2 = miss_t2,
+    missing_form_t4 = miss_t4,
+    missing_beta_t2 = miss_beta_t2,
+    missing_beta_t4 = miss_beta_t4,
+    missing_pre_prop = miss_prop_pre,
+    missing_y_prop = miss_prop_y,
+    verbose = FALSE
+  )
+
+
+  d1 <- struct_sim(simout$miss, verbose = FALSE)
+  
+
+  
+```
+
+
+
+
+```{r}
+
+# (re)-Compiling each model (due to naming issues)
+s1 <- cmdstan_model(stan_file = "models/s1.stan", 
+                      exe_file = "models/s1.exe")
+
+s2 <- cmdstan_model(stan_file = "models/s2.stan", 
+                      exe_file = "models/s2.exe")
+
+s3 <- cmdstan_model(stan_file = "models/s3.stan", 
+                      exe_file = "models/s3.exe")
 
 s4 <- cmdstan_model(stan_file = "models/s4.stan", 
                       exe_file = "models/s4.exe")
 
-fit_wrap(s4, DATA = d, fit = "fit.s4")
+s5 <- cmdstan_model(stan_file = "models/s5.stan", 
+                      exe_file = "models/s5.exe")
 
+s6 <- cmdstan_model(stan_file = "models/s6.stan", 
+                      exe_file = "models/s6.exe")
+
+s7 <- cmdstan_model(stan_file = "models/s7.stan", 
+                      exe_file = "models/s7.exe")
 
 ```
 
 
+The prior predictive checks confirm working and comparable models. A further check of model performance is done using synthetic data. We assess if we can recover simulated effects in the model estimates, we also assess the models effects of the prior on "reversed" effects, i.e. effect of opposite direction in the two groups.
+
+Here, a simulated data set is constructed where we fix the relationship between pre- and post-intervention values ($\beta_{pre} = 0.95$), residual variation is set to 0.2 and effect sizes of treatment effects are set to -0.5 in type 1 and 7, 0.5 in type 2 and 8, and 0 in all other types. The model capture these effects and this preliminary check does not suggest preference for one treatment over the other (@fig-s1-synth).  
+
+
 ```{r}
-#| fig-width: 6
+ds_cc_single <- d1$dl_compl_single # Complete case, single time point
+ds_miss_single <- d1$dl_itt_single # Missing data, single time point
+ds_miss <- d1$dl_itt # Missing data, both time points
+
+ds_cc_single$prior_only <- 0
+ds_miss_single$prior_only <- 0
+ds_miss$prior_only <- 0
+
+
+refit.models <- FALSE # Should fit_wrap refit models.
+# 
+fit_wrap(s1, DATA = ds_cc_single, fit = "fit.synth.s1")
+fit_wrap(s2, DATA = ds_cc_single, fit = "fit.synth.s2")
+fit_wrap(s3, DATA = ds_miss_single, fit = "fit.synth.s3")
+fit_wrap(s4, DATA = ds_miss_single, fit = "fit.synth.s4")
+
+fit_wrap(s5, DATA = ds_miss, fit = "fit.synth.s5")
+fit_wrap(s6, DATA = ds_miss, fit = "fit.synth.s6")
+fit_wrap(s7, DATA = ds_miss, fit = "fit.synth.s7")
+
+
+
+# Extract draws 
+draws.s1 <- fit.synth.s1$draws(format="df") 
+draws.s2 <- fit.synth.s2$draws(format="df") 
+draws.s3 <- fit.synth.s3$draws(format="df") 
+
+draws.s4 <- fit.synth.s4$draws(format="df") 
+
+
+draws.s5 <- fit.synth.s5$draws(format="df") 
+draws.s6 <- fit.synth.s6$draws(format="df") 
+draws.s7 <- fit.synth.s7$draws(format="df")
+```
+
+
+```{r}
+#| label: fig-s1-4-postpred-synth
+#| fig-cap: "Posterior predictive check of pre- to post-intervention associations in model S1-S4 on synthetic data. "
+#| fig-width: 8
 #| fig-height: 12
-#| fig-cap: "Prior predictive check of Model s4."
-#| echo: false
-#| label: fig-s4-priorpredict
-#| message: false
-#| warning: false
 
 
 
-
-draws.s4 <- fit.s4$draws(format = "df")
-
-
-
-draws.s4 |> 
-  filter(.chain == 1, 
-         .iteration %in% 1:1000) |> 
-  select(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-  pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-
-  mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-  pivot_wider(names_from = parameter, 
-              values_from = value) |> 
-  expand_grid(pre = seq(from = -2, to = 2, by = 0.4)) |> 
+p1 <- pred_fig_1(draws.s1, fit_type = 1) + 
+  theme(axis.title.x = element_blank(), 
+        legend.position = "none") + 
+  labs(subtitle = "Model S1")
   
-  rowwise() |> 
-  
-  mutate(male_placebo = rnorm(1, alpha1 + beta * pre + beta_sex * -0.5, sigma), 
-         male_omega = rnorm(1,   alpha2 + beta * pre + beta_sex * -0.5, sigma), 
-         female_placebo = rnorm(1, alpha1 + beta * pre + beta_sex * 0.5, sigma), 
-         female_omega = rnorm(1,   alpha2 + beta * pre + beta_sex * 0.5, sigma)
-         
-         ) |> 
-  
-  pivot_longer(cols = male_placebo:female_omega, 
-               names_to = "treat") |> 
-  separate(treat, into = c("sex", "treat")) |> 
+p2 <- pred_fig_1(draws.s2, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none")+ 
+  labs(subtitle = "Model S2")
+p3 <- pred_fig_1(draws.s3, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none")+ 
+  labs(subtitle = "Model S3")
+p4 <- pred_fig_1(draws.s4, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none")+ 
+  labs(subtitle = "Model S4")
 
 
-  summarise(.by = c(pre, sex,treat, type), 
-            m = mean(value), 
-            lwr = quantile(value, 0.05), 
-            upr = quantile(value, 0.95)) |> 
 
-  mutate(treat = factor(treat, levels = c("placebo", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
-  
-  
-  ggplot(aes(pre, m, ymin = lwr, ymax = upr)) + 
-  geom_line() + 
-  geom_ribbon(alpha = 0.2) +
-  facet_grid(type ~ treat + sex) +
-  scale_x_continuous(limits = c(-2,2)) + 
+p1|p2|p3|p4
 
-  labs(y = "Prior predictive mean (90% PI)", 
-       x = "Pre-intervention scores") +
-  alpha_theme()
-
-
-```
-
-
-Prior predictive checks confirmed that the model now predicts for males and females over all type and treatment combinations (@fig-s4-priorpredict). Posterior model performance was satisfactory (@fig-s4-modelperformance), and similar to model s3, the posterior predictions are OK (@fig-s4-posteriorpredict).  
-
-
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-
-
-d$prior_only <- 0
-fit_wrap(s4, DATA = d, fit = "fit.s4p", refit = TRUE)
-
+ 
 ```
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Model performance metrics from Model s4."
-#| echo: false
-#| label: fig-s4-modelperformance
-#| message: false
-#| warning: false
-#| output: false
+#| label: fig-s5-7-priorpred-synth
+#| fig-cap: "Prior predictive check of pre- to post-intervention associations in model S5-S7. "
+#| fig-width: 8
+#| fig-height: 12
 
-
-
-# Model performance
-s4_sum <- fit.s4p$summary(c("alpha","beta", "sigma"))
-
-# No problematic imputed
-# s4_sum_imp <- fit.s4p$summary(c("pre_impute", "y_impute")) |> 
-#  arrange(-rhat)
-
-
-# Get (most) problematic parameters
-vars <- s4_sum |> 
-  arrange(-rhat) |> 
-   filter(grepl(paste(
-    c("alpha","beta", "sigma"), collapse = "|"), 
-               variable)) |> 
-  slice_head(n = 3) |> 
-  pull(variable)
-
-
-
-p1 <- s4_sum |> 
-  filter(grepl(paste(
-    c("alpha","beta", "sigma"), collapse = "|"), 
-               variable)) |> 
-  mutate(variable_type = variable) |> 
-  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+p5 <- pred_fig_1(draws.s5, fit_type = 2) + 
+  theme(axis.title.x = element_blank(), 
+        legend.position = "none") + labs(title = "Model S5",
+                                        y = "Post-intervention values")
   
-  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
-  
-  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
-  geom_point() + 
-  
-  geom_text_repel(aes(label = highlight, 
-                color = NULL, 
-                size = NULL), 
-                show.legend = FALSE) +
-  
-  labs(x = "(Bulk) effective sample size", 
-       y = "R-hat", 
-       color = "Parameter type", 
-       size = "(Tail) effective sample size") +
-  scale_color_manual(values = colscale)
+p6 <- pred_fig_1(draws.s6, fit_type = 2)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") + labs(title = "Model S6", 
+                                         x = "Pre-intervention values")
+p7 <- pred_fig_1(draws.s7, fit_type = 3)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") + labs(title = "Model S7", x = "")
 
 
 
-
-draws.s4 <- fit.s4p$draws(format = "df")
-
-
-p2  <- draws.s4 |> 
-  select(.iteration, .chain, all_of(vars)) |> 
-  pivot_longer(cols = all_of(vars)) |> 
-  ggplot(aes(.iteration, value, 
-             color = as.factor(.chain))) + 
-  geom_line(alpha = 0.5) + 
-  facet_wrap(~ name, ncol = 1, 
-             scales = "free_y") + 
-  scale_color_manual(values = colscale) + 
-  labs(x = "Iteration", 
-       color = "Chain", 
-       y = "Parameter value")
-
-
-
-p1 / p2
-
-
-```
-
-
-
-```{r}
-#| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Posterior predictive check of Model s4 using data from T4."
-#| echo: false
-#| label: fig-s4-posteriorpredict
-#| message: false
-#| warning: false
-
-
-
-draws.s4 |> 
-
-  select(starts_with("y_rep"), .chain, .draw) |> 
-  pivot_longer(cols = starts_with("y_rep")) |> 
-  filter(.chain == 1, .draw %in% 1:50) |> 
-  
-  mutate(type = rep(d$type, 50), 
-         treat = rep(d$treat, 50), 
-         treat = if_else(treat == 1, "Placebo", "N-3")) |> 
-  
-  
-  inner_join(dat |> 
-  distinct(type, analyte)) |> 
-
-  ggplot(aes(value, group = paste(.draw,treat), 
-             color = as.factor(treat))) + 
-  geom_line(stat = "density", 
-            aes(), 
-            alpha = 0.2)  +
-  geom_line(stat = "density", 
-            # Sort data category for treat
-            data = data.frame(y = d$y_obs, 
-                              type = d$type, 
-                              treat = d$treat) |> 
-              mutate(treat = if_else(treat == 1, "Placebo", "N-3")) |> 
-              filter(y > -900), 
-            
-               aes(y, group = treat, color = as.factor(treat)), 
-            linewidth = 1.5)  +
-  facet_wrap(~ analyte + treat) + 
-  alpha_theme(yaxis = FALSE) + 
-  labs(y = "Density", 
-       x = "Predicted/Observed values", 
-       color = "Treatment") +
-  scale_color_manual(values = colscale) 
+p5|p6|p7
+ 
 
 
 
 ```
 
 
-
 ```{r}
-#| echo: false
-#| message: false
-#| warning: false
-#| eval: false
+#| label: fig-s1-7-postpred-treatmeans-synth
+#| fig-cap: "Posterior predictive distributions of treatment means in models S1-S7. "
+#| fig-width: 8
+#| fig-height: 12
 
-
-
-## Under development -- Needs right indexing of participants...
-
-log_lik.s4 <- fit.s4p$draws("log_lik_part", format = "matrix") |> 
-  loo::loo(cores = 12)
-
-# Investigate if high pareto K comes from 
-pareto_k <- log_lik.s4$diagnostics$pareto_k
-
-dat |> 
-  arrange(P) |> 
-  
-  summarise(.by = P, 
-            miss_y = 8 - sum(y_miss), 
-            miss_pre = 8 - sum(pre_miss), 
-            sex = mean(sex)) |> 
-  
-  mutate(pareto_k = pareto_k) |> 
-  
-  ggplot(aes(miss_pre, pareto_k)) + 
-  geom_point() + 
-  geom_hline(yintercept = 0.7, lty = 2)
-  
-
-## Compare models on complete data 
-
-compl_part <- dat |> 
-  arrange(P) |> 
-  
-  summarise(.by = P, 
-            miss_y = 8 - sum(y_miss), 
-            miss_pre = 8 - sum(pre_miss), 
-            sex = mean(sex)) |> 
-  filter(miss_y == 0 ) |> 
-  pull(P)
-
-log_lik.s3 <- fit.s3$draws("log_lik_part", format = "matrix")[,compl_part] |> 
-  loo::loo(cores = 12)
-
-log_lik.s4 <- fit.s4$draws("log_lik_part", format = "matrix")[,compl_part] |> 
-  loo::loo(cores = 12)
-
-loo::loo_compare(log_lik.s3, log_lik.s4)
-
-
-```
-
-
-
-
-
-```{r}
-#| eval: false
-
-## Comparing treatments
 
 
 bind_rows(
+  pred_dat_1(draws.s1, fit_type = 1) |> 
+    mutate(model = "s1"), 
+  pred_dat_1(draws.s2, fit_type = 1) |> 
+    mutate(model = "s2"),
+  pred_dat_1(draws.s3, fit_type = 1) |> 
+    mutate(model = "s3"),
+  pred_dat_1(draws.s4, fit_type = 1) |> 
+    mutate(model = "s4"),
+  pred_dat_1(draws.s5, fit_type = 2) |> 
+    mutate(model = "s5"),
+  pred_dat_1(draws.s6, fit_type = 2) |> 
+    mutate(model = "s6"),
+  pred_dat_1(draws.s7, fit_type = 2) |> 
+    mutate(model = "s7") ) |> 
+  pivot_longer(cols = treat1:treat2) |> 
+
   
-  draws.s3 |> 
-  filter(.chain == 1 ) |> 
-  select(starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-
-    pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-    mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-  pivot_wider(names_from = parameter, 
-              values_from = value) |> 
-
-  rowwise() |> 
-  
-  mutate(placebo_pred = rnorm(1, alpha1 , sigma), 
-         omega_pred = rnorm(1,   alpha2 , sigma), 
-         placebo_mu = alpha1 , 
-         omega_mu = alpha2 ) |> 
-  ungroup() |> 
-
-  pivot_longer(cols = placebo_pred:omega_mu, 
-               names_to = "treat") |> 
-  separate(treat, into = c("treat", "pred")) |> 
-
-  summarise(.by = c(treat, type, pred), 
+  summarise(.by = c(model, type, time, name), 
             m = mean(value), 
             lwr = quantile(value, 0.05), 
             upr = quantile(value, 0.95)) |> 
   
-  filter(pred == "mu") |> 
-    mutate(model = "m3"),
   
-  draws.s4 |> 
-  filter(.chain == 1 ) |> 
-  select(starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-
-    pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-    mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-  pivot_wider(names_from = parameter, 
-              values_from = value) |> 
-
-  rowwise() |> 
-  
-  mutate(placebo_pred = rnorm(1, alpha1 , sigma), 
-         omega_pred = rnorm(1,   alpha2 , sigma), 
-         placebo_mu = alpha1 , 
-         omega_mu = alpha2 ) |> 
-  ungroup() |> 
-
-  pivot_longer(cols = placebo_pred:omega_mu, 
-               names_to = "treat") |> 
-  separate(treat, into = c("treat", "pred")) |> 
-
-  summarise(.by = c(treat, type, pred), 
-            m = mean(value), 
-            lwr = quantile(value, 0.05), 
-            upr = quantile(value, 0.95)) |> 
-  
-  filter(pred == "mu") |> 
-    mutate(model = "m4")) |> 
-
-  ggplot(aes(treat, m, color = model)) + 
-  geom_pointrange(aes(ymin = lwr, ymax = upr), 
-                  position = position_dodge(width = 0.1)) + 
-  
-  facet_wrap(~ type, ncol = 1)
-  
-## Calculate constrats
-
-
- bind_rows(
-   ## Model S1
-  draws.s1 |> 
-  select(starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-    pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-    mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-    
-    
-  pivot_wider(names_from = parameter, 
-              values_from = value)  |> 
-    
-  mutate(contrast = alpha2 - alpha1) |> 
-    select(.draw, type, contrast) |> 
-
-  summarise(.by = c(type), 
-            m = mean(contrast), 
-            lwr = quantile(contrast, 0.025), 
-            upr = quantile(contrast, 0.975)) |> 
-  mutate(model = "s1"),
-  ## Model S2
-  draws.s2 |> 
-  select(starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-    pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-    mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-    
-    
-  pivot_wider(names_from = parameter, 
-              values_from = value)  |> 
-    
-  mutate(contrast = alpha2 - alpha1) |> 
-    select(.draw, type, contrast) |> 
-
-  summarise(.by = c(type), 
-            m = mean(contrast), 
-            lwr = quantile(contrast, 0.025), 
-            upr = quantile(contrast, 0.975)) |> 
-  mutate(model = "s2"), 
-  
-  ## Model S3
-  draws.s3 |> 
-  filter(.chain == 1) |> 
-  select(starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-    pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-    mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-  pivot_wider(names_from = parameter, 
-              values_from = value) |> 
-  mutate(contrast = alpha2 - alpha1) |> 
-  select(.draw, type, contrast) |> 
-
-  summarise(.by = c(type), 
-            m = mean(contrast), 
-            lwr = quantile(contrast, 0.025), 
-            upr = quantile(contrast, 0.975)) |> 
-    mutate(model = "s3"), 
-  
-  draws.s4 |> 
-  filter(.chain == 1) |> 
-  select(starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-    pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-    mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-  pivot_wider(names_from = parameter, 
-              values_from = value) |> 
-  mutate(contrast = alpha2 - alpha1) |> 
-  select(.draw, type, contrast) |> 
-
-  summarise(.by = c(type), 
-            m = mean(contrast), 
-            lwr = quantile(contrast, 0.025), 
-            upr = quantile(contrast, 0.975)) |> 
-    mutate(model = "s4")) |> 
-  
-  ggplot(aes("Contrast", m, color = model)) + 
-  geom_pointrange(aes(ymin = lwr, ymax = upr), 
-                  position = position_dodge(width = 0.1)) + 
-  
-  facet_wrap(~ type, ncol = 2, 
-             scales = "free_y") + 
-  geom_hline(yintercept = 0, lty = 2)
-
+  ggplot(aes(name, m, color = model)) + 
+  geom_errorbar(aes(ymin = lwr, ymax = upr), 
+                position = position_dodge(width = 0.2), 
+                width = 0) +
+  geom_point(position = position_dodge(width = 0.2)) + 
+  facet_wrap(~type + time, labeller = label_both, 
+             scales = "free") +
+  alpha_theme() + 
+  scale_fill_manual(values = colscale)
 
 
 
@@ -2125,16 +1763,700 @@ bind_rows(
 ```
 
 
+```{r}
+#| label: clean-up-s1-s7-synth-post
+
+# To save some space, clean up environment here
+fits <- paste0("fit.synth.s", 1:7)
+draws <- paste0("draws.s", 1:7)
+plots <- paste0("p", 1:7)
+
+# Remove and do garbage collection...
+rm(list = c(fits, draws, plots)); gc()
+
+
+```
+
+
+
+Using the synthetic data we confirm that the incrementally developed models captures the same patterns when they use the same data. In the above test, synthetic data was generated with large effects and negligible correlation structures across measurement types. We should therefore not expect large differences between models that could potentially capture different between-measurement type correlations patterns.
+
+Based on these preliminary models, model S6 and S7 are kept for further development and evaluation. Model S6 is replaced by S8 that will also generate diagnostic criteria thresholds.
+
+To compare the multivariate normal model (S8) to non-pooled alternative (S7) we will use a more realistic simulation inducing correlations between variables. We will assume that at baseline, variables 1-3 are mostly influenced by a latent variably capturing aspects of body composition. Variables 4-6 are influenced mostly by a latent variable capturing metabolic health and variables 7 and 8 are mostly unrelated to these two latent variables. Variable 1 is negatively associated with the other variables. Implicated correlations are calculated in code below. 
 
 
 ```{r}
-#| eval: false
-#| echo: false
-#| message: false
-#| warning: false
+#| echo: true
+
+# Defining a matrix of proportions explained by factors (latent variables).
+# In the example, column 1 is "body composition" and column 2 is 
+# "metabolic health.
+Lambda <- matrix(
+  c(0.5,  0.02,
+    0.4,  0.01,   
+    0.35, 0.01, 
+    0.01, 0.4, 
+    0.02, 0.35,
+    0.03, 0.3, 
+    0.01, 0.02, 
+    0.001,0.002 
+
+    ), 
+                 ncol = 2,
+                 byrow = TRUE)
+# Approximating loadings as variance explained 
+# needs the error to be 1 - sum(loading) 
+psi <- 1 - rowSums(Lambda)
+
+# Transform from proportions to loadings
+Lambda <- sqrt(Lambda)
+
+# Change the sign for variable 1
+Lambda[1,] <- -Lambda[1,]
 
 
-## Model 5 --- Including pre time-point ##
+S <- rep(1, 8)
+
+Sigma <- build_sigma_factor(Lambda, psi, S)
+
+
+
+```
+
+
+
+```{r}
+#| label: tbl-sigma-sim2
+#| tbl-cap: "Correlations used to simulate data for 8 variable types."
+colnames(Sigma) <-  paste0("k", 1:8)
+rownames(Sigma) <-  paste0("k", 1:8)
+
+data.frame(Sigma) |> 
+  gt(rownames_to_stub = TRUE) |> 
+  fmt_number(decimals = 3)
+
+```
+
+Next, residual correlations at follow-up time-points are added. Here we'll use a separate factor loading structure that implies shared influence over four latent factors. An example of implied correlations are shown below. 
+
+```{r}
+
+# Defining a matrix of proportions explained by factors (latent variables).
+# In the example, column 1 is "body composition" and column 2 is 
+# "metabolic health.
+Lambda <- matrix(
+  c(0.3,   0.02,  0.02, 0.01,
+    0.01,  0.2,   0.01, 0.01,
+    0.01,  0.01,  0.4,  0.02,
+    0.02,  0.01,  0.01, 0.2,
+    0.8,   0.02,  0.01, 0.01,
+    0.02,  0.3,   0.01, 0.01,
+    0.01,  0.02,  0.3,  0.01,
+    0.001, 0.002, 0.01, 0.02
+
+    ), 
+                 ncol = 4,
+                 byrow = TRUE)
+# Approximating loadings as variance explained 
+# needs the error to be 1 - sum(loading) 
+psi <- 1 - rowSums(Lambda)
+
+# Transform from proportions to loadings
+Lambda <- sqrt(Lambda)
+
+# Change the sign for variable 1
+Lambda[c(1,4),] <- -Lambda[c(1,4),]
+
+
+S <- rep(1, 8)
+
+Sigma <- build_sigma_factor(Lambda, psi, S)
+
+```
+
+
+```{r}
+#| label: tbl-sigma-sim2-resid
+#| tbl-cap: "Residual correlations in follow-up used to simulate data for 8 variable types."
+colnames(Sigma) <-  paste0("k", 1:8)
+rownames(Sigma) <-  paste0("k", 1:8)
+
+data.frame(Sigma) |> 
+  gt(rownames_to_stub = TRUE) |> 
+  fmt_number(decimals = 3)
+
+```
+
+Simulating the full data set leads to synthetic data patterns presented in @fig-var-cor-synth. 
+
+```{r}
+#| label: synthetic-data2
+
+
+set.seed(1)
+
+  N <- 148 # Number of participants
+  K <- 8 # number of measurement types
+
+  # The formula for the pre-intervention variables
+  form_pre <- ~ 1 +  age + sex
+
+  # beta_pre is a p * K matrix of parameter (p in 1 to P)
+  # values for each type (k in 1:K).
+  # fmt: skip
+  betas_pre <- matrix(
+  c(rep(0, K), # intercepts
+    runif(8, -0.15, 0.15),  # age
+    0, 0, 0, 0.2, 0, -0.2, 0.15, 0.15  # sex
+  ),
+  nrow = 3,
+  ncol = K,
+  byrow = TRUE
+)
+
+  # The same formula for both time-points
+  form_main <- ~  pre + group + sex
+
+  # betas matrix are p * K
+  # fmt: skip
+  
+  beta_pre <- runif(8, 0.7, 0.95)
+  
+  betas_t1 <- matrix(
+  c(rep(0, K), # intercepts
+    beta_pre, # pre_k effect 
+    c(0.4, 0, 0, 0, 0.4, 0, 0, 0), # group
+    rep(0, 8)   # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  # fmt: skip
+  betas_t2 <-  matrix(
+  c(rep(0, K), # intercepts
+    beta_pre,  # pre_k effect 
+    c(0.2, 0.4, 0, 0, 0.4, 0.2, 0, 0),  # group
+    rep(0, 8)   # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  
+  
+  # Predictor variables, used in *all* sims
+  preds_all <- data.frame(
+    group = rep(c(0, 1), each = N / 2),
+    sex = rep(c(0, 1),  N/2 ),
+    age = c(runif(N/2, -1.5, 1.5), rnorm(N/2))
+  )
+
+  
+ 
+  # Loadings for pre-intervention loading matrix
+  # Assuming that 
+  
+  Lambda1 <- matrix(
+  c(0.7,  0.02,
+    0.5,  0.01,   
+    0.35, 0.01, 
+    0.01, 0.4, 
+    0.02, 0.35,
+    0.03, 0.3, 
+    0.01, 0.02, 
+    0.001,0.002 
+    ), 
+                 ncol = 2,
+                 byrow = TRUE)
+  
+  # Error in the factor model
+  psi1 <- 1 - rowSums(Lambda1) 
+  
+
+  
+  # Transform to loadings
+  Lambda1 <- sqrt(Lambda1)
+  # Add negative correlations
+  Lambda1[1,] <- -Lambda1[1,]
+  # Pre intervention SD's per type (length K)
+  S1 <- rep(1, K)
+  
+  
+   Lambda2a <- matrix(
+   c(0.3,   0.02,  0.02, 0.01,
+    0.01,  0.2,   0.01, 0.01,
+    0.01,  0.01,  0.4,  0.02,
+    0.02,  0.01,  0.01, 0.2,
+    0.8,   0.02,  0.01, 0.01,
+    0.02,  0.3,   0.01, 0.01,
+    0.01,  0.02,  0.3,  0.01,
+    0.001, 0.002, 0.01, 0.02
+    ), 
+                 ncol = 4,
+                 byrow = TRUE)
+  
+      Lambda2b <- matrix(
+   c(0.32,   0.01,  0.01, 0.02,
+    0.01,  0.28,   0.01, 0.02,
+    0.02,  0.02,  0.43,  0.02,
+    0.02,  0.001,  0.02, 0.2,
+    0.75,   0.02,  0.01, 0.01,
+    0.02,  0.3,   0.01, 0.01,
+    0.01,  0.02,  0.34,  0.01,
+    0.001, 0.002, 0.01, 0.02
+    ), 
+                 ncol = 4,
+                 byrow = TRUE)
+   
+
+       
+  # Error in the factor model
+  psi2a <- 1 - rowSums(Lambda2a)
+  psi2b <- 1 - rowSums(Lambda2b) 
+  
+    # Transform to loadings
+  Lambda2a <- sqrt(Lambda2a)
+  Lambda2b <- sqrt(Lambda2b)
+  
+    # Add some negative correlations
+  Lambda2a[3,] <- -Lambda2a[3,]
+  Lambda2b[3,] <- -Lambda2b[3,]
+  
+
+  # Pre intervention SD's per type (length K)
+  s2a <- rep(1, K); s2b <- rep(1, K) 
+  
+  
+  Lambda2 <- list(Lambda2a, Lambda2b)
+  psi2 <- list(psi2a, psi2b)
+  S2 <- list(s2a, s2b)
+  
+  
+  # Between time-point (residual) correlations within each type (length K)
+  c_cross <- c(0.35, 0.4, 0.3, 0.35, 0.3, 0.35, 0.35, 0.4)
+
+  # missing_form_t2,  formula specifying the predictor for missing values at t2
+  miss_t2 <- ~ 1 + age
+  miss_t4 <- ~ 1 + age
+
+  # Parameter values for the form complete missingness
+  miss_beta_t2 <- c(-2, -0.5)
+  miss_beta_t4 <- c(-2, -0.5)
+
+  # Random missing proportion
+  miss_prop_pre <- 0.005 # e.g., 2% missing of all rows
+  miss_prop_y <- 0.02 # e.g., 5% miss of all rows post-int
+
+
+  simout <- sim_type2(
+    
+    n = N,
+    K = K,
+
+    form_pre = form_pre,
+    betas_pre = betas_pre,
+
+    form = form_main,
+    preds = preds_all,
+    betas = list(betas_t1, betas_t2),
+
+    Lambda1 = Lambda1, 
+    psi1 = psi1, 
+    S1 = S1, 
+    
+    Lambda2 = Lambda2, 
+    psi2 = psi2, 
+    S2 = S2, 
+    
+    
+    C_cross = c_cross,
+    missing_form_t2 = miss_t2,
+    missing_form_t4 = miss_t4,
+    missing_beta_t2 = miss_beta_t2,
+    missing_beta_t4 = miss_beta_t4,
+    missing_pre_prop = miss_prop_pre,
+    missing_y_prop = miss_prop_y,
+    verbose = FALSE
+  )
+
+
+  d2 <- struct_sim(simout$miss, verbose = FALSE)
+  
+
+  
+```
+
+
+```{r}
+#| label: fig-var-cor-synth
+#| fig-cap: "Residual variation and correlation pattern within and between variables in the synthetic data example."
+#| eval: true
+#| fig-height: 6
+#| fig-width: 12
+
+
+# d, a data set with participant, treat, sex, 
+# age, time, analyte, value.
+simd <- d2$raw_df |> 
+  mutate(treat = group, 
+         time = if_else(time == "T3", "T4", time)) |> 
+  select(participant, treat, sex, age, time, analyte = type, 
+         value = y, value_std = ystd)
+
+
+ps <- cor_plot(simd) 
+
+(ps$p2 | ps$p1) / ps$p3
+
+
+
+```
+
+
+
+```{r}
+
+# Extract coverage
+files <- list.files("data-sim/coverage")
+ls <- list()
+for(i in seq_along(files)) {
+  ls[[i]] <- readRDS(paste0("data-sim/coverage/", files[i])) |> 
+    mutate(dataset = paste0("d", i))
+}
+
+# Coverage and CI-width
+
+bind_rows(ls) |> 
+    filter(dataset != "d8") |> 
+  summarise(.by = c(model, dataset), 
+            coverage = sum(coverage) / n()) |> 
+  summarise(.by = model, 
+            m = mean(coverage), 
+            min = min(coverage), 
+            max = max(coverage)) |> 
+
+  ggplot(aes(model, m)) + 
+
+  geom_errorbar(aes(ymin = min, ymax = max), 
+                width = 0) +
+  geom_point(shape = 21, aes(fill = model), 
+             size = 3) + 
+  
+  alpha_theme() + 
+  geom_hline(yintercept = 0.9, lty = 2, 
+             color = "gray") + 
+  scale_fill_manual(values = colscale)
+
+
+# Avg ci width
+ci_width <- bind_rows(ls) |> 
+  filter(dataset != "d8") |> 
+  summarise(.by = model, 
+            m = mean(ci_width), 
+            s = sd(ci_width))
+
+
+bind_rows(ls) |> 
+  filter(dataset != "d8") |> 
+  ggplot(aes(model, ci_width, group = paste0(time, type, dataset))) + 
+  geom_line() +
+  geom_point() + 
+  
+  
+  geom_errorbar(data = filter(ci_width, model == "s8"),
+             aes(model, m, 
+                 ymin = m - s, 
+                 ymax = m + s, 
+                 group = NULL), 
+             width = 0,
+             position = position_nudge(x = 0.2)) +
+  
+  geom_point(data = filter(ci_width, model == "s8"),
+             aes(model, m, group = NULL), 
+             shape = 21, 
+             size = 4,
+             fill = colscale[3],
+             position = position_nudge(x = 0.2)) +
+  
+    
+  geom_errorbar(data = filter(ci_width, model == "s7"),
+             aes(model, m, 
+                 ymin = m - s, 
+                 ymax = m + s, 
+                 group = NULL), 
+             width = 0,
+             position = position_nudge(x = -0.2)) +
+  
+  geom_point(data = filter(ci_width, model == "s7"),
+             aes(model, m, group = NULL), 
+             shape = 21, 
+             size = 4,
+             fill = colscale[3],
+             position = position_nudge(x = -0.2)) +
+  
+  
+  
+  alpha_theme()
+
+# Extract error distributions
+files <- list.files("data-sim/est_error_dist")
+ls <- list()
+for(i in seq_along(files)) {
+  ls[[i]] <- readRDS(paste0("data-sim/est_error_dist/", files[i])) |> 
+    mutate(dataset = paste0("d", i))
+}
+
+# Calculate average absolute error over all simulations
+
+abs_dev <- bind_rows(ls) |> 
+    filter(dataset != "d8") |> 
+  summarise(.by = model, 
+            m = median(abs_dev), 
+            q05 = quantile(abs_dev, 0.05), 
+            q25 = quantile(abs_dev, 0.25), 
+            q75 = quantile(abs_dev, 0.75), 
+            q95 = quantile(abs_dev, 0.95)) 
+
+
+bind_rows(ls) |> 
+    filter(dataset != "d8") |> 
+  ggplot(aes(abs_dev, 
+             color = model,
+             group = paste(model, dataset))) + 
+  
+  geom_line(stat = "density", 
+            alpha = 0.4) + 
+  
+  
+  geom_segment(data = abs_dev,
+               aes(x = q05,xend = q95, 
+                   y = c(5.1, 5.3), 
+                   yend = c(5.1, 5.3), 
+                   color = model, group = NULL), 
+               alpha = 0.4) +
+    geom_segment(data = abs_dev,
+               aes(x = q25,xend = q75, 
+                   y = c(5.1, 5.3), 
+                   yend = c(5.1, 5.3), 
+                   color = model, group = NULL), 
+               linewidth = 1.2, 
+               alpha = 0.4) +
+  annotate("text", 
+           y = c(5.1, 5.3), 
+           x = -0.05, 
+           size = 3,
+           label = c("Model S7", "Model S8")) +
+  
+    annotate("text", 
+           y = rep(5.45, 5), 
+           x = as.numeric(abs_dev[2, c(3, 4, 2, 5, 6)]), 
+           size = 2.5,
+           label = c("5%", "25%", "50%", "75%", "95%")) +
+           
+  
+           
+  
+  geom_point(data = abs_dev, 
+             aes(m, y = c(5.1, 5.3), fill = model, color = NULL, group = NULL), 
+             shape = 21, 
+             size = 4) + 
+  scale_fill_manual(values = colscale) +
+  scale_color_manual(values = colscale) + 
+  alpha_theme(yaxis = FALSE) + 
+  labs(x = "Absolute error", 
+       y = "") + 
+  theme(legend.position = "none")
+  
+
+bind_rows(ls) |> 
+    filter(dataset != "d8") |> 
+  ggplot(aes(error, color = paste(model), 
+             group = paste(model, dataset))) + geom_density()
+
+
+
+# Extract error comparison
+files <- list.files("data-sim/error_comp")
+ls <- list()
+for(i in seq_along(files)) {
+  ls[[i]] <- readRDS(paste0("data-sim/error_comp/", files[i])) |> 
+    mutate(dataset = paste0("d", i))
+}
+
+bind_rows(ls) |>  
+    filter(dataset != "d8") |> 
+  ggplot(aes(abs_dev_a , abs_dev_b, 
+             color = dataset))  + geom_point() + 
+  geom_abline(intercept = 0, slope = 1) + 
+  labs(x = "Model S7 absolute error", 
+       y = "Model S8 absolute error")
+
+bind_rows(ls) |>  
+    filter(dataset != "d8") |> 
+  ggplot(aes(sq_err_a , sq_err_b, 
+             color = dataset))  + geom_point() + 
+  geom_abline(intercept = 0, slope = 1) + 
+  labs(x = "Model S7 squared error", 
+       x = "Model S8 squared error")
+
+
+bind_rows(ls) |> 
+    filter(dataset != "d8") |> 
+  ggplot(aes(true, delta_abs)) + geom_point() + 
+  labs(x = "Population effect", 
+       y = "&Delta; absolute error (S8 - S7)") + 
+  
+  alpha_theme() +
+  theme(axis.title.y = element_markdown()) +
+  geom_hline(yintercept = 0, 
+             lty = 2, 
+             color = "gray") + 
+  annotate("text", 
+           x = c(0.65,0.65), 
+           y = c(0.01,-0.01), 
+           hjust = 0,
+           label = c("Larger error\nmodel S8", 
+                     "Larger error\nmodel S7")) + 
+  scale_x_continuous(limits = c(-0.3, 0.75))
+
+# Extract hmc metrics
+files <- list.files("data-sim/average_hmc_metrics")
+ls <- list()
+for(i in seq_along(files)) {
+  ls[[i]] <- readRDS(paste0("data-sim/average_hmc_metrics/", files[i])) |> 
+    mutate(dataset = paste0("d", i))
+}
+
+bind_rows(ls) |> 
+    filter(dataset != "d8") |> 
+  ggplot(aes(dataset, m, color = model)) + 
+  geom_pointrange(aes(ymin = min, ymax = max), 
+                  position = position_dodge(width = 0.1)) + 
+  facet_wrap(~ name, ncol = 1, scales = "free") + 
+  alpha_theme()
+
+
+
+  
+
+  
+  
+```
+
+
+
+
+
+
+
+```{r}
+
+
+d_full |> 
+  distinct(analyte) |> 
+  mutate(type = dense_rank(analyte))
+
+
+d_full |> 
+  summarise(.by = analyte, 
+            m = mean(value, na.rm = TRUE), 
+            s = sd(value, na.rm = TRUE) ) |> 
+  mutate(threshold_male = c(1.03, 5.6, 1.7, 94, 100, NA, NA, NA), 
+         threshold_female = c(1.29, 5.6, 1.7, 80, 100, NA, NA, NA)) |>
+  
+  mutate(threshold_male = (threshold_male - m)/s, 
+         threshold_female = (threshold_female - m)/s) |> 
+  mutate(type = dense_rank(analyte)) |> 
+  
+  print()
+  
+
+
+```
+
+
+
+```{r}
+
+## Prior predictive checks
+
+
+## Full, no missing
+ds_itt <- d2$dl_itt
+
+## Prior pred
+
+
+s7 <- cmdstan_model(stan_file = "models/s7.stan", 
+                      exe_file = "models/s7.exe")
+
+s8 <- cmdstan_model(stan_file = "models/s8.stan", 
+                      exe_file = "models/s8.exe")
+
+
+
+
+fit_wrap(s7, DATA = ds_itt, fit = "fit.synth2.s7", refit = FALSE)
+fit_wrap(s8, DATA = ds_itt, fit = "fit.synth2.s8")
+
+ds_itt$prior_only <- 0
+
+
+fit_wrap(s7, DATA = ds_itt, fit = "fit.synth2.s7.post")
+fit_wrap(s8, DATA = ds_itt, fit = "fit.synth2.s8.post")
+
+
+
+temp <- bind_rows(
+  pred_dat_1(fit.synth2.s7$draws(format = "df"), fit_type = 2) |> 
+    mutate(model = "s7", 
+           prior = "Prior"), 
+  pred_dat_1(fit.synth2.s8$draws(format = "df"), fit_type = 2) |> 
+    mutate(model = "s8", 
+           prior = "Prior"), 
+    pred_dat_1(fit.synth2.s7.post$draws(format = "df"), fit_type = 2) |> 
+    mutate(model = "s7", 
+           prior = "Posterior"), 
+  pred_dat_1(fit.synth2.s8.post$draws(format = "df"), fit_type = 2) |> 
+    mutate(model = "s8", 
+           prior = "Posterior")) |> 
+  print()
+
+temp |> 
+  pivot_longer(names_to = "treat", values_to = "est", 
+              cols = treat1:treat2) |> 
+  summarise(.by = c(time, type, treat, prior, model), 
+            m = mean(est), 
+            lwr = quantile(est, 0.05), 
+            upr = quantile(est, 0.95)) |> 
+  ggplot(aes(treat, m, color = prior, shape = model)) + 
+  geom_point(position = position_dodge(width = 0.2)) + 
+  facet_wrap( time ~ type, labeller = label_both)
+  
+
+
+```
+
+
+
+
+
+
+## Inference 
+
+
+
+
+
+```{r}
+#| label: data-prep-obs
+
+
+# Including all data
 dat <- d_full |> 
   filter(time %in% c("T1", "T2","T4")) |> 
   
@@ -2157,7 +2479,7 @@ dat <- d_full |>
 
   
   mutate(time = if_else(time == "T2", 1, 2), 
-         sex = if_else(sex == "m", 1, 2), 
+         sex = if_else(sex == "m", -0.5, 0.5), 
          y_miss = if_else(y_obs == -999, 0, 1), 
          pre_miss= if_else(pre_obs == -999, 0, 1)) |> 
 
@@ -2168,238 +2490,398 @@ dat <- d_full |>
          P = participant, 
          sex,
          type,
-         score = type,
+         type,
          time,
          treat = treat_seq) |> 
-  print()
+
+  arrange(P, time, type) 
 
 
-# Check what particpants has near complete data 
-compl_dat_id <- dat |> 
-  summarise(.by = P, 
-            n_y = sum(y_miss)) |> 
-  filter(n_y == 10 ) |> 
-  pull(P)
-
-
-# Check participants with less 
-dat_compl <- dat |> 
-  filter(P %in% compl_dat_id) |> 
-  mutate(P = dense_rank(P))
-
-  
 
 d <- list(
   N = nrow(dat), 
-  N_part = length(unique(dat$P)),
-  K = length(unique(dat$score)),
+  N_P = length(unique(dat$P)),
+  N_TX = length(unique(dat$treat)),
+  K = length(unique(dat$type)),
   y_obs = dat$y_obs, 
   pre_obs = dat$pre_obs, 
   y_miss = dat$y_miss,
   pre_miss = dat$pre_miss, 
-  score = dat$score, 
+  type = dat$type, 
   treat = dat$treat, 
   P = dat$P, 
-  prior_only = 1,
-  # Adding sex to data structure
+  prior_only = 0,
+  # Adding sex and time to data structure
   time = dat$time,
   sex = dat$sex
 )
 
-# Warning participant ID are not the same!
-d_compl <- list(
-  N = nrow(dat_compl), 
-  N_part = length(unique(dat_compl$P)),
-  K = length(unique(dat_compl$score)),
-  y_obs = dat_compl$y_obs, 
-  pre_obs = dat_compl$pre_obs, 
-  y_miss = dat_compl$y_miss,
-  pre_miss = dat_compl$pre_miss, 
-  score = dat_compl$score, 
-  treat = dat_compl$treat, 
-  P = dat_compl$P, 
-  prior_only = 0,
-  # Adding sex to data structure
-  time = dat_compl$time,
-  sex = dat_compl$sex
+
+fit_wrap(s7, DATA = d, fit = "fit.s7.post")
+fit_wrap(s8, DATA = d, fit = "fit.s8.post")
+
+
+```
+
+
+
+
+
+
+
+```{r}
+
+
+
+# Collect labels and standardizers
+labs <- d_full |> 
+  summarise(.by = analyte, 
+            m = mean(value, na.rm = TRUE), 
+            s = sd(value, na.rm = TRUE) ) |> 
+  mutate(threshold_male = c(1.03, 5.6, 1.7, 94, 100, NA, NA, NA), 
+         threshold_female = c(1.29, 5.6, 1.7, 80, 100, NA, NA, NA)) |>
+  
+  mutate(threshold_male = (threshold_male - m)/s, 
+         threshold_female = (threshold_female - m)/s) |> 
+  mutate(type = dense_rank(analyte)) |> 
+  expand_grid(treat = c(1, 2), 
+              time = c(1, 2)) |> 
+  mutate(Treatment = if_else(treat == 1, "Placebo", "N-3"), 
+         Time = if_else(time == 1, "T2", "T4"), 
+         treat = as.character(treat), 
+         time = as.character(time), 
+         type = as.character(type)) |> 
+  # dropping thresholds here
+  select(-threshold_male, -threshold_female) |> 
+  print()
+
+
+# In the Stan model -- Time-specific intercepts: alpha[time][type, treat]
+
+draws.s8 <- fit.s8.post$draws(format = "df")
+
+
+
+
+
+draws.s8 |> 
+
+  select(starts_with("alpha"), .chain, .iteration) |> 
+#  filter(.iteration %in% 1:10) |> 
+  pivot_longer(names_to = "param", 
+               values_to = "value", 
+               cols = starts_with("alpha")) |> 
+  mutate(param = gsub("alpha\\[", "", param), 
+         param = gsub("\\]", "", param)) |> 
+  separate(param, into = c("time", "type", "treat"), sep = ",") |> 
+  
+  # Include labs
+  inner_join(labs) |> 
+  # Back-transform
+  mutate(value_org = value * s + m) |> 
+  
+  summarise(.by = c(analyte, Treatment, Time), 
+            m = mean(value_org), 
+            lwr5 = quantile(value_org, 0.025), 
+            lwr25 = quantile(value_org, 0.25),
+            upr75 = quantile(value_org, 0.75),
+            upr95 = quantile(value_org, 0.975)) |> 
+  
+  ggplot(aes(Treatment, m, color = Time)) + 
+  
+  geom_errorbar(aes(ymin = lwr5, ymax = upr95), 
+                width = 0, 
+                position = position_dodge(width = 0.2)) +
+  
+  geom_errorbar(aes(ymin = lwr25, ymax = upr75), 
+                width = 0, 
+                linewidth = 1.2,
+                position = position_dodge(width = 0.2))  +
+  
+  geom_point(position = position_dodge(width = 0.2), 
+             size = 2) + 
+  facet_wrap(~ analyte, scales = "free")
+
+
+## Contrasts
+
+draws.s8 |> 
+
+  select(starts_with("alpha"), .chain, .iteration) |> 
+# filter(.iteration %in% 1:10) |> 
+  pivot_longer(names_to = "param", 
+               values_to = "value", 
+               cols = starts_with("alpha")) |> 
+  mutate(param = gsub("alpha\\[", "", param), 
+         param = gsub("\\]", "", param)) |> 
+  separate(param, into = c("time", "type", "treat"), sep = ",") |> 
+  
+  # Include labs
+  inner_join(labs) |> 
+  # Back-transform
+  mutate(value_org = value * s + m) |> 
+  select(analyte, Time, Treatment, value_org, .chain, .iteration) |> 
+  pivot_wider(names_from = Treatment, 
+              values_from = value_org) |> 
+  
+  mutate(contrast = `N-3` - Placebo) |> 
+    summarise(.by = c(analyte, Time), 
+            m = mean(contrast), 
+            lwr5 = quantile(contrast, 0.025), 
+            lwr25 = quantile(contrast, 0.25),
+            upr75 = quantile(contrast, 0.75),
+            upr95 = quantile(contrast, 0.975)) |> 
+  
+  ggplot(aes(Time, m)) +
+    geom_errorbar(aes(ymin = lwr5, ymax = upr95), 
+                width = 0, 
+                position = position_dodge(width = 0.2)) +
+  
+  geom_errorbar(aes(ymin = lwr25, ymax = upr75), 
+                width = 0, 
+                linewidth = 1.2,
+                position = position_dodge(width = 0.2))  +
+  
+  geom_point(position = position_dodge(width = 0.2), 
+             size = 2) + 
+  facet_wrap(~ analyte, scales = "free") + 
+  
+  geom_hline(yintercept = 0, lty = 2, color = "gray80") + 
+  
+  alpha_theme()
+  
+  
+  
+  print()
+
+
+
+
+
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+
+## Extracting diagnostic criteria and running seqwrap
+
+draws.s8 <- fit.s8.post$draws(format = "df")
+
+# In the stan code, diagnosed is indexed as participant p and time t
+#  n_criteria[p, t] = count;
+#  diagnosed[p, t] = (count >= 3) ? 1.0 : 0.0;
+
+sw_data <- draws.s8 |> 
+ # filter(.iteration %in% 1:100) |> 
+  filter(.chain == 1) |> 
+  select(starts_with("diagnosed"), .chain, .iteration) |> 
+ 
+  pivot_longer(cols = starts_with("diagnosed")) |> 
+  mutate(name = gsub("diagnosed\\[", "", name), 
+         name = gsub("\\]", "", name)) |> 
+  separate(name, into = c("participant", "time"), sep = ",") |> 
+  mutate(sample_seq = paste0("part_time_", participant,"_", time), 
+         chain_iter = paste0("iter", .chain, "_", .iteration)) |> 
+  select(chain_iter, sample_seq, value) |> 
+  pivot_wider(names_from = sample_seq, 
+              values_from = value) |> 
+  data.frame() 
+
+# Create a metadata data frame
+sw_md <- data.frame(participant = d$P, 
+           treat = d$treat) |> 
+  distinct(participant, treat) |> 
+  expand_grid(time = c(1, 2, 3)) |> 
+  mutate(sample_seq = paste0("part_time_", participant, "_", time), 
+         treat = if_else(treat == 1, "placebo", "n3"), 
+         time = if_else(time == 1, "t1", 
+                        if_else(time == 2, "t2", "t4"))) |> 
+  data.frame() |> 
+  print()
+
+
+
+library(seqwrap)
+
+sw1 <- seqwrap_compose(modelfun = glmmTMB::glmmTMB, 
+                arguments = list(
+                  formula = y ~ time * treat + (1|participant), 
+                  family = stats::binomial
+                ), 
+                data = sw_data, 
+                metadata = sw_md, 
+                samplename = "sample_seq")
+
+sw1_results <- seqwrap(sw1, cores = 10)
+
+
+sw1_sum <- seqwrap_summarise(sw1_results)
+
+
+sw1_sum$summaries |> 
+  filter(term %in% c("timet2:treatplacebo", "timet4:treatplacebo")) |> 
+  ggplot(aes(estimate)) + geom_density() + 
+  facet_wrap(~ term)
+
+
+```
+
+
+
+```{r}
+
+## Extracting posterior and comparing treatments
+
+draws.s8 <- fit.s8.post$draws(format = "df")
+
+
+draws.s8 
+
+
+
+```
+
+
+
+
+
+```{r}
+
+dat <- d_full |> 
+  filter(time %in% c("T1", "T2","T4")) |> 
+  
+
+  mutate(type = dense_rank(analyte), 
+         participant = dense_rank(participant), 
+         treat_seq = dense_rank(treat), 
+         value_std = if_else(is.na(value_std), -999, value_std)) |> 
+
+    select(-value) |> 
+  
+  pivot_wider(names_from = time, 
+              values_from = c(value_std)) |> 
+  
+  pivot_longer(cols = T2:T4, 
+               names_to = "time",
+               values_to = "y_obs") |> 
+  rename(pre_obs = T1) |> 
+  
+
+  
+  mutate(time = if_else(time == "T2", 1, 2), 
+         sex = if_else(sex == "m", -0.5, 0.5), 
+         y_miss = if_else(y_obs == -999, 0, 1), 
+         pre_miss= if_else(pre_obs == -999, 0, 1)) |> 
+
+  select(y_obs, 
+         pre_obs, 
+         y_miss, 
+         pre_miss, 
+         P = participant, 
+         sex,
+         type,
+         type,
+         time,
+         treat = treat_seq) |> 
+
+  arrange(P, time, type) 
+
+
+
+d <- list(
+  N = nrow(dat), 
+  N_P = length(unique(dat$P)),
+  N_TX = 2,
+  K = length(unique(dat$type)),
+  y_obs = dat$y_obs, 
+  pre_obs = dat$pre_obs, 
+  y_miss = dat$y_miss,
+  pre_miss = dat$pre_miss, 
+  type = dat$type, 
+  treat = dat$treat, 
+  P = dat$P, 
+  prior_only = 1,
+  # Adding sex and time to data structure
+  time = dat$time,
+  sex = dat$sex
 )
 
 
-s5 <- cmdstan_model(stan_file = "models/s5.stan", 
-                      exe_file = "models/s5.exe")
+
+```
 
 
-
-init_fun <- function() {
-  list(
-    alpha_mid = matrix(0, d$K, 2),
-    alpha_post = matrix(0, d$K, 2),
-    beta = rep(1, d$K),
-    sigma_mid = rep(0.5, d$K),
-    sigma_post = rep(0.5, d$K),
-    L_Omega_mid = diag(d$K),
-    L_Omega_post = diag(d$K),
-    sigma_pre = rep(0.5, d$K),
-    L_Omega_pre = diag(d$K),
-    mu_pre = rep(0, d$K),
-    y_impute_raw = rep(0, sum(!d$y_miss)),
-    pre_impute_raw = rep(0, sum(!d$pre_miss))
-  )
-}
-
+```{r}
 
 
 d$prior_only <- 0
 
-fit.s5 <- s5$sample(
-        data = d,                 # The list of variables
-        init = init_fun,          # Initiating the parameters
-        
-        adapt_delta = 0.95, 
-        max_treedepth = 15,
-        
-        
-        iter_sampling = 2000,      # Number of iterations for sampling
-        iter_warmup = 1000,        # Number of warm-up iterations
-        
-        chains = 4,   
-        # Number of Markov chains
-        parallel_chains = 4,
-        refresh = 1000             # Number of iterations before each print
-)
+
+fit_wrap(s7, DATA = d, fit = "fit.s7.post", refit = TRUE)
+fit_wrap(s8, DATA = d, fit = "fit.s8.post")
 
 
-fit.s5_compl <- s5$sample(
-        data = d_compl,                 # The list of variables
-
-        adapt_delta = 0.95, 
-        max_treedepth = 15,
-        
-        
-        iter_sampling = 2000,      # Number of iterations for sampling
-        iter_warmup = 1000,        # Number of warm-up iterations
-        chains = 4,   
-        # Number of Markov chains
-        parallel_chains = 4,
-        refresh = 1000             # Number of iterations before each print
-)
+draws <- fit.s8.post$draws(format = "df")
 
 
+temp <- fit.s8.post$summary(.cores = 12)
 
+temp 
 
-rethinking::precis(fit.s5, depth = 2)
-
-
-draws.s5 <- fit.s5$draws(format = "df")
-draws.s5_compl <- fit.s5_compl$draws(format = "df")
-
-
-bind_rows(
+criteria_dat |> 
+  distinct(analyte) |> 
+  mutate(type = dense_rank(analyte)) |> 
+  print()
   
-  draws.s5_compl |> 
-  filter(.chain == 1) |> 
-  select(starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-    pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-    mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
+
+
+
+draws |> 
+  select(.iteration, .chain, starts_with("alpha")) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "time", "type", "treat")) |> 
   
-  separate(parameter, into = c("parameter", "time") ) |> 
-    filter(time != "pre") |> 
+  ggplot(aes(value, color = treat)) + 
+  geom_line(stat = "density") + 
+  facet_wrap(~ type + time, scales = "free")
 
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
 
-  pivot_wider(names_from = parameter, 
+
+
+draws |> 
+  select(.iteration, .chain, starts_with("alpha")) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "time", "type", "treat")) |>
+  mutate(treat = paste0("treat", treat)) |> 
+  pivot_wider(names_from = treat, 
               values_from = value) |> 
- 
-  mutate(contrast = alpha2 - alpha1) |> 
-  select(.draw, type, contrast, time) |> 
-
-  summarise(.by = c(type, time), 
-            m = mean(contrast), 
-            lwr = quantile(contrast, 0.025), 
-            upr = quantile(contrast, 0.975)) |> 
-  
-  mutate(type = case_when(
-    type == 1 ~ "HDL", 
-    type == 2 ~ "Triglycerides", 
-    type == 3 ~ "Blood pressure",
-    type == 4 ~ "Fasting glucose", 
-    type == 5 ~ "Waist curcumference",
-  )) |> 
-    mutate(Analysis = "Complete data"), 
-  
-  draws.s5 |> 
-  filter(.chain == 1) |> 
-  select(starts_with("alpha"), 
-         starts_with("sigma"),
-         .draw
-         ) |> 
-    pivot_longer(cols = c(starts_with("beta"), 
-         starts_with("alpha"), 
-         starts_with("sigma"))) |> 
-  separate(name, into = c("parameter", "type"), 
-           sep = "\\[") |> 
-   separate(type, into = c("type", "treat"), 
-           sep = ",") |> 
-    mutate(type = gsub("\\]", "", type), 
-         treat = gsub("\\]", "", treat)) |> 
-  
-  separate(parameter, into = c("parameter", "time") ) |> 
-    filter(time != "pre") |> 
-
-  mutate(parameter = if_else(!is.na(treat), paste0(parameter, treat), 
-                             parameter)) |> 
-  select(-treat) |> 
-
-  pivot_wider(names_from = parameter, 
-              values_from = value) |> 
- 
-  mutate(contrast = alpha2 - alpha1) |> 
-  select(.draw, type, contrast, time) |> 
-
-  summarise(.by = c(type, time), 
-            m = mean(contrast), 
-            lwr = quantile(contrast, 0.025), 
-            upr = quantile(contrast, 0.975)) |> 
-  
-  mutate(type = case_when(
-    type == 1 ~ "HDL", 
-    type == 2 ~ "Triglycerides", 
-    type == 3 ~ "Blood pressure",
-    type == 4 ~ "Fasting glucose", 
-    type == 5 ~ "Waist curcumference",
-  )) |> 
-    mutate(Analysis = "ITT (imputed missing values)")
-  ) |> 
-  
-  ggplot(aes("Contrast", m, color = time, alpha = Analysis)) + 
-  
-    geom_pointrange(aes(ymin = lwr, ymax = upr), 
-                  position = position_dodge(width = 0.1)) +
-    scale_alpha_manual(values = c(0.4, 1)) +
-  
-  facet_wrap(~ type, ncol = 1, scales = "free") + 
-  geom_hline(yintercept = 0, lty = 2)
-```
-
-
-```{r}
-#| eval: false
-#| echo: false
-#| message: false
-#| warning: false
-
+  mutate(contrast = treat2 - treat1) |> 
+  ggplot(aes(contrast)) + 
+  geom_line(stat = "density") + 
+  facet_wrap(~ type + time, scales = "free") + 
+  geom_vline(xintercept = 0)
 
 
 
@@ -2409,38 +2891,7 @@ bind_rows(
 
 
 
-
-```{r}
-#| eval: false
-#| echo: false
-#| message: false
-#| warning: false
-
-## Comparing completers with drop-out in pre scores
-
-d_full |> 
-  filter(time == "T1") |> 
-  
-  mutate(completer = if_else(dense_rank(participant ) %in% compl_dat_id, 
-                             1, 0)) |> 
-  
-  
-  
-  ggplot(aes(value, color = as.factor(completer))) + geom_density() +
-  facet_wrap(~ analyte, scales = "free")
-  
-
-  
-  
-
-```
-
-
-
-
-
-
-
+#### A model of metabolic syndrome criteria
 
 
 
