@@ -1,0 +1,964 @@
+---
+title: "Effects of N-3 supplementation on indications of metabolic syndrome - Simulations"
+execute:
+  echo: false
+  warning: false
+  message: false
+  cache: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+# Source figure options, packages, and main data prep.
+source("./R/fig-opt-fun.R")
+source("./R/packages.R")
+source("./R/data-prep.R")
+source("./R/helpers.R")
+source("./R/sim-fun.R")
+
+```
+
+To compare the multivariate normal model (S8 and S10) to non-pooled alternative (S7 and S9) we will use a more realistic simulation inducing correlations between variables. As an example, we will assume that at baseline, variables 1-3 are mostly influenced by a latent variable capturing aspects of body composition. Variables 4-6 are influenced mostly by a latent variable capturing metabolic health and variables 7 and 8 are mostly unrelated to these two latent variables. Variable 1 is negatively associated with the other variables. Implicated correlations are calculated in code below. 
+
+
+```{r}
+#| echo: true
+
+# Defining a matrix of proportions explained by factors (latent variables).
+# In the example, column 1 is "body composition" and column 2 is 
+# "metabolic health.
+Lambda <- matrix(
+  c(0.5,  0.02,
+    0.4,  0.01,   
+    0.35, 0.01, 
+    0.01, 0.4, 
+    0.02, 0.35,
+    0.03, 0.3, 
+    0.01, 0.02, 
+    0.001,0.002 
+
+    ), 
+                 ncol = 2,
+                 byrow = TRUE)
+# Approximating loadings as variance explained 
+# needs the error to be 1 - sum(loading) 
+psi <- 1 - rowSums(Lambda)
+
+# Transform from proportions to loadings
+Lambda <- sqrt(Lambda)
+
+# Change the sign for variable 1
+Lambda[1,] <- -Lambda[1,]
+
+
+S <- rep(1, 8)
+
+Sigma <- build_sigma_factor(Lambda, psi, S)
+
+
+
+```
+
+
+
+```{r}
+#| label: tbl-sigma-sim2
+#| tbl-cap: "Correlations used to simulate data for 8 variable types."
+colnames(Sigma) <-  paste0("k", 1:8)
+rownames(Sigma) <-  paste0("k", 1:8)
+
+data.frame(Sigma) |> 
+  gt(rownames_to_stub = TRUE) |> 
+  fmt_number(decimals = 3)
+
+```
+
+Next, residual correlations at follow-up time-points are added. Here we'll use a separate factor loading structure that implies shared influence over four latent factors. An example of implied correlations are shown below. 
+
+```{r}
+
+# Defining a matrix of proportions explained by factors (latent variables).
+# In the example, column 1 is "body composition" and column 2 is 
+# "metabolic health.
+Lambda <- matrix(
+  c(0.3,   0.02,  0.02, 0.01,
+    0.01,  0.2,   0.01, 0.01,
+    0.01,  0.01,  0.4,  0.02,
+    0.02,  0.01,  0.01, 0.2,
+    0.8,   0.02,  0.01, 0.01,
+    0.02,  0.3,   0.01, 0.01,
+    0.01,  0.02,  0.3,  0.01,
+    0.001, 0.002, 0.01, 0.02
+
+    ), 
+                 ncol = 4,
+                 byrow = TRUE)
+# Approximating loadings as variance explained 
+# needs the error to be 1 - sum(loading) 
+psi <- 1 - rowSums(Lambda)
+
+# Transform from proportions to loadings
+Lambda <- sqrt(Lambda)
+
+# Change the sign for variable 1
+Lambda[c(1,4),] <- -Lambda[c(1,4),]
+
+
+S <- rep(1, 8)
+
+Sigma <- build_sigma_factor(Lambda, psi, S)
+
+```
+
+
+```{r}
+#| label: tbl-sigma-sim2-resid
+#| tbl-cap: "Residual correlations in follow-up used to simulate data for 8 variable types."
+colnames(Sigma) <-  paste0("k", 1:8)
+rownames(Sigma) <-  paste0("k", 1:8)
+
+data.frame(Sigma) |> 
+  gt(rownames_to_stub = TRUE) |> 
+  fmt_number(decimals = 3)
+
+```
+
+Simulating the full data set leads to synthetic data patterns presented in @fig-var-cor-synth. 
+
+```{r}
+#| label: synthetic-data2
+
+
+set.seed(1)
+
+  N <- 148 # Number of participants
+  K <- 8 # number of measurement types
+
+  # The formula for the pre-intervention variables
+  form_pre <- ~ 1 +  age + sex
+
+  # beta_pre is a p * K matrix of parameter (p in 1 to P)
+  # values for each type (k in 1:K).
+  # fmt: skip
+  betas_pre <- matrix(
+  c(rep(0, K), # intercepts
+    runif(8, -0.15, 0.15),  # age
+    0, 0, 0, 0.2, 0, -0.2, 0.15, 0.15  # sex
+  ),
+  nrow = 3,
+  ncol = K,
+  byrow = TRUE
+)
+
+  # The same formula for both time-points
+  form_main <- ~  pre + group + sex
+
+  # betas matrix are p * K
+  # fmt: skip
+  
+  beta_pre <- runif(8, 0.7, 0.95)
+  
+  betas_t1 <- matrix(
+  c(rep(0, K), # intercepts
+    beta_pre, # pre_k effect 
+    c(0.4, 0, 0, 0, 0.4, 0, 0, 0), # group
+    rep(0, 8)   # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  # fmt: skip
+  betas_t2 <-  matrix(
+  c(rep(0, K), # intercepts
+    beta_pre,  # pre_k effect 
+    c(0.2, 0.4, 0, 0, 0.4, 0.2, 0, 0),  # group
+    rep(0, 8)   # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  
+  
+  # Predictor variables, used in *all* sims
+  preds_all <- data.frame(
+    group = rep(c(0, 1), each = N / 2),
+    sex = rep(c(0, 1),  N/2 ),
+    age = c(runif(N/2, -1.5, 1.5), rnorm(N/2))
+  )
+
+  
+ 
+  # Loadings for pre-intervention loading matrix
+  # Assuming that 
+  
+  Lambda1 <- matrix(
+  c(0.7,  0.02,
+    0.5,  0.01,   
+    0.35, 0.01, 
+    0.01, 0.4, 
+    0.02, 0.35,
+    0.03, 0.3, 
+    0.01, 0.02, 
+    0.001,0.002 
+    ), 
+                 ncol = 2,
+                 byrow = TRUE)
+  
+  # Error in the factor model
+  psi1 <- 1 - rowSums(Lambda1) 
+  
+
+  
+  # Transform to loadings
+  Lambda1 <- sqrt(Lambda1)
+  # Add negative correlations
+  Lambda1[1,] <- -Lambda1[1,]
+  # Pre intervention SD's per type (length K)
+  S1 <- rep(1, K)
+  
+  
+   Lambda2a <- matrix(
+   c(0.3,   0.02,  0.02, 0.01,
+    0.01,  0.2,   0.01, 0.01,
+    0.01,  0.01,  0.4,  0.02,
+    0.02,  0.01,  0.01, 0.2,
+    0.8,   0.02,  0.01, 0.01,
+    0.02,  0.3,   0.01, 0.01,
+    0.01,  0.02,  0.3,  0.01,
+    0.001, 0.002, 0.01, 0.02
+    ), 
+                 ncol = 4,
+                 byrow = TRUE)
+  
+      Lambda2b <- matrix(
+   c(0.32,   0.01,  0.01, 0.02,
+    0.01,  0.28,   0.01, 0.02,
+    0.02,  0.02,  0.43,  0.02,
+    0.02,  0.001,  0.02, 0.2,
+    0.75,   0.02,  0.01, 0.01,
+    0.02,  0.3,   0.01, 0.01,
+    0.01,  0.02,  0.34,  0.01,
+    0.001, 0.002, 0.01, 0.02
+    ), 
+                 ncol = 4,
+                 byrow = TRUE)
+   
+
+       
+  # Error in the factor model
+  psi2a <- 1 - rowSums(Lambda2a)
+  psi2b <- 1 - rowSums(Lambda2b) 
+  
+    # Transform to loadings
+  Lambda2a <- sqrt(Lambda2a)
+  Lambda2b <- sqrt(Lambda2b)
+  
+    # Add some negative correlations
+  Lambda2a[3,] <- -Lambda2a[3,]
+  Lambda2b[3,] <- -Lambda2b[3,]
+  
+
+  # Pre intervention SD's per type (length K)
+  s2a <- rep(1, K); s2b <- rep(1, K) 
+  
+  
+  Lambda2 <- list(Lambda2a, Lambda2b)
+  psi2 <- list(psi2a, psi2b)
+  S2 <- list(s2a, s2b)
+  
+  
+  # Between time-point (residual) correlations within each type (length K)
+  c_cross <- c(0.35, 0.4, 0.3, 0.35, 0.3, 0.35, 0.35, 0.4)
+
+  # missing_form_t2,  formula specifying the predictor for missing values at t2
+  miss_t2 <- ~ 1 + age
+  miss_t4 <- ~ 1 + age
+
+  # Parameter values for the form complete missingness
+  miss_beta_t2 <- c(-2, -0.5)
+  miss_beta_t4 <- c(-2, -0.5)
+
+  # Random missing proportion
+  miss_prop_pre <- 0.005 # e.g., 2% missing of all rows
+  miss_prop_y <- 0.02 # e.g., 5% miss of all rows post-int
+
+
+  simout <- sim_type2(
+    
+    n = N,
+    K = K,
+
+    form_pre = form_pre,
+    betas_pre = betas_pre,
+
+    form = form_main,
+    preds = preds_all,
+    betas = list(betas_t1, betas_t2),
+
+    Lambda1 = Lambda1, 
+    psi1 = psi1, 
+    S1 = S1, 
+    
+    Lambda2 = Lambda2, 
+    psi2 = psi2, 
+    S2 = S2, 
+    
+    
+    C_cross = c_cross,
+    missing_form_t2 = miss_t2,
+    missing_form_t4 = miss_t4,
+    missing_beta_t2 = miss_beta_t2,
+    missing_beta_t4 = miss_beta_t4,
+    missing_pre_prop = miss_prop_pre,
+    missing_y_prop = miss_prop_y,
+    verbose = FALSE
+  )
+
+
+  d2 <- struct_sim(simout$miss, verbose = FALSE)
+  
+
+  
+```
+
+
+
+```{r}
+#| label: fig-var-cor-synth
+#| fig-cap: "Residual variation and correlation pattern within and between variables in the synthetic data example."
+#| eval: true
+#| fig-height: 6
+#| fig-width: 12
+
+
+# d, a data set with participant, treat, sex, 
+# age, time, analyte, value.
+simd <- d2$raw_df |> 
+  mutate(treat = group, 
+         time = if_else(time == "T3", "T4", time)) |> 
+  select(participant, treat, sex, age, time, analyte = type, 
+         value = y, value_std = ystd)
+
+
+ps <- cor_plot(simd) 
+
+(ps$p2 | ps$p1) / ps$p3
+
+
+
+```
+
+
+
+
+```{r}
+
+# Some simulations have unsatisfactory chain convergence and ess statistics. 
+# We will exclude these from comparisons and treat them as special cases
+# where 500 + 750 iterations where not enough to capture the parameters.
+
+
+# Extract hmc metrics to get a lsit of problematic data sets
+files <- list.files("data-sim/average_hmc_metrics")
+ls <- list()
+for(i in seq_along(files)) {
+  ls[[i]] <- readRDS(paste0("data-sim/average_hmc_metrics/", files[i])) |> 
+    mutate(dataset = paste0("d", i))
+}
+
+
+files <- list.files("data-sim2/average_hmc_metrics")
+ls2 <- list()
+for(i in seq_along(files)) {
+  ls2[[i]] <- readRDS(paste0("data-sim2/average_hmc_metrics/", files[i])) |> 
+    mutate(dataset = paste0("d", i))
+}
+
+
+ls <- bind_rows(ls) |> 
+  mutate(variation = "Homoscedastic") 
+
+
+ls2 <- bind_rows(ls2) |> 
+  mutate(variation = "Heteroscedastic") 
+
+
+
+
+p1 <- bind_rows(ls, ls2) |> 
+  dplyr::select(name, m, model, variation, variant, dataset) |> 
+  pivot_wider(names_from = name, values_from = m) |>
+  mutate(flag = if_else(rhat > 1.1, dataset, ""), 
+         colflag = if_else(rhat > 1.1, "flag", "")) |> 
+  ggplot(aes(ess_bulk, rhat)) + 
+  geom_point(alpha = 0.3, 
+             aes(color = colflag), 
+             size = 3) + 
+  geom_text_repel(aes(label = flag)) +
+  alpha_theme() + 
+  labs(x = "Bulk effective sample size (mean)", 
+       y = "Rhat (mean)") +
+  facet_wrap(~ variation) +
+  theme(legend.position = "none") + 
+  scale_color_manual(values = c("gray",colscale[2]))
+
+
+# Excluded datasets
+excl_datasets <- bind_rows(ls, ls2)  |> 
+  dplyr::select(name, m, model, variation, variant, dataset) |> 
+  filter(name == "rhat" & m > 1.1) |>
+  mutate(dataset = paste0(dataset, variation)) |> 
+  
+  pull(dataset)
+
+# Number of data sets
+ndatasets <-  bind_rows(ls, ls2) |> 
+  mutate(dataset = paste0(dataset, variation)) |> 
+  distinct(dataset) |> 
+
+  nrow()
+
+n_excl_ds <- length(excl_datasets)
+
+
+```
+
+
+Using `r ndatasets` simulated data sets we are comparing models S7 and s9 to S8 and s10 for modelling performance using two variants of each data set, a full data set and a data set with missing values, requiring data imputation. Additionally, in one set of simulations, population variation is set to be equal between treatments (homoscedasticity) and in another set to be unequal (heteroscedasticity). The focus estimands in evaluating each simulated data set were contrasts between treatments at two follow-up time-points for 8 different measurements. The simulated data sets were constructed using effect sizes between -0.4 to 0.4 and correlations structures similar to those seen in the observed data. A total of `r n_excl_ds` data sets were excluded from comparisons as chain convergence and effective sample sizes where unsatisfactory. We consider these data sets as special cases where more than 500 (warm-up) and 750 (sampling) iterations are required to give reliable estimates. @fig-chain-diag shows the `r n_excl_ds` data sets with deviating chain convergence statistics compared to data sets used for model evaluation.
+
+
+```{r}
+#| label: fig-chain-diag
+#| fig-cap: "Chain dioagnostics under two different scenarios of simulated data. Data sets excluded from comparisons are highlighted."
+#| eval: true
+#| fig-height: 4
+#| fig-width: 8
+
+p1
+
+
+```
+
+
+For each estimate (treatment contrasts, 2 &times; 8 per data set), coverage of a 90% percentile interval was determined and averaged over variant (full data and missing values) and variation scenarios. The aggregated coverage was slightly higher for all models for the full data scenario. In missing data scenarios, coverage tended to be higher in model s10 (@fig-sim-cred-int A). The credible interval width was larger in the missing data scenario (@fig-sim-cred-int B), but models S10 and s8 tended to have tighter intervals than S7 and s9 for the missing data variant in both variation scenarios (@fig-sim-cred-int C). 
+
+
+
+
+```{r}
+#| label: fig-sim-cred-int
+#| fig-cap: "(A) Coverage of 90% credible intervals, (B) credible interval widths, and (C) differences in credible interval widths between models. "
+#| eval: true
+#| fig-height: 12
+#| fig-width: 18
+
+
+
+# Extract coverage
+files <- list.files("data-sim/coverage")
+ls <- list()
+for(i in seq_along(files)) {
+  ls[[i]] <- readRDS(paste0("data-sim/coverage/", files[i])) |> 
+    mutate(dataset = paste0("d", i))
+}
+
+files <- list.files("data-sim2/coverage")
+ls2 <- list()
+for(i in seq_along(files)) {
+  ls2[[i]] <- readRDS(paste0("data-sim2/coverage/", files[i])) |> 
+    mutate(dataset = paste0("d", i))
+}
+
+# Combine coverage stats
+ls <- bind_rows(ls) |> 
+  mutate(variation = "Homoscedastic") 
+
+
+ls2 <- bind_rows(ls2) |> 
+  mutate(variation = "Heteroscedastic") 
+
+
+
+
+
+
+# Coverage and CI-width
+
+p1 <- bind_rows(ls, ls2) |> 
+    mutate(dataset = paste0(dataset, variation),
+           model = factor(model, levels = c("s7", "s8", "s9", "s10"))) |> 
+  filter(!(dataset %in% excl_datasets)) |> 
+  summarise(.by = c(model,variant, variation), 
+            coverage = sum(coverage) / n()) |> 
+
+  ggplot(aes(model, coverage, shape = variant)) + 
+
+  geom_point(aes(),
+             position = position_dodge(width = 0.2),
+             fill = colscale[3],
+             size = 3) + 
+  
+  alpha_theme() + 
+  geom_hline(yintercept = 0.9, lty = 2, 
+             color = "gray") + 
+  scale_shape_manual(values = c(21, 22)) +
+
+  labs(x = "Model", 
+       y = "Credible interval coverage", 
+       shape = "Variant") + 
+  facet_wrap(~ variation)
+
+
+# Avg ci width
+ci_width <- bind_rows(ls, ls2) |> 
+  mutate(dataset = paste0(dataset, variation), 
+         model = factor(model, levels = c("s7", "s8", "s9", "s10"))) |> 
+    filter(!(dataset %in% excl_datasets)) |> 
+  summarise(.by = c(model,variant, variation), 
+            m = median(ci_width), 
+            q5 = quantile(ci_width, 0.05), 
+            q25 = quantile(ci_width, 0.25), 
+            q75 = quantile(ci_width, 0.75), 
+            q95 = quantile(ci_width, 0.95))
+
+p2 <- ci_width |> 
+  ggplot(aes(model, m, color = variant, group = variant)) + 
+  geom_errorbar(
+    aes(model, m, 
+        ymin = q5, 
+        ymax = q95, 
+        group = NULL), 
+    width = 0, 
+    position = position_dodge(width = 0.2)) +
+  
+  geom_errorbar(
+    aes(model, m, 
+        ymin = q25, 
+        ymax = q75, 
+        group = NULL), 
+    width = 0, 
+    linewidth = 1.2,
+    position = position_dodge(width = 0.2)) +
+  
+  geom_point(
+    aes(shape = variant, fill = variant),
+    size = 3,
+    position = position_dodge(width = 0.2)) +
+  
+  facet_wrap(~ variation) + 
+  scale_shape_manual(values = c(21, 23)) + 
+  scale_color_manual(values = c("black", "black")) +
+
+  scale_fill_manual(values = c(colscale[2], colscale[4])) + 
+  alpha_theme() +
+    labs(x = "Model", 
+       y = "Contrast Cedible interval width", 
+       fill = "Variant", 
+       color = "Variant", 
+       shape = "Variant")  
+
+
+
+
+
+
+
+p3 <- bind_rows(ls, ls2) |> 
+    mutate(dataset = paste0(dataset, variation)) |> 
+    filter(!(dataset %in% excl_datasets)) |> 
+  dplyr::select(time, type, dataset, variation,  variant,model, ci_width) |> 
+  pivot_wider(names_from = model, 
+              values_from = ci_width) |> 
+  mutate(s10_s8 = s10 - s8, 
+         s10_s9 = s10 - s9,
+         s9_s7  = s9 - s7, 
+         s8_s7  = s8 - s7) |> 
+  dplyr::select(time, type, dataset, variation, variant, s10_s8:s8_s7) |> 
+  pivot_longer(cols =  s10_s8:s8_s7) |> 
+  summarise(.by = c(name, variant, variation),
+            m = median(value), 
+            q5 = quantile(value, 0.05), 
+            q25 = quantile(value, 0.25), 
+            q75 = quantile(value, 0.75), 
+            q95 = quantile(value, 0.95)) |> 
+  mutate(name = case_when(
+    name == "s10_s8" ~ "s10 - s8", 
+    name == "s10_s9" ~ "s10 - s9", 
+    name == "s9_s7" ~ "s9 - s7", 
+    name == "s8_s7" ~ "s8 - s7",
+    .default = name
+  )) |> 
+
+  ggplot(aes(name, m, color = variant)) + 
+    geom_errorbar(
+             aes(name, m, 
+                 ymin = q5, 
+                 ymax = q95, 
+                 group = NULL), 
+            position = position_dodge(width = 0.2),
+             width = 0) +
+  
+  geom_errorbar(
+             aes(name, m, 
+                 ymin = q25, 
+                 ymax = q75, 
+                 group = NULL), 
+             width = 0, 
+                 position = position_dodge(width = 0.2),
+             linewidth = 1.2) +
+  
+  geom_point(aes(shape = variant), 
+             size = 4, 
+                 position = position_dodge(width = 0.2),
+             fill = colscale[3]) +
+  geom_hline(yintercept = 0, 
+             lty = 2, color = "gray") +
+  
+  scale_shape_manual(values = c(21, 22)) +
+    scale_color_manual(values = c("black", "black")) +
+  labs(y = "Credible width difference \n(Median 5-25-75-95% PI)", 
+       x = "Dataset variant", 
+       shape = "Variant", 
+       color = "Variant") + 
+  alpha_theme() + 
+  facet_wrap(~ variation)
+
+
+p1 / p2 / p3 + plot_annotation(tag_levels = 'A')
+```
+
+
+
+The absolute error (|Estimate - Simulated|) was compared between models indicating that for data sets that included missing values model S8 and S10 tended to have lower error rates compared to their respective univariate models (@fig-sim-error). @fig-sim-error shows comparisons of errors between models with comparisons aggregated over all effects in heteroscedastic/homoskedastic data sets. To assess differences within the heteroscedastic data set, @fig-sim-error2 shows comparisons between models in effects that were simulated using either equal or unequal variation between treatments groups. 
+
+Together, although differences are small, these results point to favorable performance of the S8 and S10 model.
+
+
+
+
+```{r}
+#| label: fig-sim-error
+#| fig-cap: "Comparing absolute error between models in zero and non-zero effects under equal and unequal population treatments-specific variation aggregated over all effects."
+#| eval: true
+#| fig-height: 12
+#| fig-width: 18
+
+
+# # Extract error distributions
+# files <- list.files("data-sim/est_error_dist")
+# ls <- list()
+# for(i in seq_along(files)) {
+#   ls[[i]] <- readRDS(paste0("data-sim/est_error_dist/", files[i])) |> 
+#     mutate(dataset = paste0("d", i))
+# }
+# 
+# files <- list.files("data-sim2/est_error_dist")
+# ls2 <- list()
+# for(i in seq_along(files)) {
+#   ls2[[i]] <- readRDS(paste0("data-sim2/est_error_dist/", files[i])) |> 
+#     mutate(dataset = paste0("d", i))
+# }
+# 
+# # Combine coverage stats
+# ls <- bind_rows(ls) |> 
+#   mutate(variation = "Homoscedastic") 
+# 
+# 
+# ls2 <- bind_rows(ls2) |> 
+#   mutate(variation = "Heteroscedastic") 
+# 
+
+
+
+
+
+# Calculate average absolute error over all simulations
+# abs_dev <- bind_rows(ls, ls2) |> 
+#     mutate(dataset = paste0(dataset, variation), 
+#          model = factor(model, levels = c("s7", "s8", "s9", "s10"))) |> 
+#   filter(!(dataset %in% excl_datasets)) |> 
+#   
+#   summarise(.by = c(model,variant, variation), 
+#             m = median(abs_dev), 
+#             q05 = quantile(abs_dev, 0.05), 
+#             q25 = quantile(abs_dev, 0.25), 
+#             q75 = quantile(abs_dev, 0.75), 
+#             q95 = quantile(abs_dev, 0.95)) 
+# 
+
+# abs_dev |> 
+#    ggplot(aes(model, m, 
+#               color = variant, 
+#               group = variant)) + 
+#   geom_errorbar(
+#     aes(model, m, 
+#         ymin = q25, 
+#         ymax = q75, 
+#         group = NULL), 
+#     width = 0, 
+#     linewidth = 1.2,
+#     position = position_dodge(width = 0.3)) +
+#   
+#   geom_point(
+#     aes(shape = variant, fill = variant),
+#     size = 3,
+#     position = position_dodge(width = 0.3)) +
+#   
+#   facet_wrap( ~ variation) + 
+#   scale_shape_manual(values = c(21, 23)) + 
+#   scale_color_manual(values = c("black", "black")) +
+# 
+#   scale_fill_manual(values = c(colscale[2], colscale[4])) + 
+#   alpha_theme() +
+#     labs(x = "Model", 
+#        y = "Contrast Cedible interval width", 
+#        fill = "Variant", 
+#        color = "Variant", 
+#        shape = "Variant")  
+#   
+
+
+# Bias across all
+
+
+# p_bias <- bind_rows(ls, ls2) |> 
+#      mutate(dataset = paste0(dataset, variation), 
+#          model = factor(model, levels = c("s7", "s8", "s9", "s10"))) |> 
+#   filter(!(dataset %in% excl_datasets)) |> 
+# 
+#   ggplot(aes(error, color = paste(model), 
+#              group = paste(model, dataset))) + 
+#   geom_line(stat = "density", alpha = 0.4) + 
+#   facet_wrap(~ variant, ncol = 1) +
+#     scale_color_manual(values = colscale) +
+#     alpha_theme(yaxis = FALSE) + 
+#   labs(x = "Bias", 
+#        y = "") 
+
+
+
+# Extract error comparison
+files <- list.files("data-sim/error_comp")
+ls <- list()
+for(i in seq_along(files)) {
+  ls[[i]] <- readRDS(paste0("data-sim/error_comp/", files[i])) |> 
+    mutate(dataset = paste0("d", i))
+}
+
+files <- list.files("data-sim2/error_comp")
+ls2 <- list()
+for(i in seq_along(files)) {
+  ls2[[i]] <- readRDS(paste0("data-sim2/error_comp/", files[i])) |> 
+    mutate(dataset = paste0("d", i))
+}
+
+# Combine coverage stats
+ls <- bind_rows(ls) |> 
+  mutate(variation = "Homoscedastic") 
+
+
+ls2 <- bind_rows(ls2) |> 
+  mutate(variation = "Heteroscedastic") 
+
+
+
+p1 <-  bind_rows(ls, ls2) |>  
+      mutate(dataset = paste0(dataset, variation), 
+         model = factor(model, levels = c("s7", "s8", "s9", "s10"))) |> 
+  filter(!(dataset %in% excl_datasets)) |> 
+  dplyr::select(time, type, model,variation, dataset, true, abs_dev_full, abs_dev_miss) |> 
+  pivot_longer(names_to = "variant", 
+               values_to = "abs_dev", 
+               cols = starts_with("abs_dev_")) |> 
+  mutate(variant = gsub("abs_dev_", "", variant)) |> 
+  pivot_wider(names_from = model, 
+              values_from = abs_dev) |> 
+  mutate(s10_s8 = s10 - s8, 
+         s10_s9 = s10 - s9,
+         s9_s7  = s9 - s7, 
+         s8_s7  = s8 - s7, 
+         effect = if_else(true == 0, "zero effect", "non-zero effect")) |> 
+  dplyr::select(time, type, dataset, effect, variation, variant, s10_s8:s8_s7) |> 
+  pivot_longer(cols =  s10_s8:s8_s7) |> 
+  summarise(.by = c(name, variant, variation, effect),
+            m = median(value), 
+            q5 = quantile(value, 0.05), 
+            q25 = quantile(value, 0.25), 
+            q75 = quantile(value, 0.75), 
+            q95 = quantile(value, 0.95)) |> 
+  mutate(name = case_when(
+    name == "s10_s8" ~ "s10 - s8", 
+    name == "s10_s9" ~ "s10 - s9", 
+    name == "s9_s7" ~ "s9 - s7", 
+    name == "s8_s7" ~ "s8 - s7",
+    .default = name
+  )) |> 
+    ggplot(aes(name, m, color = variant)) + 
+    geom_errorbar(
+             aes(name, m, 
+                 ymin = q5, 
+                 ymax = q95, 
+                 group = NULL), 
+            position = position_dodge(width = 0.2),
+             width = 0) +
+  
+  geom_errorbar(
+             aes(name, m, 
+                 ymin = q25, 
+                 ymax = q75, 
+                 group = NULL), 
+             width = 0, 
+                 position = position_dodge(width = 0.2),
+             linewidth = 1.2) +
+  
+  geom_point(aes(shape = variant), 
+             size = 4, 
+                 position = position_dodge(width = 0.2),
+             fill = colscale[3]) +
+  geom_hline(yintercept = 0, 
+             lty = 2, color = "gray") +
+  
+  scale_shape_manual(values = c(21, 22)) +
+    scale_color_manual(values = c("black", "black")) +
+  labs(y = "Absolut error difference \n(Median 5-25-75-95% PI)", 
+       x = "Dataset variant", 
+       shape = "Variant", 
+       color = "Variant") + 
+  alpha_theme() + 
+  facet_wrap(effect ~ variation)
+   
+   
+   
+p1
+
+
+  
+```
+
+
+
+```{r}
+#| label: fig-sim-error2
+#| fig-cap: "Comparing absolute error between models in zero and non-zero effects under equal and unequal population type-specific and treatments-specific."
+#| eval: true
+#| fig-height: 8
+#| fig-width: 6
+
+
+p1 <- ls2 |>  
+      mutate(dataset = paste0(dataset, variation), 
+         model = factor(model, levels = c("s7", "s8", "s9", "s10"))) |> 
+  filter(!(dataset %in% excl_datasets)) |> 
+  dplyr::select(time, type, model,variation, dataset, true, abs_dev_full, abs_dev_miss) |> 
+  pivot_longer(names_to = "variant", 
+               values_to = "abs_dev", 
+               cols = starts_with("abs_dev_")) |> 
+  mutate(variant = gsub("abs_dev_", "", variant)) |> 
+  pivot_wider(names_from = model, 
+              values_from = abs_dev) |> 
+  mutate(s10_s8 = s10 - s8, 
+         s10_s9 = s10 - s9,
+         s9_s7  = s9 - s7, 
+         s8_s7  = s8 - s7, 
+         effect = if_else(true == 0, "zero effect", "non-zero effect"), 
+         variation = if_else(type %in% c(3, 4, 7, 8), "Homoscedastic", "Heteroscedastic")) |> 
+  dplyr::select(time, type, dataset, effect, variation, variant, s10_s8:s8_s7) |> 
+  pivot_longer(cols =  s10_s8:s8_s7) |> 
+  summarise(.by = c(name, variant, variation, effect),
+            m = median(value), 
+            q5 = quantile(value, 0.05), 
+            q25 = quantile(value, 0.25), 
+            q75 = quantile(value, 0.75), 
+            q95 = quantile(value, 0.95)) |> 
+  mutate(name = case_when(
+    name == "s10_s8" ~ "s10 - s8", 
+    name == "s10_s9" ~ "s10 - s9", 
+    name == "s9_s7" ~ "s9 - s7", 
+    name == "s8_s7" ~ "s8 - s7",
+    .default = name
+  )) |> 
+    ggplot(aes(name, m, color = variant)) + 
+    geom_errorbar(
+             aes(name, m, 
+                 ymin = q5, 
+                 ymax = q95, 
+                 group = NULL), 
+            position = position_dodge(width = 0.2),
+             width = 0) +
+  
+  geom_errorbar(
+             aes(name, m, 
+                 ymin = q25, 
+                 ymax = q75, 
+                 group = NULL), 
+             width = 0, 
+                 position = position_dodge(width = 0.2),
+             linewidth = 1.2) +
+  
+  geom_point(aes(shape = variant), 
+             size = 4, 
+                 position = position_dodge(width = 0.2),
+             fill = colscale[3]) +
+  geom_hline(yintercept = 0, 
+             lty = 2, color = "gray") +
+  
+  scale_shape_manual(values = c(21, 22)) +
+    scale_color_manual(values = c("black", "black")) +
+  labs(y = "Absolut error difference \n(Median 5-25-75-95% PI)", 
+       x = "Dataset variant", 
+       shape = "Variant", 
+       color = "Variant") + 
+  alpha_theme() + 
+  facet_wrap(effect ~ variation)
+
+
+# Number of simulations 
+
+p2 <- ls2 |>  
+      mutate(dataset = paste0(dataset, variation), 
+         model = factor(model, levels = c("s7", "s8", "s9", "s10"))) |> 
+  filter(!(dataset %in% excl_datasets)) |> 
+  dplyr::select(time, type, model,variation, dataset, true, abs_dev_full, abs_dev_miss) |> 
+  pivot_longer(names_to = "variant", 
+               values_to = "abs_dev", 
+               cols = starts_with("abs_dev_")) |> 
+  mutate(variant = gsub("abs_dev_", "", variant)) |> 
+  pivot_wider(names_from = model, 
+              values_from = abs_dev) |> 
+  mutate(s10_s8 = s10 - s8, 
+         s10_s9 = s10 - s9,
+         s9_s7  = s9 - s7, 
+         s8_s7  = s8 - s7, 
+         effect = if_else(true == 0, "zero effect", "non-zero effect"), 
+         variation = if_else(type %in% c(3, 4, 7, 8), "Homoscedastic", "Heteroscedastic")) |> 
+  dplyr::select(time:dataset,effect, s10_s8:s8_s7) |> 
+  pivot_longer(cols = s10_s8:s8_s7) |> 
+  summarise(.by = c(variation, name, effect),
+            rel = sum(value < 0) / n()) |> 
+  mutate(name = case_when(
+    name == "s10_s8" ~ "s10 - s8", 
+    name == "s10_s9" ~ "s10 - s9", 
+    name == "s9_s7" ~ "s9 - s7", 
+    name == "s8_s7" ~ "s8 - s7",
+    .default = name
+  )) |> 
+  ggplot(aes(rel, name, color = variation, shape = effect)) + 
+  geom_point(alpha = 0.3, 
+             position = position_jitter(height = 0.1)) + 
+  geom_vline(xintercept = 0.5, lty = 2, color = "gray") + 
+  alpha_theme() + 
+  scale_color_manual(values = colscale[c(1, 3)])
+
+
+p1 / p2 + plot_layout(heights = c(1, 0.5))
+
+
+```
+
+

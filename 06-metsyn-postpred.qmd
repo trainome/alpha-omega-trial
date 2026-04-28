@@ -1,0 +1,490 @@
+---
+title: "Effects of N-3 supplementation on indications of metabolic syndrome - Posterior predictive simulations"
+execute:
+  echo: false
+  warning: false
+  message: false
+  cache: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+# Source figure options, packages, and main data prep.
+source("./R/fig-opt-fun.R")
+source("./R/packages.R")
+source("./R/data-prep.R")
+source("./R/helpers.R")
+source("./R/sim-fun.R")
+
+
+```
+
+
+
+Models S7-S10 where next fitted with the observed data. Chain statistics indicated that the HMC algorithm converges with satisfactory results. @fig-chain-stats-s7s8 per-parameter summaries of $\hat{R}$ and effective sample size indicating that no parameter are $\hat{R} << 1.01$ and effective sample sizes are generally > 1000 per chain.
+
+
+
+```{r}
+#| eval: true
+#| label: data-prep-obs-fit
+
+
+
+
+
+d_full <- criteria_dat |> 
+  select(participant, time, treat, sex, age, analyte, value) |>
+  # Add missing values for all missing obs. 
+  pivot_wider(names_from = time, 
+              values_from = value) |> 
+
+  pivot_longer(cols = c(T1, T2, T4), 
+               values_to = "value",
+               names_to = "time" ) |> 
+  
+  pivot_wider(names_from = analyte, 
+              values_from = value) |> 
+
+    pivot_longer(cols = HDL:HOMA2IR, 
+               values_to = "value",
+               names_to = "analyte" ) |> 
+  
+  mutate(value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value)) |> 
+  
+
+  
+  mutate(.by = analyte, 
+         value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE)) |> 
+
+  mutate(participant = paste0("p", participant)) 
+
+
+
+```
+
+
+
+```{r}
+
+
+# Including all data
+dat <- d_full |> 
+  filter(time %in% c("T1", "T2","T4")) |> 
+  
+
+  mutate(type = dense_rank(analyte), 
+         participant = dense_rank(participant), 
+         treat_seq = dense_rank(treat), 
+         value_std = if_else(is.na(value_std), -999, value_std)) |> 
+
+    select(-value) |> 
+  
+  pivot_wider(names_from = time, 
+              values_from = c(value_std)) |> 
+  
+  pivot_longer(cols = T2:T4, 
+               names_to = "time",
+               values_to = "y_obs") |> 
+  rename(pre_obs = T1) |> 
+  
+
+  
+  mutate(time = if_else(time == "T2", 1, 2), 
+         sex = if_else(sex == "m", -0.5, 0.5), 
+         y_miss = if_else(y_obs == -999, 0, 1), 
+         pre_miss= if_else(pre_obs == -999, 0, 1)) |> 
+
+  select(y_obs, 
+         pre_obs, 
+         y_miss, 
+         pre_miss, 
+         P = participant, 
+         sex,
+         type,
+         type,
+         time,
+         treat = treat_seq) |> 
+
+  arrange(P, time, type) 
+
+
+# Prepare a data list for models s7-s10
+d <- list(
+  N = nrow(dat), 
+  N_P = length(unique(dat$P)),
+  N_TX = length(unique(dat$treat)),
+  K = length(unique(dat$type)),
+  y_obs = dat$y_obs, 
+  pre_obs = dat$pre_obs, 
+  y_miss = dat$y_miss,
+  pre_miss = dat$pre_miss, 
+  type = dat$type, 
+  treat = dat$treat, 
+  P = dat$P, 
+  prior_only = 0,
+  # Adding sex and time to data structure
+  time = dat$time,
+  sex = dat$sex
+)
+
+# Fit model (get posterior distributions)
+fit_wrap(s7, DATA = d, fit = "fit.s7.post")
+fit_wrap(s8, DATA = d, fit = "fit.s8.post")
+fit_wrap(s9, DATA = d, fit = "fit.s9.post")
+fit_wrap(s10, DATA = d, fit = "fit.s10.post")
+
+```
+
+
+```{r}
+#| label: fig-chain-stats-s7s8-org
+#| fig-cap: "Summary chain statistics indicate satisfactory results from both models."
+#| eval: true
+#| fig-height: 8
+#| fig-width: 8
+
+sum.s7 <- fit.s7.post$summary()
+sum.s8 <- fit.s8.post$summary()
+sum.s9 <- fit.s9.post$summary()
+sum.s10 <- fit.s10.post$summary()
+
+
+p1 <- sum.s7 |> 
+  filter(!is.na(rhat)) |> 
+  ggplot(aes(ess_bulk, rhat)) + 
+  geom_point(alpha = 0.5, color = colscale[4]) +
+  alpha_theme() + 
+  labs(x = "Effective sample size (bulk)", 
+       y = "Rhat", 
+       subtitle = "Model: S7")
+p2 <- sum.s7 |> 
+  filter(!is.na(rhat)) |> 
+  ggplot(aes(ess_tail, rhat)) + 
+  geom_point(alpha = 0.5, color = colscale[4]) +
+  alpha_theme() + 
+  labs(x = "Effective sample size (tail)", 
+       y = "Rhat", 
+       subtitle = "Model: S7")
+
+
+p3 <- sum.s8 |> 
+  filter(!is.na(rhat)) |> 
+  ggplot(aes(ess_bulk, rhat)) + 
+  geom_point(alpha = 0.5, color = colscale[7]) +
+  alpha_theme() + 
+  labs(x = "Effective sample size (bulk)", 
+       y = "Rhat", 
+       subtitle = "Model: S8")
+p4 <- sum.s8 |> 
+  filter(!is.na(rhat)) |> 
+  ggplot(aes(ess_tail, rhat)) + 
+  geom_point(alpha = 0.5, color = colscale[7]) +
+  alpha_theme() + 
+  labs(x = "Effective sample size (tail)", 
+       y = "Rhat", 
+       subtitle = "Model: S8")
+
+
+(p1 | p2) / (p3 | p4)
+
+
+
+```
+
+
+Using the observed data set we are next assessing the models tendencies to produce replicated data similar to the observed data. Both model S7 and S8 are still considered in these posterior predictive checks. The overall distributions of replicated data (y^rep^) tend to look very similar to the observed data for each measurement type, treatment, and time-point combinations, both for model S7 (@fig-ppcheck-s7-rep) and model S8 (@fig-ppcheck-s7-rep).
+
+```{r}
+#| label: fig-ppcheck-s7-rep
+#| fig-cap: "Posterior predictive check of model s7. y^rep^ (40 draws from the posterior) and observed data (orange line) indicate that the model replicate the observed data distributions."
+#| eval: true
+#| fig-height: 8
+#| fig-width: 8
+
+yrep.s8 <- fit.s8.post$draws("y_rep", format = "df")
+yrep.s7 <- fit.s7.post$draws("y_rep", format = "df")
+
+# Obs data
+dobs <- data.frame(
+  y = d$y_obs, 
+  type = d$type, 
+    sex = d$sex,
+    treat = d$treat, 
+  time = d$time
+  ) |> 
+  filter(y > -900) 
+
+# Set number of draws for posterior predictive checks
+ndraws <- 40
+
+
+# Distribution of observed values vs. distribution of y rep
+p1 <- yrep.s7 |> 
+  filter(.chain == "1", 
+         .iteration %in% 1:ndraws) |> 
+  pivot_longer(starts_with("y_rep")) |> 
+  mutate(
+    type = rep(d$type, ndraws), 
+    sex = rep(d$sex, ndraws),
+    treat = rep(d$treat, ndraws), 
+    time = rep(d$time, ndraws),
+  ) |> 
+  ggplot(aes(value, group = .iteration)) + 
+  geom_line(stat = "density", 
+            alpha = 0.2) + 
+  facet_grid(time + treat ~ type, 
+             labeller = label_both) +
+  
+  geom_line(data = dobs, 
+            aes(y, group = NULL), 
+            stat = "density", 
+            color = colscale[3],
+            alpha = 0.8,
+            linewidth = 1.2) +
+  alpha_theme(yaxis = FALSE) + 
+  theme(axis.title.y =  element_blank())
+
+p1
+
+```
+
+
+```{r}
+#| eval: true
+#| label: fig-ppcheck-s8-rep
+#| fig-cap: "Posterior predictive check of model s8. y^rep^ (40 draws from the posterior) and observed data (orange line) indicate that the model replicate the observed data distributions."
+#| fig-height: 8
+#| fig-width: 8
+
+
+p2 <- yrep.s8 |> 
+  filter(.chain == "1", 
+         .iteration %in% 1:ndraws) |> 
+  pivot_longer(starts_with("y_rep")) |> 
+  mutate(
+    type = rep(d$type, ndraws), 
+    sex = rep(d$sex, ndraws),
+    treat = rep(d$treat, ndraws), 
+    time = rep(d$time, ndraws),
+  ) |> 
+  ggplot(aes(value, group = .iteration)) + 
+  geom_line(stat = "density", 
+            alpha = 0.2) + 
+  facet_grid(time + treat ~ type, 
+             labeller = label_both) +
+  
+  geom_line(data = dobs, 
+            aes(y, group = NULL), 
+            stat = "density", 
+            color = colscale[3],
+            alpha = 0.8,
+            linewidth = 1.2) +
+  alpha_theme(yaxis = FALSE) + 
+  theme(axis.title.y =  element_blank())
+```
+
+To further explore model implications we calculate the observed standard deviations and extract distributions implied by the model. In @fig-ppcheck-s7-sd and @fig-ppcheck-s8-sd most distributions of y^rep^ standard deviations contain the empirical standard deviation, however, for both model S7 and S8 the standard deviations observed in the data do not correspond to those implied by the model. 
+
+```{r}
+#| eval: true
+#| label: fig-ppcheck-s7-sd
+#| fig-cap: "Posterior predictive check of model s7. The distributions of standard deviations calculated from y^rep^"
+#| fig-height: 8
+#| fig-width: 8
+
+# New number of draws
+ndraws <- 1000
+
+sumstat <- dobs |> 
+    summarise(.by = c(type, time, treat),
+            s = sd(y)) 
+
+# Statistics vs observed
+
+yrep.s7 |> 
+  filter(.iteration %in% 1:ndraws) |> 
+  pivot_longer(starts_with("y_rep")) |> 
+  mutate(
+    type = rep(d$type, ndraws * 4), 
+    sex = rep(d$sex, ndraws * 4),
+    treat = rep(d$treat, ndraws * 4),
+    time = rep(d$time, ndraws * 4)
+  ) |> 
+  summarise(.by = c(.iteration, type, time, treat),
+            s = sd(value)) |> 
+  ggplot(aes(s)) + geom_histogram() + 
+  facet_grid(type ~ time + treat, 
+             labeller = label_both) + 
+  alpha_theme(yaxis = FALSE) + 
+  
+  geom_vline(data = sumstat, 
+             aes(xintercept = s, color = as.factor(treat))) + 
+  scale_color_manual(values = colscale) + 
+  labs(x = "Standard deviation", 
+       color = "Treatment") + 
+  theme(axis.title.y = element_blank())
+
+
+```
+
+
+
+```{r}
+#| eval: true
+#| label: fig-ppcheck-s8-sd
+#| fig-cap: "Posterior predictive check of model s8. The distributions of standard deviations calculated from y^rep^"
+#| fig-height: 8
+#| fig-width: 8
+
+# New number of draws
+ndraws <- 1000
+
+sumstat <- dobs |> 
+    summarise(.by = c(type, time, treat),
+            s = sd(y)) 
+
+# Statistics vs observed
+
+yrep.s8 |> 
+  filter(.iteration %in% 1:ndraws) |> 
+  pivot_longer(starts_with("y_rep")) |> 
+  mutate(
+    type = rep(d$type, ndraws * 4), 
+    sex = rep(d$sex, ndraws * 4),
+    treat = rep(d$treat, ndraws * 4),
+    time = rep(d$time, ndraws * 4)
+  ) |> 
+  summarise(.by = c(.iteration, type, time, treat),
+            s = sd(value)) |> 
+  ggplot(aes(s)) + geom_histogram() + 
+  facet_grid(type ~ time + treat, 
+             labeller = label_both) + 
+  alpha_theme(yaxis = FALSE) + 
+  
+  geom_vline(data = sumstat, 
+             aes(xintercept = s, color = as.factor(treat))) + 
+  scale_color_manual(values = colscale) + 
+  labs(x = "Standard deviation", 
+       color = "Treatment") + 
+  theme(axis.title.y = element_blank())
+
+
+```
+
+Similarly to posterior predictive checks of the standard deviations, comparing percentiles (5% and 95%) between y^rep^ and observed data indicate that the observed data overlap with posterior distributions in most cases. Again, however, some measurements types (e.g., type 7) indicate imabalønce between treatments. 
+
+
+```{r}
+#| eval: true
+#| label: fig-ppcheck-s7-quantiles
+#| fig-cap: "Posterior predictive check of model s7. The distributions of percentiles (5 and 95%) calculated from y^rep^"
+#| fig-height: 8
+#| fig-width: 8
+
+# New number of draws
+ndraws <- 1000
+
+sumstat <- dobs |> 
+    summarise(.by = c(type, time, treat),
+            q5 = quantile(y, 0.05), 
+            q95 = quantile(y, 0.95))  |> 
+  pivot_longer(names_to = "stat", 
+               values_to = "value", 
+               cols = q5:q95) 
+
+# Statistics vs observed
+
+yrep.s7 |> 
+  filter(.iteration %in% 1:ndraws) |> 
+  pivot_longer(starts_with("y_rep")) |> 
+  mutate(
+    type = rep(d$type, ndraws * 4), 
+    sex = rep(d$sex, ndraws * 4),
+    treat = rep(d$treat, ndraws * 4),
+    time = rep(d$time, ndraws * 4)
+  ) |> 
+  summarise(.by = c(.iteration, type, time, treat),
+            q5 = quantile(value, 0.05), 
+            q95 = quantile(value, 0.95)) |> 
+    pivot_longer(names_to = "stat", 
+               values_to = "value", 
+               cols = q5:q95) |> 
+  
+  ggplot(aes(value, fill = stat)) + geom_histogram() + 
+  facet_grid(type ~ time + treat, 
+             labeller = label_both) + 
+  alpha_theme(yaxis = FALSE) + 
+  
+  geom_vline(data = sumstat, 
+             aes(xintercept = value, color = stat)) + 
+  scale_color_manual(values = colscale) + 
+  scale_fill_manual(values = colscale) + 
+  labs(x = "Quantiles (5% and 95%)", 
+       color = "", 
+       fill = "") + 
+  theme(axis.title.y = element_blank())
+
+
+```
+
+
+
+```{r}
+#| eval: true
+#| label: fig-ppcheck-s8-quantiles
+#| fig-cap: "Posterior predictive check of model s8. The distributions of percentiles (5 and 95%) calculated from y^rep^"
+#| fig-height: 8
+#| fig-width: 8
+
+# New number of draws
+ndraws <- 1000
+
+sumstat <- dobs |> 
+    summarise(.by = c(type, time, treat),
+            q5 = quantile(y, 0.05), 
+            q95 = quantile(y, 0.95))  |> 
+  pivot_longer(names_to = "stat", 
+               values_to = "value", 
+               cols = q5:q95) 
+
+# Statistics vs observed
+
+yrep.s8 |> 
+  filter(.iteration %in% 1:ndraws) |> 
+  pivot_longer(starts_with("y_rep")) |> 
+  mutate(
+    type = rep(d$type, ndraws * 4), 
+    sex = rep(d$sex, ndraws * 4),
+    treat = rep(d$treat, ndraws * 4),
+    time = rep(d$time, ndraws * 4)
+  ) |> 
+  summarise(.by = c(.iteration, type, time, treat),
+            q5 = quantile(value, 0.05), 
+            q95 = quantile(value, 0.95)) |> 
+    pivot_longer(names_to = "stat", 
+               values_to = "value", 
+               cols = q5:q95) |> 
+  
+  ggplot(aes(value, fill = stat)) + geom_histogram() + 
+  facet_grid(type ~ time + treat, 
+             labeller = label_both) + 
+  alpha_theme(yaxis = FALSE) + 
+  
+  geom_vline(data = sumstat, 
+             aes(xintercept = value, color = stat)) + 
+  scale_color_manual(values = colscale) + 
+  scale_fill_manual(values = colscale) + 
+  labs(x = "Quantiles (5% and 95%)", 
+       color = "", 
+       fill = "") + 
+  theme(axis.title.y = element_blank())
+
+
+```
+
+
+
+Together, the posterior predictive check indicate that, for some cases of measurement types, the model implied variation among replicated data do not overlap with the observed data. As both models S7 and S8 assumes equal variation between treatments a natural extension of both models is to add treatment-specific variation. Models S9 and S10 incorporates this addition. 

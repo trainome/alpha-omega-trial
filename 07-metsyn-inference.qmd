@@ -1,0 +1,10 @@
+---
+title: "Effects of N-3 supplementation on indications of metabolic syndrome - Inference"
+execute:
+  echo: false
+  warning: false
+  message: false
+  cache: false
+editor_options: 
+  chunk_output_type: console
+---

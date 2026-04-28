@@ -867,8 +867,8 @@ sim_wrap2 <- function(
   # fmt: skip
   betas_pre <- matrix(
     c(rep(0, K), # intercepts
-      runif(8, -0.15, 0.15),  # age
-      0, 0, 0, 0.2, 0, -0.2, 0.15, 0.15  # sex
+      runif(8, -0.2, 0.2),  # age
+      runif(8, -0.2, 0.2)  # sex
     ),
     nrow = 3,
     ncol = K,
@@ -911,7 +911,7 @@ sim_wrap2 <- function(
   preds_all <- data.frame(
     group = rep(c(0, 1), each = N / 2),
     sex = rep(c(0, 1), N / 2),
-    age = c(runif(N / 2, -1.5, 1.5), rnorm(N / 2))
+    age = rnorm(N)
   )
 
   # Loadings for pre-intervention loading matrix
@@ -1016,6 +1016,368 @@ sim_wrap2 <- function(
     full = d2_full,
     miss = d2_miss,
     true_effects = matrix(c(group1, group2), ncol = 8, byrow = TRUE)
+  )
+
+  return(out)
+}
+
+
+# sim_type3 ----------------------------------------------------------------
+# Heteroskedastic variant of sim_type2: residual SDs differ by treatment,
+# but the correlation structure (from Lambda2, psi2, C_cross) is shared
+# across treatments. Matches exactly what model s10 assumes: one L_Omega,
+# treatment-specific sigmas.
+#
+# Differences from sim_type2:
+#   - S2 argument shape: list of length 2 (per time), where each element is
+#     a K x N_TX matrix. Column tx is the SD vector for treatment tx.
+#   - Residuals are drawn from the correlation matrix (unit scales), then
+#     rescaled per participant based on that participant's treatment.
+#   - New treat_col argument picks the treatment column from preds.
+#
+# Everything else -- pre-intervention draws, design matrix, mu_mat,
+# missingness, and output structure -- is identical to sim_type2.
+sim_type3 <- function(
+  n,
+  K,
+  form_pre,
+  betas_pre,
+  form,
+  betas,
+  preds,
+  Lambda1,
+  psi1,
+  S1,
+  Lambda2,
+  psi2,
+  S2,              # list of 2; each element a K x N_TX matrix
+  C_cross,
+  missing_form_t2 = NULL,
+  missing_form_t4 = NULL,
+  missing_beta_t2,
+  missing_beta_t4,
+  missing_y_prop = 0,
+  missing_pre_prop = 0,
+  treat_col = "group",
+  verbose = TRUE
+) {
+  if (nrow(preds) != n) stop("n is not equal to nrow(preds)")
+  if (nrow(Lambda1) != K) stop("Lambda1 must have K rows")
+  if (length(psi1) != K) stop("psi1 must be of length K")
+  if (any(psi1 <= 0)) stop("psi1 values must be > 0")
+  if (length(S1) != K) stop("S1 must be of length K")
+
+  if (!is.list(Lambda2) || length(Lambda2) != 2)
+    stop("Lambda2 must be a list of length 2")
+  if (!is.list(psi2) || length(psi2) != 2)
+    stop("psi2 must be a list of length 2")
+  if (!is.list(S2) || length(S2) != 2) stop("S2 must be a list of length 2")
+  if (!is.list(betas) || length(betas) != 2)
+    stop("betas must be a list of length 2")
+
+  for (t in 1:2) {
+    if (!is.matrix(S2[[t]]) || nrow(S2[[t]]) != K)
+      stop(sprintf("S2[[%d]] must be a K x N_TX matrix", t))
+    if (nrow(Lambda2[[t]]) != K)
+      stop(sprintf("Lambda2[[%d]] must have K rows", t))
+    if (any(psi2[[t]] <= 0)) stop(sprintf("psi2[[%d]] values must be > 0", t))
+    if (!is.matrix(betas[[t]])) stop(sprintf("betas[[%d]] must be a matrix", t))
+  }
+  N_TX <- ncol(S2[[1]])
+  if (ncol(S2[[2]]) != N_TX)
+    stop("S2[[1]] and S2[[2]] must have the same number of columns (N_TX)")
+
+  if (!(treat_col %in% colnames(preds)))
+    stop(sprintf("treat_col '%s' not found in preds", treat_col))
+  treat_raw <- preds[[treat_col]]
+  treat_idx <- as.integer(as.factor(treat_raw))   # 1..N_TX
+  if (max(treat_idx) > N_TX)
+    stop("Number of treatment levels in preds exceeds S2 column count")
+
+  if (length(C_cross) != K) stop("C_cross must be of length K")
+  if (any(abs(C_cross) > 1)) stop("C_cross values must be in [-1, 1]")
+
+  # Pre-intervention (identical to sim_type2) ---------------------------------
+  Sigma1 <- build_sigma_factor(Lambda1, psi1, S1)
+  Z_pre <- MASS::mvrnorm(n, rep(0, K), Sigma1)
+  desig_pre <- model.matrix(form_pre, data = preds)
+  mu_pre <- desig_pre %*% betas_pre
+  pre <- Z_pre + mu_pre
+  colnames(pre) <- paste0("type", 1:K)
+
+  # Design matrix (identical to sim_type2) ------------------------------------
+  form_terms <- attr(terms(form), "term.labels")
+  has_pre <- "pre" %in% form_terms
+
+  if (has_pre) {
+    pre_df <- as.data.frame(pre)
+    colnames(pre_df) <- paste0("pre", 1:K)
+    preds_expanded <- cbind(preds, pre_df)
+    design <- lapply(1:K, function(k) {
+      form_k <- as.formula(gsub("\\bpre\\b", paste0("pre", k), deparse(form)))
+      model.matrix(form_k, data = preds_expanded)
+    })
+  } else {
+    design <- replicate(K, model.matrix(form, data = preds), simplify = FALSE)
+  }
+
+  p <- ncol(design[[1]])
+  for (t in 1:2) {
+    if (!all(dim(betas[[t]]) == c(p, K)))
+      stop(sprintf(
+        "betas[[%d]] must be %d x %d (predictors x K), got %d x %d",
+        t, p, K, nrow(betas[[t]]), ncol(betas[[t]])
+      ))
+  }
+
+  mu_t1 <- sapply(1:K, function(k) design[[k]] %*% betas[[1]][, k])
+  mu_t2 <- sapply(1:K, function(k) design[[k]] %*% betas[[2]][, k])
+  mu_mat <- cbind(mu_t1, mu_t2)
+
+  # Correlation-scale 2K x 2K block matrix -----------------------------------
+  unit_S <- rep(1, K)
+  R2_t1 <- build_sigma_factor(Lambda2[[1]], psi2[[1]], unit_S)
+  R2_t2 <- build_sigma_factor(Lambda2[[2]], psi2[[2]], unit_S)
+  R_cross <- diag(C_cross)
+  R_full <- rbind(cbind(R2_t1, R_cross), cbind(t(R_cross), R2_t2))
+
+  eigs <- eigen(R_full, symmetric = TRUE, only.values = TRUE)$values
+  if (any(eigs <= 0))
+    stop("R_full is not positive definite - check C_cross vs Lambda2/psi2")
+
+  # Standardized residuals and per-participant scaling -----------------------
+  Z_std <- MASS::mvrnorm(n, rep(0, 2 * K), R_full)
+
+  # Row i of s_mat is c(S2[[1]][, treat_idx[i]], S2[[2]][, treat_idx[i]])
+  s_t1 <- t(S2[[1]])[treat_idx, , drop = FALSE]   # n x K
+  s_t2 <- t(S2[[2]])[treat_idx, , drop = FALSE]   # n x K
+  s_mat <- cbind(s_t1, s_t2)                      # n x 2K
+
+  Z <- Z_std * s_mat
+  Y <- Z + mu_mat
+
+  y_t1 <- Y[, 1:K]
+  y_t2 <- Y[, (K + 1):(2 * K)]
+  colnames(y_t1) <- paste0("type", 1:K)
+  colnames(y_t2) <- paste0("type", 1:K)
+
+  if (verbose) {
+    cat("Heteroskedastic sim (sim_type3). Treatment-specific SDs:\n")
+    for (t in 1:2) {
+      cat(sprintf("Time %d (rows = type, cols = treatment):\n", t))
+      print(round(S2[[t]], 3))
+    }
+    cat("Implied pre-intervention correlation matrix:\n")
+    print(round(cov2cor(Sigma1), 2))
+    cat("\nImplied post-int residual correlation (t1, unit scale):\n")
+    print(round(R2_t1, 2))
+    cat("\nImplied post-int residual correlation (t2, unit scale):\n")
+    print(round(R2_t2, 2))
+  }
+
+  # Missing values (identical to sim_type2) -----------------------------------
+  miss_t2_ind <- rep(0L, n)
+  miss_t4_ind <- rep(0L, n)
+
+  if (!is.null(missing_form_t2)) {
+    X_miss_t2 <- model.matrix(missing_form_t2, data = preds)
+    p_miss_t2 <- plogis(X_miss_t2 %*% missing_beta_t2)
+    miss_t2_ind <- rbinom(n, 1, p_miss_t2)
+  }
+  if (!is.null(missing_form_t4)) {
+    X_miss_t4 <- model.matrix(missing_form_t4, data = preds)
+    p_miss_t4 <- plogis(X_miss_t4 %*% missing_beta_t4)
+    miss_t4_ind <- rbinom(n, 1, p_miss_t4)
+    miss_t4_ind[miss_t2_ind == 1] <- 1
+  }
+
+  y_t1_miss <- y_t1
+  y_t2_miss <- y_t2
+  y_t1_miss[miss_t2_ind == 1, ] <- NA
+  y_t2_miss[miss_t4_ind == 1, ] <- NA
+
+  # Collect output (identical to sim_type2) -----------------------------------
+  preds$participant <- 1:n
+
+  build_long <- function(y_t1_m, y_t2_m, pre_m) {
+    pre_df <- data.frame(pre_m) |>
+      dplyr::mutate(participant = 1:n) |>
+      tidyr::pivot_longer(
+        cols = tidyselect::starts_with("type"),
+        names_to = "type",
+        values_to = "pre"
+      )
+    y_df <- dplyr::bind_rows(
+      data.frame(y_t1_m) |>
+        dplyr::mutate(participant = 1:n, time = 1) |>
+        tidyr::pivot_longer(
+          cols = tidyselect::starts_with("type"),
+          names_to = "type",
+          values_to = "y"
+        ),
+      data.frame(y_t2_m) |>
+        dplyr::mutate(participant = 1:n, time = 2) |>
+        tidyr::pivot_longer(
+          cols = tidyselect::starts_with("type"),
+          names_to = "type",
+          values_to = "y"
+        )
+    )
+    y_df |>
+      inner_join(pre_df, by = c("participant", "type")) |>
+      inner_join(preds, by = "participant")
+  }
+
+  full <- build_long(y_t1, y_t2, pre)
+  miss <- build_long(y_t1_miss, y_t2_miss, pre)
+
+  if (missing_y_prop > 0) {
+    idx_y <- sample(seq_len(nrow(miss)), round(nrow(miss) * missing_y_prop, 0))
+    miss$y[idx_y] <- NA
+  }
+  if (missing_pre_prop > 0) {
+    idx_pre <- sample(
+      seq_len(nrow(miss)),
+      round(nrow(miss) * missing_pre_prop, 0)
+    )
+    miss$pre[idx_pre] <- NA
+  }
+
+  return(list(full = full, miss = miss))
+}
+
+
+# sim_wrap3 ----------------------------------------------------------------
+# Wrapper for sim_type3 exposing only the knobs that matter for a
+# simulation sweep. Interface mirrors sim_wrap2 with one addition:
+#
+# sigma_ratio,  K-vector of SD ratios treat2 / treat1 per type. Values
+#   equal to 1 give a homoskedastic cell; values != 1 give heteroskedastic
+#   cells. Default mixes both so recovery can be tested across the
+#   null and non-null regimes in one simulation.
+# sigma_base,   K-vector of baseline (treat 1) SDs per type. Default rep(1, K).
+#
+# The cross-time correlation C_cross and pre-intervention structure are
+# handled as in sim_wrap2.
+sim_wrap3 <- function(
+  group1 = c(0.4, 0.4, 0, 0, 0, 0, 0, 0),
+  group2 = c(0.4, 0.4, 0, 0, 0, 0, 0, 0),
+  loadings_beta = matrix(c(2, 10, 1, 10, 1, 10), ncol = 2, byrow = TRUE),
+  c_corr = rbeta(8, 5, 10),
+  sigma_base = rep(1, 8),
+  sigma_ratio = c(1.5, 0.6, 1.0, 1.0, 1.3, 0.8, 1.0, 1.0),
+  N = 148,
+  K = 8
+) {
+  if (length(group1) != K) stop("group1 must have length K")
+  if (length(group2) != K) stop("group2 must have length K")
+  if (length(sigma_base) != K) stop("sigma_base must have length K")
+  if (length(sigma_ratio) != K) stop("sigma_ratio must have length K")
+
+  form_pre <- ~ 1 + age + sex
+
+  betas_pre <- matrix(
+    c(rep(0, K),
+      runif(8, -0.2, 0.2),
+      runif(8, -0.2, 0.2)),
+    nrow = 3,
+    ncol = K,
+    byrow = TRUE
+  )
+
+  form_main <- ~ pre + group + sex
+  beta_pre <- runif(8, 0.7, 0.95)
+
+  betas_t1 <- matrix(
+    c(rep(0, K), beta_pre, group1, rep(0, 8)),
+    nrow = 4, ncol = K, byrow = TRUE
+  )
+  betas_t2 <- matrix(
+    c(rep(0, K), beta_pre, group2, rep(0, 8)),
+    nrow = 4, ncol = K, byrow = TRUE
+  )
+
+  preds_all <- data.frame(
+    group = rep(c(0, 1), each = N / 2),
+    sex = rep(c(0, 1), N / 2),
+    age = rnorm(N)
+  )
+
+  # Pre-intervention loading structure (identical to sim_wrap2)
+  Lambda1 <- matrix(
+    rbeta(16, loadings_beta[1, 1], loadings_beta[1, 2]),
+    ncol = 2, byrow = TRUE
+  )
+  psi1 <- 1 - rowSums(Lambda1)
+  Lambda1 <- sqrt(Lambda1)
+  Lambda1[1, ] <- -Lambda1[1, ]
+  S1 <- rep(1, K)
+
+  Lambda2a <- matrix(
+    rbeta(32, loadings_beta[2, 1], loadings_beta[2, 2]),
+    ncol = 4, byrow = TRUE
+  )
+  Lambda2b <- matrix(
+    rbeta(32, loadings_beta[3, 1], loadings_beta[3, 2]),
+    ncol = 4, byrow = TRUE
+  )
+  psi2a <- 1 - rowSums(Lambda2a)
+  psi2b <- 1 - rowSums(Lambda2b)
+  Lambda2a <- sqrt(Lambda2a)
+  Lambda2b <- sqrt(Lambda2b)
+  Lambda2a[3, ] <- -Lambda2a[3, ]
+  Lambda2b[3, ] <- -Lambda2b[3, ]
+
+  Lambda2 <- list(Lambda2a, Lambda2b)
+  psi2 <- list(psi2a, psi2b)
+
+  # Per-treatment post-intervention SDs: K x 2 matrices (col 1 = treat 1)
+  S2_t1 <- cbind(sigma_base, sigma_base * sigma_ratio)
+  S2_t2 <- cbind(sigma_base, sigma_base * sigma_ratio)
+  S2 <- list(S2_t1, S2_t2)
+
+  c_cross <- c_corr
+
+  miss_t2 <- ~ 1 + age
+  miss_t4 <- ~ 1 + age
+  miss_beta_t2 <- c(-2, -0.5)
+  miss_beta_t4 <- c(-2, -0.5)
+  miss_prop_pre <- 0.005
+  miss_prop_y <- 0.02
+
+  simout <- sim_type3(
+    n = N,
+    K = K,
+    form_pre = form_pre,
+    betas_pre = betas_pre,
+    form = form_main,
+    preds = preds_all,
+    betas = list(betas_t1, betas_t2),
+    Lambda1 = Lambda1,
+    psi1 = psi1,
+    S1 = S1,
+    Lambda2 = Lambda2,
+    psi2 = psi2,
+    S2 = S2,
+    C_cross = c_cross,
+    missing_form_t2 = miss_t2,
+    missing_form_t4 = miss_t4,
+    missing_beta_t2 = miss_beta_t2,
+    missing_beta_t4 = miss_beta_t4,
+    missing_pre_prop = miss_prop_pre,
+    missing_y_prop = miss_prop_y,
+    treat_col = "group",
+    verbose = FALSE
+  )
+
+  d3_full <- struct_sim(simout$full, verbose = FALSE)
+  d3_miss <- struct_sim(simout$miss, verbose = FALSE)
+
+  out <- list(
+    full = d3_full,
+    miss = d3_miss,
+    true_effects = matrix(c(group1, group2), ncol = 8, byrow = TRUE),
+    true_sigma = S2    # K x 2 matrices per time, for recovery checks
   )
 
   return(out)

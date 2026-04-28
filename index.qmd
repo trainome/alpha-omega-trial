@@ -3,6 +3,9 @@
 This document includes supplementary data and computational details related to the paper "Effects of ... ". 
 
 
+
+
+
 ## Project organisation
 
 This notebook is built from source code available at the github repository [trainome/alpha-omega-trial](https://github.com/dhammarstrom/alpha-omega-trial/).  
@@ -22,3 +25,8 @@ Each chapter contains model definitions and checks for analyses in the project.
 
 All Stan model scripts are stored in `/models/`. If model code is executed locally, model executables are also stored here. Model fits are stored in `fits/` but not pushed to github due to their large size.  
 
+### Reproducibility
+
+The project uses renv for a snapshot 
+
+rm -rf /tmp/Rtmp*

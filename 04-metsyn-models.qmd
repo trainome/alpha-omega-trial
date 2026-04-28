@@ -1,0 +1,1182 @@
+---
+title: "Effects of N-3 supplementation on indications of metabolic syndrome - Models"
+execute:
+  echo: false
+  warning: false
+  message: false
+  cache: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+# Source figure options, packages, and main data prep.
+source("./R/fig-opt-fun.R")
+source("./R/packages.R")
+source("./R/data-prep.R")
+source("./R/helpers.R")
+source("./R/sim-fun.R")
+
+# Settings
+refit.models <- FALSE # Should fit_wrap refit models.
+```
+
+```{r}
+#| label: synthetic-data-example
+#| echo: false
+#| message: false
+#| warning: false
+
+  N <- 148 # Number of participants
+  K <- 8 # number of measurement types
+
+  # The formula for the pre-intervention variables
+  form_pre <- ~ 1 +  age + sex
+
+  # beta_pre is a p * K matrix of parameter (p in 1 to P)
+  # values for each type (k in 1:K).
+  # fmt: skip
+  betas_pre <- matrix(
+  c(rep(0, K), # intercepts
+    0.2, -0.2, 0.1, -0.1, 0.1, -0.1, 0, 0,  # age
+    0.2, -0.2, 0, 0, -0.2, 0.2, 0, 0  # sex
+  ),
+  nrow = 3,
+  ncol = K,
+  byrow = TRUE
+)
+
+  # The same formula for both time-points
+  form_main <- ~  pre + group + sex
+
+  # betas matrix are p * K
+  # fmt: skip
+  betas_t1 <- matrix(
+  c(rep(0, K), # intercepts
+    0.95, 0.95, 0.95, 0.95, 0.86, 0.85, 0.86, 0.85,  # pre_k effect 
+    0, 0.5, 0, 0, 0, 0, 0, 0, # group
+    0.1, 0.2, -0.1, -0.2, 0.1, 0.2, 0.1, 0.1  # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  # fmt: skip
+  betas_t2 <- matrix(
+  c(rep(0, K), # intercepts
+   0.95, 0.95, 0.95, 0.95, 0.86, 0.85, 0.86, 0.85,  # pre_k effect 
+    0, 0.4, 0, 0, 0, 0, 0, 0, # group
+    0.1, 0.2, -0.1, 0, 0, 0, 0, 0  # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  
+  
+  # Predictor variables, used in *all* sims
+  preds_all <- data.frame(
+    group = rep(c(0, 1), each = N / 2),
+    sex = rep(c(0, 1),  N/2 ),
+    age = c(runif(N/2, -1.5, 1.5), rnorm(N/2))
+  )
+
+  # Vector of correlations (upper triangle, fill by column) for the pre int
+  # values. For a K = 8 matrix, this should be (K * K - K) / 2 = 
+  # (8 * 8 - 8) / 2
+  c1 <- c(
+    # E.g., type 1 correlation with type 2 = r12
+    0.2,     # r12
+    0.2,     # r13
+    0.6,     # r23
+    0,     # r14
+    0,     # r24
+    0,     # r34
+    0,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0.2,     # r37
+    0.2,     # r47
+    0.3,     # r57
+    0.5,     # r67
+    0.4,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0,     # r68
+    0      # r78
+  )
+
+  # A list of two (per time-point) residual correlations
+  # (upper triangle, fill by row)
+  c2 <- list(
+    c(
+    # E.g., type 1 correlation with type 2 = r12
+    0,     # r12
+    0,     # r13
+    0,     # r23
+    0,     # r14
+    0,     # r24
+    0,     # r34
+    0,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0,     # r37
+    0,     # r47
+    0,     # r57
+    0,     # r67
+    0,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0,     # r68
+    0      # r78
+  ),
+    c(
+    # E.g., type 1 correlation with type 2 = r12
+    0,     # r12
+    0,     # r13
+    0,     # r23
+    0,     # r14
+    0,     # r24
+    0,     # r34
+    0,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0,     # r37
+    0,     # r47
+    0,     # r57
+    0,     # r67
+    0,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0,     # r68
+    0      # r78
+  )
+  )
+
+  # Pre intervention SD's per type (length K)
+  s1 <- rep(1, K)
+  # Residual SD per type in each time point
+  s2 <- list(
+    c(0.8, 0.9, 1, 1.1, 0.8, 0.9, 1, 1.1),
+     c(0.8, 0.9, 1, 1.1, 0.8, 0.9, 1, 1.1)
+  )
+  # Between time-point (residual) correlations within each type (length K)
+  c_cross <- c(rep(0.5, K))
+
+  # missing_form_t2,  formula specifying the predictor for missing values at t2
+  miss_t2 <- ~ 1 + age
+  miss_t4 <- ~ 1 + age
+
+  # Parameter values for the form complete missingness
+  miss_beta_t2 <- c(-2.5, -0.5)
+  miss_beta_t4 <- c(-2, -0.5)
+
+  # Random missing proportion
+  miss_prop_pre <- 0.02 # e.g., 2% missing of all rows
+  miss_prop_y <- 0.05 # e.g., 5% miss of all rows post-int
+
+  
+  # The simulation function
+  simout <- sim_type(
+    
+    n = N,
+    K = K,
+
+    form_pre = form_pre,
+    betas_pre = betas_pre,
+
+    form = form_main,
+    preds = preds_all,
+    betas = list(betas_t1, betas_t2),
+    C1 = c1,
+    S1 = s1,
+    C2 = c2,
+    S2 = s2,
+    C_cross = c_cross,
+    missing_form_t2 = miss_t2,
+    missing_form_t4 = miss_t4,
+    missing_beta_t2 = miss_beta_t2,
+    missing_beta_t4 = miss_beta_t4,
+    missing_pre_prop = miss_prop_pre,
+    missing_y_prop = miss_prop_y,
+    verbose = FALSE
+  )
+
+
+  d <- struct_sim(simout$miss, verbose = FALSE)
+  
+
+
+```
+
+
+Models are incrementally developed by incorporating and testing features using prior predictive and posterior predictive checks, using both synthetic and observed data. Model performance (e.g., chain convergence and divergent transitions) is evaluated at relevant steps.
+
+The first model (model s1, `models/s1.stan`) is an ANCOVA-type model with pre-intervention values as covariates for estimating the post-intervention treatment- and measurement-type-specific means. The model is defined as:
+
+$$
+\begin{align}
+y_i &\sim \operatorname{Normal}(\mu_i, \sigma_i) \\
+\mu_i &= \alpha_{\text{type,[TX]}} + \beta_{\text{type}} \times \text{pre}_i \\
+\alpha_{\text{type,[TX]}} &\sim \operatorname{Normal}(0,1) \\
+\beta_{\text{type}} &\sim \operatorname{Normal}(1, 0.4) \\
+\sigma_{\text{type}} &\sim \operatorname{Exponential}(1)
+\end{align}
+$$
+
+Where $\alpha_{\text{type,TX}}$ is the measurement-type and treatment ($TX$) -specific intercept, and $pre_i$ is the row-specific pre-treatment value. 
+
+Prior to modeling, observed values are placed on a standardized scale (mean-centered and scaled to the standard deviation). Since the model specification gives the same $\operatorname{Normal}(0,1)$ prior for both treatment groups, the implied prior for the differences between groups is $\operatorname{Normal}(0,\sqrt{2})$. 95% of the prior probability mass therefore captures differences between groups from about `r round(-2 * sqrt(2),1)` to `r round(2 * sqrt(2),1)`. This prior is considered weakly regularizing. Similarly, the prior for the type-specific parameter for the pre-value covariates expects a 1-to-1 relationship between pre- and post-intervention values but with a wide range of possible relationships (95% prior probability mass in the range `r round(1 - 2 * 0.4,1)` to `r round(1 + 2 * 0.4,1)`). The prior for the &sigma; is also considered weakly regularizing allowing for a wide range of possible values but with more prior weight below the average (1).
+
+The second model (model S2, `models/s2.stan`) for the main outcomes uses a multivariate normal likelihood. Here, we model outcomes as sampled from a multivariate normal distribution with a covariance matrix that connects the outcome types. This model extends model S1 by modelling the correlation structure among measurement types, enabling partial pooling across them. In further extensions of this model, the correlation structure will provide precision for imputing missing values, as observed scores will inform them through the structure. The same ANCOVA-type model is used here, in which pre-intervention scores serve as a covariate for the post-intervention group and measurement-type-level averages.
+
+The model is defined as:
+
+$$
+\begin{align}
+y_p &\sim \operatorname{MVNormal}(\mu_p, \Sigma) \\
+\mu_{p,\text{type}} &= \alpha_{\text{type,TX}} + \beta_{\text{type}} \times \text{pre}_{p,\text{type}} \\
+\alpha_{\text{type,TX}} &\sim \operatorname{Normal}(0,1) \\
+\beta_{\text{type}} &\sim \operatorname{Normal}(1, 0.5) \\
+\Sigma &= \text{S} \times \text{R} \times \text{S} \\
+S &= 
+  \begin{bmatrix}
+  \sigma_{\text{type}[1]} &0 & .. \\
+  0 & \sigma_{\text{type}[2]} & .. \\
+  .. & .. & ..
+  \end{bmatrix} \\
+R &=   \begin{bmatrix}
+  1 & \rho_{12} & .. \\
+  \rho_{21} & 1 & .. \\
+  .. & .. & ..
+  \end{bmatrix} \\
+\sigma_\text{type} &\sim \operatorname{Exponential}(1) \\
+\text{R} &\sim \operatorname{LKJcorr}(4) \\
+\end{align}
+$$
+Where $y_p$ is a participant-level vector of outcome scores. $\Sigma$ is the covariance matrix with standard deviations $\text{S}$ and the correlation matrix $\text{R}$. The prior on $\text{R}$ is defined using the LKJ distribution which provides regularization away from extreme values (-1, 1).
+
+The third (model S3, `models/s3.stan`) includes all available data for one time-point, and imputes missing data. Imputation is done for both missing pre- and post-intervention observations. The pre-intervention imputation is done using a separate multivariate-normal model, defined as:
+
+$$
+\begin{align}
+y_{\text{pre},p}^{\text{all}} &\sim \operatorname{MVNormal}(\mu_{\text{pre},p},\Sigma_\text{pre} ) \\
+y_{\text{pre},\text{type},p}^{\text{all}} &=
+\begin{cases} 
+y_{\text{pre},\text{type},p}^{\text{obs}} & \text{if observed}  \\
+y_{\text{pre},\text{type},p}^{\text{miss}} & \text{if missing}
+\end{cases} \\
+y_{\text{pre},\text{type},p}^{\text{miss}} &\sim \operatorname{Normal}(0,2) \\
+\end{align}
+$$
+Where missing values are treated as parameters and given a vague prior (Normal(0,2)) under prior-only sampling to make sampling more efficient. 
+
+The main model uses the $y_{\text{pre},p}^{\text{all}}$ as a covariate in the linear predictor. Again, missing values in the outcome are treated as parameters. The prior for missing observation is only included in prior predictive simulations.  
+
+$$
+\begin{align}
+\text{Likelihood} \\
+y_{p}^{\text{all}} &\sim \operatorname{MVNormal}(\mu_{p},\Sigma ) \\
+\text{Imputation} \\
+y_{p, \text{type}}^{\text{all}} &=
+\begin{cases} 
+y_{p, \text{type}}^{\text{obs}} & \text{if observed}  \\
+y_{p, \text{type}}^{\text{mis}} & \text{if missing}
+\end{cases} \\
+y_{\text{type},p}^{\text{miss}} &\sim \operatorname{Normal}(0,2) \\
+\text{Using imputed pre in the linear model} \\
+\text{pre}_{p,\text{type}} &= y_{\text{pre},p, \text{type}}^{\text{all}} \\
+\mu_{p,\text{type}} &= \alpha_{\text{type,TX}} + \beta_{\text{type}} \times \text{pre}_{p,\text{type}} \\
+
+\text{Priors and correlation structure} \\
+\alpha_{\text{type,TX}} &\sim \operatorname{Normal}(0,1) \\
+\beta_{\text{type}} &\sim \operatorname{Normal}(1, 0.5) \\
+\Sigma &= \text{S} \times \text{R} \times \text{S} \\
+S &= 
+  \begin{bmatrix}
+  \sigma_{\text{type}[1]} &0 & .. \\
+  0 & \sigma_{\text{type}[2]} & .. \\
+  .. & .. & ..
+  \end{bmatrix} \\
+R &=   \begin{bmatrix}
+  1 & \rho_{12} & .. \\
+  \rho_{21} & 1 & .. \\
+  .. & .. & ..
+  \end{bmatrix} \\
+\sigma_\text{type} &\sim \operatorname{Exponential}(1) \\
+\text{R} &\sim \operatorname{LKJcorr}(4) \\
+\end{align}
+$$
+
+Model S4 (`models/s4.stan`) adds sex as a covariate with the intention to improve predictions. The relevant addition to model s3 is in the linear predictor:
+
+$$
+\begin{align}
+\mu_{p,\text{type}} &= \alpha_{\text{type,TX}} + \beta_{\text{type}} \times \text{pre}_{p,\text{type}} + \beta_{\text{sex}} \times \text{sex}_p \\
+\beta_{\text{sex}} &\sim \operatorname{Normal}(0, 0.5) \\
+\end{align}
+$$
+
+The $\text{sex}_p$ variable is created as $\text{male} = -0.5$ and $\text{female} = 0.5$ which gives that the prior for $\beta_{\text{sex}}$ expects that most of the difference between males and females in post-intervention scores is within &pm; 1 SD. 
+
+Model S5 (`models/s5.stan`) and S6 (`models/s6.stan`) further extends previous models by including both post-intervention time-points. In model S5 residuals are not correlated between time-points. Instead, separate covariance matrices are built for each time-point. The covariance matrices are therefore
+
+$$
+\begin{align}
+\Sigma_\text{time} &= \text{S}_\text{time} \times \text{R}_\text{time} \times \text{S}_\text{time} \\
+S_\text{time} &= 
+  \begin{bmatrix}
+  \sigma_{1\text{[time]}} &0 & .. \\
+  0 & \sigma_{2\text{[time]}} & .. \\
+  .. & .. & ..
+  \end{bmatrix} \\
+R_\text{time} &=   \begin{bmatrix}
+  1 & \rho_{12\text{[time]}} & .. \\
+  \rho_{21\text{[time]}} & 1 & .. \\
+  .. & .. & ..
+  \end{bmatrix} \\
+\sigma_{\text{type}\text{[time]}} &\sim \operatorname{Exponential}(1) \\
+\text{R}_\text{time} &\sim \operatorname{LKJcorr}(4) \\
+\end{align}
+$$
+The total number of parameters in each &Sigma; is 36 for 8 measurement types.
+
+Model 6 includes a full covariance matrix for the multivariate normal model. The total number of parameters in the matrix is 136 for 8 measurements with &sigma; indexed 1 to 16. For $S$:
+
+$$
+\begin{align}
+S &= 
+  \begin{bmatrix}
+  \sigma_{1} &0 & \cdots \\
+  0 & \cdots & \cdots \\
+  \cdots & \cdots & \sigma_{2K}
+  \end{bmatrix} \\
+\end{align}
+$$
+
+Finally, model S7 (`models/s7.stan`) extends model S1 by including both post-intervention time-points and missing data imputation. No correlation structures are included in the model and parameters (&sigma;, &beta; &alpha; are time- and type-specific).
+
+
+```{r}
+
+# Compiling each model 
+s1 <- cmdstan_model(stan_file = "models/s1.stan", 
+                      exe_file = "models/s1.exe")
+
+s2 <- cmdstan_model(stan_file = "models/s2.stan", 
+                      exe_file = "models/s2.exe")
+
+s3 <- cmdstan_model(stan_file = "models/s3.stan", 
+                      exe_file = "models/s3.exe")
+
+s4 <- cmdstan_model(stan_file = "models/s4.stan", 
+                      exe_file = "models/s4.exe")
+
+s5 <- cmdstan_model(stan_file = "models/s5.stan", 
+                      exe_file = "models/s5.exe")
+
+s6 <- cmdstan_model(stan_file = "models/s6.stan", 
+                      exe_file = "models/s6.exe")
+
+s7 <- cmdstan_model(stan_file = "models/s7.stan", 
+                      exe_file = "models/s7.exe")
+
+```
+
+### Prior predictive checks, preliminary models
+
+Prior predictive checks are performed for each model to confirm expected relationships between the pre-intervention covariate (@fig-s1-4-priorpred and @fig-s5-7-priorpred), and prior expectations of treatment means (@fig-s1-7-priorpred-treatmeans). 
+
+```{r}
+# prep data sets (from synthetic data)
+ds_cc_single <- d$dl_compl_single # Complete case, single time point
+ds_miss_single <- d$dl_itt_single # Missing data, single time point
+ds_miss <- d$dl_itt # Missing data, both time points
+
+refit.models <- FALSE # Should fit_wrap refit models.
+# 
+fit_wrap(s1, DATA = ds_cc_single, fit = "fit.s1")
+fit_wrap(s2, DATA = ds_cc_single, fit = "fit.s2")
+fit_wrap(s3, DATA = ds_miss_single, fit = "fit.s3")
+fit_wrap(s4, DATA = ds_miss_single, fit = "fit.s4")
+
+fit_wrap(s5, DATA = ds_miss, fit = "fit.s5")
+fit_wrap(s6, DATA = ds_miss, fit = "fit.s6")
+fit_wrap(s7, DATA = ds_miss, fit = "fit.s7")
+
+
+
+# Extract draws 
+draws.s1 <- fit.s1$draws(format="df") 
+draws.s2 <- fit.s2$draws(format="df") 
+draws.s3 <- fit.s3$draws(format="df") 
+
+draws.s4 <- fit.s4$draws(format="df") 
+
+
+draws.s5 <- fit.s5$draws(format="df") 
+draws.s6 <- fit.s6$draws(format="df") 
+draws.s7 <- fit.s7$draws(format="df") 
+
+
+# Plot prior/posterior predictions
+#
+# Draws are organized so that pre- to post-treatment associations are shown. 
+# 
+# fit_type, type 1 is models s1-s4, type 2 is models s5-s6 and type 3 is s7. 
+# iter, what draws should be used for plotting predictions?
+pred_fig_1 <- function(draws, fit_type = 1, iter = 1:50) {
+  
+  if(fit_type == 1) {
+  
+  p1 <- bind_rows(
+  # Alpha 
+   draws |> 
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "type", "treat")), 
+  
+  # Beta
+  draws |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), .iteration) |> 
+  pivot_longer(cols = starts_with("beta")) |> 
+  filter(!(grepl("beta_sex", name))) |> 
+    
+  separate(name, into = c("param", "type")) |> 
+    filter(param == "beta") |> 
+  expand_grid(treat = c("1","2"))) |> 
+  
+  filter(.iteration %in% iter) |> 
+ 
+
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+
+  expand_grid(x = seq(from = -3, to = 3, by = 3)) |> 
+  
+  mutate(y = alpha + beta * x)  |> 
+
+  ggplot(aes(x, y, 
+             color = treat,
+             group = paste(.iteration, treat))) +
+  geom_line() + 
+  facet_wrap(~ type, 
+             ncol = 1, 
+             labeller = label_both) +
+  alpha_theme() + 
+   scale_color_manual(values = colscale)
+   
+    
+  }
+  
+    if(fit_type == 2) {
+      
+       p1 <-  bind_rows(
+  # Alpha 
+   draws |> 
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "time", "type", "treat")), 
+  
+  # Beta
+  draws |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), .iteration) |> 
+  pivot_longer(cols = starts_with("beta")) |>
+  filter(!(grepl("beta_sex", name))) |> 
+  separate(name, into = c("param", "type")) |> 
+  expand_grid(treat = c("1","2")) |> 
+  expand_grid(time = c("1", "2")))   |> 
+         
+  
+  filter(.iteration %in% iter) |> 
+
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  
+  expand_grid(x = seq(from = -3, to = 3, by = 3)) |> 
+  
+  mutate(y = alpha + beta * x)  |> 
+
+  ggplot(aes(x, y, 
+             color = treat,
+             group = paste(.iteration, treat))) +
+  geom_line() + 
+  facet_wrap(~ type + time, 
+             ncol = 2, 
+             labeller = label_both) +
+  alpha_theme() + 
+   scale_color_manual(values = colscale)
+      
+    }
+  
+  if(fit_type == 3) {
+      
+       p1 <-  bind_rows(
+  # Alpha 
+   draws |> 
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "time", "type", "treat")), 
+  
+  # Beta
+  draws |> 
+  filter(.chain == 1) |> 
+  select(starts_with("beta"), .iteration) |> 
+  pivot_longer(cols = starts_with("beta")) |>
+  filter(!(grepl("beta_sex", name))) |> 
+  separate(name, into = c("param", "type", "time")) |> 
+  expand_grid(treat = c("1","2")))   |> 
+         
+  
+  filter(.iteration %in% iter) |> 
+
+  pivot_wider(names_from = param, 
+              values_from = value) |> 
+  
+  expand_grid(x = seq(from = -3, to = 3, by = 3)) |> 
+  
+  mutate(y = alpha + beta * x)  |> 
+
+  ggplot(aes(x, y, 
+             color = treat,
+             group = paste(.iteration, treat))) +
+  geom_line() + 
+  facet_wrap(~ type + time, 
+             ncol = 2, 
+             labeller = label_both) +
+  alpha_theme() + 
+   scale_color_manual(values = colscale)
+      
+    }
+  return(p1)
+  
+}
+
+
+
+
+
+# Extract data for plotting/analyzing group-wise comparisons per type.
+#
+# 
+#
+pred_dat_1 <- function(draws, fit_type = 1, chains = c(1)) {
+
+    if(fit_type == 1) {
+   dat <-  draws |> 
+     filter(.chain %in% chains) |> 
+    select(.iteration, .chain, starts_with("alpha")) |> 
+    pivot_longer(cols = starts_with("alpha")) |> 
+    separate(name, into = c("parameter", "type", "treat")) |> 
+    mutate(time = "1") |> 
+    select(.iteration, .chain, parameter, type, time, treat, value) |> 
+    mutate(treat = paste0("treat", treat)) |> 
+      pivot_wider(names_from = treat, values_from = value)
+    
+
+  }
+  
+  if(fit_type == 2) {
+    dat <- draws |> 
+      filter(.chain %in% chains) |> 
+    select(.iteration, .chain, starts_with("alpha")) |> 
+    pivot_longer(cols = starts_with("alpha")) |> 
+    separate(name, into = c("parameter", "time", "type", "treat")) |> 
+
+    select(.iteration, .chain, parameter, type, time, treat, value) |> 
+    mutate(treat = paste0("treat", treat)) |> 
+      pivot_wider(names_from = treat, values_from = value)
+    
+    }
+  return(dat)
+  
+}
+
+
+```
+
+
+
+```{r}
+#| label: fig-s1-4-priorpred
+#| fig-cap: "Prior predictive check of pre- to post-intervention associations in model S1-S4. "
+#| fig-width: 8
+#| fig-height: 12
+
+
+
+p1 <- pred_fig_1(draws.s1, fit_type = 1) + 
+  theme(axis.title.x = element_blank(), 
+        legend.position = "none")  +
+  labs(subtitle = "Model S1")
+  
+  
+p2 <- pred_fig_1(draws.s2, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") +
+  labs(subtitle = "Model S2")
+p3 <- pred_fig_1(draws.s3, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") +
+  labs(subtitle = "Model S3")
+p4 <- pred_fig_1(draws.s4, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") +
+  labs(subtitle = "Model S4")
+
+
+
+p1|p2|p3|p4
+ 
+ 
+  
+
+```
+
+
+```{r}
+#| label: fig-s5-7-priorpred
+#| fig-cap: "Prior predictive check of pre- to post-intervention associations in model S5-S7. "
+#| fig-width: 8
+#| fig-height: 12
+
+p5 <- pred_fig_1(draws.s5, fit_type = 2) + 
+  theme(axis.title.x = element_blank(), 
+        legend.position = "none") + labs(title = "Model S5")
+  
+  
+p6 <- pred_fig_1(draws.s6, fit_type = 2)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") + labs(title = "Model S6")
+p7 <- pred_fig_1(draws.s7, fit_type = 3)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") + labs(title = "Model S7")
+
+
+
+p5|p6|p7
+ 
+
+
+```
+
+
+```{r}
+#| label: fig-s1-7-priorpred-treatmeans
+#| fig-cap: "Prior predictive distributions of treatment means in models S1-S7."
+#| fig-width: 8
+#| fig-height: 12
+
+
+
+bind_rows(
+  pred_dat_1(draws.s1, fit_type = 1) |> 
+    mutate(model = "s1"), 
+  pred_dat_1(draws.s2, fit_type = 1) |> 
+    mutate(model = "s2"),
+  pred_dat_1(draws.s3, fit_type = 1) |> 
+    mutate(model = "s3"),
+  pred_dat_1(draws.s4, fit_type = 1) |> 
+    mutate(model = "s4"),
+  pred_dat_1(draws.s5, fit_type = 2) |> 
+    mutate(model = "s5"),
+  pred_dat_1(draws.s6, fit_type = 2) |> 
+    mutate(model = "s6"),
+  pred_dat_1(draws.s7, fit_type = 2) |> 
+    mutate(model = "s7") ) |> 
+  pivot_longer(cols = treat1:treat2) |> 
+  
+  ggplot(aes(name, value, fill = model)) + geom_boxplot() + 
+  facet_wrap(~type + time, labeller = label_both) + 
+  alpha_theme() + 
+  scale_fill_manual(values = colscale) + 
+  labs(x = "Treatment", 
+       y = "Prior predictive means")
+
+
+
+
+
+```
+
+
+```{r}
+#| label: clean-up-s1-s7-synth-prior
+
+# To save some space, clean up environment here
+fits <- paste0("fit.s", 1:7)
+draws <- paste0("draws.s", 1:7)
+plots <- paste0("p", 1:7)
+
+rm(list = c(fits, draws, plots)); gc(verbose = FALSE)
+
+```
+
+
+
+
+
+
+```{r}
+#| label: synthetic-data1
+
+
+set.seed(1)
+
+  N <- 148 # Number of participants
+  K <- 8 # number of measurement types
+
+  # The formula for the pre-intervention variables
+  form_pre <- ~ 1 +  age + sex
+
+  # beta_pre is a p * K matrix of parameter (p in 1 to P)
+  # values for each type (k in 1:K).
+  # fmt: skip
+  betas_pre <- matrix(
+  c(rep(0, K), # intercepts
+    0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,  # age
+    0, 0, 0, 0, 0, 0, 0, 0  # sex
+  ),
+  nrow = 3,
+  ncol = K,
+  byrow = TRUE
+)
+
+  # The same formula for both time-points
+  form_main <- ~  pre + group + sex
+
+  # betas matrix are p * K
+  # fmt: skip
+  betas_t1 <- matrix(
+  c(rep(0, K), # intercepts
+    0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95,  # pre_k effect 
+    0.5, -0.5, 0, 0, 0, 0, 0.5, -0.5, # group
+    0, 0, 0, 0, 0, 0, 0, 0  # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  # fmt: skip
+  betas_t2 <-  matrix(
+  c(rep(0, K), # intercepts
+    0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95,  # pre_k effect 
+     0.5, -0.5, 0, 0, 0, 0, 0.5, -0.5, # group
+    0, 0, 0, 0, 0, 0, 0, 0  # sex
+  ),
+  nrow = 4,
+  ncol = K,
+  byrow = TRUE
+)
+
+  
+  
+  # Predictor variables, used in *all* sims
+  preds_all <- data.frame(
+    group = rep(c(0, 1), each = N / 2),
+    sex = rep(c(0, 1),  N/2 ),
+    age = c(runif(N/2, -1.5, 1.5), rnorm(N/2))
+  )
+
+  # Vector of correlations (upper triangle, fill by column) for the pre int
+  # values. For a K = 8 matrix, this should be (K * K - K) / 2 = 
+  # (8 * 8 - 8) / 2
+  c1 <- c(
+    # E.g., type 1 correlation with type 2 = r12
+    0,   # r12
+    0.4,   # r13
+    0,   # r23
+    0,     # r14
+    0.4,     # r24
+    0,     # r34
+    0.4,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0.4,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0,     # r37
+    0,     # r47
+    0.2,     # r57
+    0,     # r67
+    0,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0.2,     # r68
+    0      # r78
+  )
+
+  # A list of two (per time-point) residual correlations
+  # (upper triangle, fill by row)
+  c2 <- list(
+    c(
+    # E.g., type 1 correlation with type 2 = r12
+    0,     # r12
+    0,     # r13
+    0,     # r23
+    0,     # r14
+    0,     # r24
+    0,     # r34
+    0,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0,     # r37
+    0,     # r47
+    0,     # r57
+    0,     # r67
+    0,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0,     # r68
+    0      # r78
+  ),
+    c(
+    # E.g., type 1 correlation with type 2 = r12
+    0,     # r12
+    0,     # r13
+    0,     # r23
+    0,     # r14
+    0,     # r24
+    0,     # r34
+    0,     # r15
+    0,     # r25
+    0,     # r35
+    0,     # r45
+    0,     # r16
+    0,     # r26
+    0,     # r36
+    0,     # r46
+    0,     # r56
+    0,     # r17
+    0,     # r27
+    0,     # r37
+    0,     # r47
+    0,     # r57
+    0,     # r67
+    0,     # r18
+    0,     # r28
+    0,     # r38
+    0,     # r48
+    0,     # r58
+    0,     # r68
+    0      # r78
+  )
+  )
+
+  # Pre intervention SD's per type (length K)
+  s1 <- rep(1, K)
+  # Residual SD per type in each time point
+  s2 <- list(
+    c(0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2),
+    c(0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2)
+  )
+  # Between time-point (residual) correlations within each type (length K)
+  c_cross <- c(rep(0.7, K))
+
+  # missing_form_t2,  formula specifying the predictor for missing values at t2
+  miss_t2 <- ~ 1 + age
+  miss_t4 <- ~ 1 + age
+
+  # Parameter values for the form complete missingness
+  miss_beta_t2 <- c(-2.5, -0.5)
+  miss_beta_t4 <- c(-2.5, -0.5)
+
+  # Random missing proportion
+  miss_prop_pre <- 0.02 # e.g., 2% missing of all rows
+  miss_prop_y <- 0.05 # e.g., 5% miss of all rows post-int
+
+
+  simout <- sim_type(
+    
+    n = N,
+    K = K,
+
+    form_pre = form_pre,
+    betas_pre = betas_pre,
+
+    form = form_main,
+    preds = preds_all,
+    betas = list(betas_t1, betas_t2),
+    C1 = c1,
+    S1 = s1,
+    C2 = c2,
+    S2 = s2,
+    C_cross = c_cross,
+    missing_form_t2 = miss_t2,
+    missing_form_t4 = miss_t4,
+    missing_beta_t2 = miss_beta_t2,
+    missing_beta_t4 = miss_beta_t4,
+    missing_pre_prop = miss_prop_pre,
+    missing_y_prop = miss_prop_y,
+    verbose = FALSE
+  )
+
+
+  d1 <- struct_sim(simout$miss, verbose = FALSE)
+  
+
+  
+```
+
+
+
+
+```{r}
+
+# (re)-Compiling each model (due to naming issues)
+s1 <- cmdstan_model(stan_file = "models/s1.stan", 
+                      exe_file = "models/s1.exe")
+
+s2 <- cmdstan_model(stan_file = "models/s2.stan", 
+                      exe_file = "models/s2.exe")
+
+s3 <- cmdstan_model(stan_file = "models/s3.stan", 
+                      exe_file = "models/s3.exe")
+
+s4 <- cmdstan_model(stan_file = "models/s4.stan", 
+                      exe_file = "models/s4.exe")
+
+s5 <- cmdstan_model(stan_file = "models/s5.stan", 
+                      exe_file = "models/s5.exe")
+
+s6 <- cmdstan_model(stan_file = "models/s6.stan", 
+                      exe_file = "models/s6.exe")
+
+s7 <- cmdstan_model(stan_file = "models/s7.stan", 
+                      exe_file = "models/s7.exe")
+
+```
+
+
+The prior predictive checks confirm working and comparable models. A further check of model performance is done using synthetic data. We assess if we can recover simulated effects in the model estimates, we also assess the models effects of the prior on "reversed" effects, i.e. effect of opposite direction in the two groups.
+
+Here, a simulated data set is constructed where we fix the relationship between pre- and post-intervention values ($\beta_{pre} = 0.95$), residual variation is set to 0.2 and effect sizes of treatment effects are set to -0.5 in type 1 and 7, 0.5 in type 2 and 8, and 0 in all other types. The model capture these effects and this preliminary check does not suggest preference for one treatment over the other (@fig-s1-synth).  
+
+
+```{r}
+ds_cc_single <- d1$dl_compl_single # Complete case, single time point
+ds_miss_single <- d1$dl_itt_single # Missing data, single time point
+ds_miss <- d1$dl_itt # Missing data, both time points
+
+ds_cc_single$prior_only <- 0
+ds_miss_single$prior_only <- 0
+ds_miss$prior_only <- 0
+
+
+refit.models <- FALSE # Should fit_wrap refit models.
+# 
+fit_wrap(s1, DATA = ds_cc_single, fit = "fit.synth.s1")
+fit_wrap(s2, DATA = ds_cc_single, fit = "fit.synth.s2")
+fit_wrap(s3, DATA = ds_miss_single, fit = "fit.synth.s3")
+fit_wrap(s4, DATA = ds_miss_single, fit = "fit.synth.s4")
+
+fit_wrap(s5, DATA = ds_miss, fit = "fit.synth.s5")
+fit_wrap(s6, DATA = ds_miss, fit = "fit.synth.s6")
+fit_wrap(s7, DATA = ds_miss, fit = "fit.synth.s7")
+
+
+
+# Extract draws 
+draws.s1 <- fit.synth.s1$draws(format="df") 
+draws.s2 <- fit.synth.s2$draws(format="df") 
+draws.s3 <- fit.synth.s3$draws(format="df") 
+
+draws.s4 <- fit.synth.s4$draws(format="df") 
+
+
+draws.s5 <- fit.synth.s5$draws(format="df") 
+draws.s6 <- fit.synth.s6$draws(format="df") 
+draws.s7 <- fit.synth.s7$draws(format="df")
+```
+
+
+```{r}
+#| label: fig-s1-4-postpred-synth
+#| fig-cap: "Posterior predictive check of pre- to post-intervention associations in model S1-S4 on synthetic data. "
+#| fig-width: 8
+#| fig-height: 12
+
+
+
+p1 <- pred_fig_1(draws.s1, fit_type = 1) + 
+  theme(axis.title.x = element_blank(), 
+        legend.position = "none") + 
+  labs(subtitle = "Model S1")
+  
+p2 <- pred_fig_1(draws.s2, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none")+ 
+  labs(subtitle = "Model S2")
+p3 <- pred_fig_1(draws.s3, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none")+ 
+  labs(subtitle = "Model S3")
+p4 <- pred_fig_1(draws.s4, fit_type = 1)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none")+ 
+  labs(subtitle = "Model S4")
+
+
+
+p1|p2|p3|p4
+
+ 
+```
+
+
+```{r}
+#| label: fig-s5-7-priorpred-synth
+#| fig-cap: "Prior predictive check of pre- to post-intervention associations in model S5-S7. "
+#| fig-width: 8
+#| fig-height: 12
+
+p5 <- pred_fig_1(draws.s5, fit_type = 2) + 
+  theme(axis.title.x = element_blank(), 
+        legend.position = "none") + labs(title = "Model S5",
+                                        y = "Post-intervention values")
+  
+p6 <- pred_fig_1(draws.s6, fit_type = 2)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") + labs(title = "Model S6", 
+                                         x = "Pre-intervention values")
+p7 <- pred_fig_1(draws.s7, fit_type = 3)+ 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none") + labs(title = "Model S7", x = "")
+
+
+
+p5|p6|p7
+ 
+
+
+
+```
+
+
+```{r}
+#| label: fig-s1-7-postpred-treatmeans-synth
+#| fig-cap: "Posterior predictive distributions of treatment means in models S1-S7. "
+#| fig-width: 8
+#| fig-height: 12
+
+
+
+bind_rows(
+  pred_dat_1(draws.s1, fit_type = 1) |> 
+    mutate(model = "s1"), 
+  pred_dat_1(draws.s2, fit_type = 1) |> 
+    mutate(model = "s2"),
+  pred_dat_1(draws.s3, fit_type = 1) |> 
+    mutate(model = "s3"),
+  pred_dat_1(draws.s4, fit_type = 1) |> 
+    mutate(model = "s4"),
+  pred_dat_1(draws.s5, fit_type = 2) |> 
+    mutate(model = "s5"),
+  pred_dat_1(draws.s6, fit_type = 2) |> 
+    mutate(model = "s6"),
+  pred_dat_1(draws.s7, fit_type = 2) |> 
+    mutate(model = "s7") ) |> 
+  pivot_longer(cols = treat1:treat2) |> 
+
+  
+  summarise(.by = c(model, type, time, name), 
+            m = mean(value), 
+            lwr = quantile(value, 0.05), 
+            upr = quantile(value, 0.95)) |> 
+  
+  
+  ggplot(aes(name, m, color = model)) + 
+  geom_errorbar(aes(ymin = lwr, ymax = upr), 
+                position = position_dodge(width = 0.2), 
+                width = 0) +
+  geom_point(position = position_dodge(width = 0.2)) + 
+  facet_wrap(~type + time, labeller = label_both, 
+             scales = "free") +
+  alpha_theme() + 
+  scale_fill_manual(values = colscale)
+
+
+
+
+```
+
+
+```{r}
+#| label: clean-up-s1-s7-synth-post
+
+# To save some space, clean up environment here
+fits <- paste0("fit.synth.s", 1:7)
+draws <- paste0("draws.s", 1:7)
+plots <- paste0("p", 1:7)
+
+# Remove and do garbage collection...
+rm(list = c(fits, draws, plots)); gc(verbose = FALSE)
+
+
+```
+
+
+Using the synthetic data we confirm that the incrementally developed models captures the same patterns when they use the same data. In the above test, synthetic data was generated with large effects and negligible correlation structures across measurement types. We should therefore not expect large differences between models that could potentially capture different between-measurement type correlations patterns.
+
+Based on these preliminary models, model S6 and S7 are kept for further development and evaluation. Model S6 is replaced by S8 that will also generate diagnostic criteria thresholds. Additionally, to allow for treatment-specific variation we including treatment-specific &sigma; by updating model S7 and S8 to S9 and S10, respectively. The relevant update in S7 to S9 is an type-, time- and treatment-specific &sigma; ($\sigma_{\text{type, time, treat}} \sim \operatorname{Exponential}(1)$. Similarly, model s10 adds type-, time- and treatment-specific &sigma; to the model by incorporating it in the multivariate-normal model.
+
+
+
+
+
