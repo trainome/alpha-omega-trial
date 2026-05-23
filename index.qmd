@@ -28,5 +28,3 @@ All Stan model scripts are stored in `/models/`. If model code is executed local
 ### Reproducibility
 
 The project uses renv for a snapshot 
-
-rm -rf /tmp/Rtmp*

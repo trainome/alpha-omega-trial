@@ -243,7 +243,7 @@ refit.models <- FALSE # Should fit_wrap refit models.
 ```
 
 
-Models are incrementally developed by incorporating and testing features using prior predictive and posterior predictive checks, using both synthetic and observed data. Model performance (e.g., chain convergence and divergent transitions) is evaluated at relevant steps.
+Models are incrementally developed by incorporating and testing features using prior predictive and posterior predictive checks, using both synthetic and observed data. Model performance (e.g., chain convergence and divergent transitions) is evaluated at relevant steps. The following chapter describes incremental model expansions.
 
 The first model (model s1, `models/s1.stan`) is an ANCOVA-type model with pre-intervention values as covariates for estimating the post-intervention treatment- and measurement-type-specific means. The model is defined as:
 

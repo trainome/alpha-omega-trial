@@ -54,7 +54,9 @@ sim_comp_wrap2 <- function(i) {
         # cells so recovery can be tested for both regimes within one sim.
         sigma_ratio = c(1.5, 0.6, 1.0, 1.0, 1.3, 0.8, 1.0, 1.0),
         N = 148,
-        K = 8
+        K = 8,
+        prop_noise = 0.025,
+        sd_noise = 1.5
       ),
       error = function(e) {
         message(sprintf(

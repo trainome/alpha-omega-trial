@@ -3,8 +3,10 @@ Model S8:
 - Joint model with missing data imputation, sex predictor,
 time-specific intercepts, and
 - A single 2K-dimensional MVN with LKJ prior on the full correlation structure.
+  with k being the number of measurement types.
 - Metabolic syndrome diagnosis is derived in generated quantities from
   the continuous biomarker model (hard threshold: >= 3 of 5 criteria).
+  The thresholds are hard coded in transformed data. 
 */
 
 data {
@@ -29,20 +31,52 @@ data {
 }
 transformed data {
   int n_miss_y = N - sum(y_miss);
-  int n_miss_pre = N - sum(pre_miss);
   int M = 2 * K;
   
   // Diagnostic criteria data
-  array[5] int diag_idx = {1, 3, 5, 7, 8};  // set the right index for subscores
-  vector[5] threshold_male = [-1.1, 0.684, 0.0164, 1.88, -0.432]'; // Add thresholds
-  vector[5] threshold_female = [-0.233, 0.684, 0.0164, 1.88, -1.48]'; // Add thresholds
-  array[5] int above = {0, 1, 1, 1, 1};      // 1 = above is abnormal
+  array[6] int diag_idx = {2, 4, 6, 8, 9, 10};
+// set the right index for subscores
+//
+// analyte  type std_threshold_male std_threshold_female
+// HDL         2            -1.10                -0.233
+// TG          4             0.947                0.947
+// dias        6            -0.0200              -0.0200
+// glucose     8             1.88                 1.88
+// sys         9             0.0638               0.0638
+// waist      10            -0.432               -1.48
+
+  vector[6] threshold_male   = [-1.1,   0.947, -0.02, 1.88, 0.0638, -0.432]';
+  vector[6] threshold_female = [-0.233, 0.947, -0.02, 1.88, 0.0638, -1.48]';
+  array[6] int above = {0, 1, 1, 1, 1, 1};   // 1 = above is abnormal
  
-  // Participant-level sex variable 
+  // Participant-level sex variable
   array[N_P] real sex_p;
   for (i in 1:N)
   sex_p[P[i]] = sex[i];  // overwrites but same value per participant
-  
+
+  // Per-(P, k) pre-imputation bookkeeping. pre is participant-level (T1)
+  // but each (P, k) appears in two rows (time=1, time=2) carrying the same
+  // pre_obs/pre_miss. Index pre_impute by (P, k) so each missing pre value
+  // is one parameter, not two.
+  array[N_P, K] int pre_pk_miss;
+  array[N_P, K] int pre_pk_idx;
+  matrix[N_P, K] pre_obs_pk = rep_matrix(0.0, N_P, K);
+  for (p in 1:N_P) for (k in 1:K) {
+    pre_pk_miss[p, k] = 0;
+    pre_pk_idx[p, k] = 0;
+  }
+  for (i in 1:N) {
+    if (pre_miss[i] == 1) pre_obs_pk[P[i], type[i]] = pre_obs[i];
+    else                  pre_pk_miss[P[i], type[i]] = 1;
+  }
+  int n_miss_pre_pk = 0;
+  for (p in 1:N_P) for (k in 1:K) {
+    if (pre_pk_miss[p, k] == 1) {
+      n_miss_pre_pk += 1;
+      pre_pk_idx[p, k] = n_miss_pre_pk;
+    }
+  }
+
   // Participant observation index for generated quantities
   array[N_P, M] int obs_idx;
   array[N_P] int obs_count;
@@ -51,11 +85,52 @@ transformed data {
     obs_count[P[i]] += 1;
     obs_idx[P[i], obs_count[P[i]]] = i;
   }
+
+  // --- Prepare for log likelihood ---
+  // Per-participant mask of valid entries in the 2K stacked vector.
+  // Entry j corresponds to time t=((j-1) div K)+1 and type k=((j-1) mod K)+1.
+  // An entry is "valid" iff y is observed at (t, k) AND pre is observed for k.
+  // Only valid entries contribute to log_lik_part in generated quantities.
+  array[N_P, M] int valid_mask;
+  array[N_P] int valid_count;
+  array[N_P, M] int valid_idx;
+  {
+    array[N_P, K] int pre_observed;
+    array[N_P, 2, K] int y_observed;
+    for (p in 1:N_P) {
+      for (k in 1:K) pre_observed[p, k] = 0;
+      for (t in 1:2) for (k in 1:K) y_observed[p, t, k] = 0;
+    }
+    for (i in 1:N) {
+      if (pre_miss[i] == 1) pre_observed[P[i], type[i]] = 1;
+      if (y_miss[i] == 1)   y_observed[P[i], time[i], type[i]] = 1;
+    }
+    for (p in 1:N_P) {
+      for (j in 1:M) { valid_mask[p, j] = 0; valid_idx[p, j] = 0; }
+      for (t in 1:2) {
+        for (k in 1:K) {
+          int j = (t - 1) * K + k;
+          if (y_observed[p, t, k] == 1 && pre_observed[p, k] == 1)
+            valid_mask[p, j] = 1;
+        }
+      }
+      int c = 0;
+      for (j in 1:M) {
+        if (valid_mask[p, j] == 1) {
+          c += 1;
+          valid_idx[p, c] = j;
+        }
+      }
+      valid_count[p] = c;
+    }
+  }
 }
+
 parameters {
   // Time-specific intercepts: alpha[time][type, treat]
   array[2] matrix[K, 2] alpha;
-  vector[K] beta;
+  // Time-specific pre-value coefficients
+  matrix[K, 2] beta;
   // Time-specific sex parameters
   matrix[K, 2] beta_sex;
   
@@ -65,7 +140,7 @@ parameters {
   
   // Missing data parameters
   vector[n_miss_y] y_impute;
-  vector[n_miss_pre] pre_impute;
+  vector[n_miss_pre_pk] pre_impute_pk;
 
   // Pre-value imputation model
   vector[K] mu_pre;
@@ -84,8 +159,7 @@ transformed parameters {
   // Fill y and pre
   {
     int idx_y = 1;
-    int idx_pre = 1;
-    
+
     for (i in 1:N) {
       if (y_miss[i] == 1) {
         y[i] = y_obs[i];
@@ -93,12 +167,13 @@ transformed parameters {
         y[i] = y_impute[idx_y];
         idx_y += 1;
       }
-      
-      if (pre_miss[i] == 1) {
-        pre[i] = pre_obs[i];
+
+      // pre is participant-level: index by (P, type) so duplicated rows
+      // share the same imputed value.
+      if (pre_pk_miss[P[i], type[i]] == 0) {
+        pre[i] = pre_obs_pk[P[i], type[i]];
       } else {
-        pre[i] = pre_impute[idx_pre];
-        idx_pre += 1;
+        pre[i] = pre_impute_pk[pre_pk_idx[P[i], type[i]]];
       }
     }
   }
@@ -113,7 +188,7 @@ transformed parameters {
       y_wide_2[P[i], type[i]] = y[i];
     
     real mu_i = alpha[time[i]][type[i], treat[i]] +
-                beta[type[i]] * pre[i] +
+                beta[type[i], time[i]] * pre[i] +
                 beta_sex[type[i], time[i]] * sex[i];
     if (time[i] == 1)
       mu_wide_1[P[i], type[i]] = mu_i;
@@ -125,7 +200,7 @@ transformed parameters {
 model {
   // Priors for the MVN model
   for (t in 1:2) to_vector(alpha[t]) ~ normal(0, 1);
-  beta ~ normal(1, 0.4);
+  to_vector(beta) ~ normal(1, 0.4);
   to_vector(beta_sex) ~ normal(0, 0.5);
   
   sigma ~ exponential(1);
@@ -137,7 +212,7 @@ model {
   // Weak prior on imputed values
   //if (prior_only == 1) {
     y_impute ~ normal(0, 2);
-    pre_impute ~ normal(0, 2);
+    pre_impute_pk ~ normal(0, 2);
   //}
 
   // Likelihood for the MVN model
@@ -186,19 +261,40 @@ generated quantities {
   
   {
     matrix[M, M] L_Sigma = diag_pre_multiply(sigma, L_Omega);
-    
+    matrix[M, M] Sigma_full = multiply_lower_tri_self_transpose(L_Sigma);
+
     for (p in 1:N_P) {
       vector[M] mu_stacked;
       mu_stacked[1:K]     = mu_wide_1[p]';
       mu_stacked[(K+1):M] = mu_wide_2[p]';
-      
+
       vector[M] y_part = multi_normal_cholesky_rng(mu_stacked, L_Sigma);
-      
+
       vector[M] y_stacked;
       y_stacked[1:K]     = y_wide_1[p]';
       y_stacked[(K+1):M] = y_wide_2[p]';
-      log_lik_part[p] = multi_normal_cholesky_lpdf(y_stacked | mu_stacked, L_Sigma);
-      
+
+      // Marginal log-density over only the valid (y- and pre-observed) entries.
+      // Participants with valid_count[p] == 0 contribute 0 -- filter in R.
+      int v = valid_count[p];
+      if (v == 0) {
+        log_lik_part[p] = 0;
+      } else {
+        vector[v] y_sub;
+        vector[v] mu_sub;
+        matrix[v, v] Sigma_sub;
+        for (a in 1:v) {
+          int ia = valid_idx[p, a];
+          y_sub[a]  = y_stacked[ia];
+          mu_sub[a] = mu_stacked[ia];
+          for (b in 1:v) {
+            int ib = valid_idx[p, b];
+            Sigma_sub[a, b] = Sigma_full[ia, ib];
+          }
+        }
+        log_lik_part[p] = multi_normal_lpdf(y_sub | mu_sub, Sigma_sub);
+      }
+
       for (j in 1:obs_count[p]) {
         int i = obs_idx[p, j];
         if (time[i] == 1) {
@@ -219,8 +315,11 @@ generated quantities {
   }
 
   // Compute diagnosis from continuous biomarker values
+  // diag_idx order: {HDL=2, TG=4, dias=6, glucose=8, sys=9, waist=10}
+  // BP (dias d=3 OR sys d=5) collapses into a single criterion,
+  // so the maximum count is 5 (HDL, TG, BP, glucose, waist).
   for (p in 1:N_P) {
-    vector[5] thresh;
+    vector[6] thresh;
     if (sex_p[p] < 0)
       thresh = threshold_male;
     else
@@ -228,9 +327,11 @@ generated quantities {
 
     for (t in 1:3) {
       int count = 0;
-      for (d in 1:5) {
+      int bp_pass = 0;
+      for (d in 1:6) {
         int k = diag_idx[d];
         real val;
+        int pass;
         if (t == 1)
           val = pre_wide[p, k];
         else if (t == 2)
@@ -239,10 +340,17 @@ generated quantities {
           val = y_wide_2[p, k];
 
         if (above[d] == 1)
-          count += (val >= thresh[d]);
+          pass = (val >= thresh[d]);
         else
-          count += (val <= thresh[d]);
+          pass = (val <= thresh[d]);
+
+        if (d == 3 || d == 5) {
+          if (pass == 1) bp_pass = 1;
+        } else {
+          count += pass;
+        }
       }
+      count += bp_pass;
       n_criteria[p, t] = count;
       diagnosed[p, t] = (count >= 3) ? 1.0 : 0.0;
     }

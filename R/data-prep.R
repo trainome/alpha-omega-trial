@@ -1,5 +1,5 @@
 # Data prep. ####################################################
-# This script wrangles the main outcome variables for the met-sym
+# This script wrangles the main outcome variables for the met-syn
 # analysis. Sourcing the script will place the following objects in
 # the env.
 #
@@ -7,13 +7,14 @@
 #   * Metabolic syndrome (with sub-scores) (primary)
 #     * Triglycerides
 #     * Waist circumference
-#     * Blood pressure
+#     * Blood pressure (diastolic and systolic)
 #     * HDL Cholesterol
 #     * Resting glucose
 #   * Body mass index
 #   * Relative fat mass
 #   * OGTT
 #   * HOMA2-IR
+#   * Adipondektin
 #
 # - participant_complete_T2: Vector of participants completed T2
 # - participant_complete_T4: Vector of participants completed T4
@@ -80,8 +81,12 @@ glucose_dat <- AOData::glucose |>
       select(participant, sex)
   ) |>
   filter(min == 0) |>
-  select(participant, sex, time, HOMA2IR) |>
-  pivot_longer(cols = HOMA2IR, names_to = "analyte", values_to = "value") |>
+  select(participant, sex, time, HOMA2IR, Adiponectin) |>
+  pivot_longer(
+    cols = c(HOMA2IR, Adiponectin),
+    names_to = "analyte",
+    values_to = "value"
+  ) |>
   mutate(threshold = NA)
 
 
@@ -159,20 +164,30 @@ criteria_dat <- bind_rows(
     filter(!is.na(value)),
 
   # Blood Pressure: 130/85 mm Hg or higher, or taking medication for it.
+  #
+  #
 
   AOData::waist_bp |>
     filter(measure != "waist") |>
     pivot_wider(names_from = measure, values_from = value) |>
-    mutate(
-      bp = if_else(sys > 130 | dias > 85, TRUE, FALSE),
-      map = dias + ((sys - dias) / 3),
-      analyte = "bp"
+
+    pivot_longer(
+      cols = c(sys, dias),
+      names_to = "analyte",
+      values_to = "value"
     ) |>
-    select(participant, time, sex, analyte, value = map, threshold = bp) |>
+    mutate(
+      threshold = if_else(
+        analyte == "sys" & value > 130 | analyte == "dias" & value > 85,
+        TRUE,
+        FALSE
+      )
+    ) |>
+    select(participant, time, sex, analyte, value, threshold) |>
     filter(!is.na(value)),
   # Add body composition
   body_comp,
-  # Add homa2IR
+  # Add homa2IR and adipondectin
   glucose_dat
 ) |>
   # Create binomial variable for individual criteria
@@ -191,12 +206,12 @@ criteria_dat <- bind_rows(
 # from T1 to T4. No missing values are allowed in the complete case analysis.
 # For the missingness analysis, participants completing T2 are also sorted out.
 participant_complete_T4 <- criteria_dat |>
-  filter(analyte %in% c("HDL", "TG", "waist", "glucose", "bp")) |>
+  filter(analyte %in% c("HDL", "TG", "waist", "glucose", "sys", "dias")) |>
   select(participant, time, treat, sex, analyte, value) |>
   # Critera measures
   pivot_wider(names_from = analyte, values_from = value) |>
-  filter(complete.cases(pick(HDL:bp))) |>
-  pivot_longer(cols = HDL:bp) |>
+  filter(complete.cases(pick(HDL:dias))) |>
+  pivot_longer(cols = HDL:dias) |>
 
   pivot_wider(names_from = time, values_from = value) |>
   filter(complete.cases(pick(T2, T4))) |>
@@ -205,12 +220,12 @@ participant_complete_T4 <- criteria_dat |>
 
 
 participant_complete_T2 <- criteria_dat |>
-  filter(analyte %in% c("HDL", "TG", "waist", "glucose", "bp")) |>
+  filter(analyte %in% c("HDL", "TG", "waist", "glucose", "sys", "dias")) |>
   select(participant, time, treat, sex, analyte, value) |>
   # Critera measures
   pivot_wider(names_from = analyte, values_from = value) |>
-  filter(complete.cases(pick(HDL:bp))) |>
-  pivot_longer(cols = HDL:bp) |>
+  filter(complete.cases(pick(HDL:dias))) |>
+  pivot_longer(cols = HDL:dias) |>
 
   pivot_wider(names_from = time, values_from = value) |>
   filter(complete.cases(pick(T2))) |>

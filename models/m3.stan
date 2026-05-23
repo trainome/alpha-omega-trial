@@ -88,13 +88,20 @@ model {
 }
 generated quantities {
   array[N] real y_rep;
-  vector[N_mis] y_imp; // Store posterior draws of imputed values
+  vector[N_mis] y_imp;   // Store posterior draws of imputed values
+  vector[N_obs] log_lik; // log-likelihood on observed data
   
   if (prior_only == 0) {
     for (n in 1:N) {
       real mu_n = alpha[FA[n], TI[n], TX[n]] + beta[FA[n]] * pre[n];
       y_rep[n] = normal_rng(mu_n, sigma[FA[n]]);
     }
+     for (k in 1:N_obs) {                    
+        int i = ii_obs[k];
+        log_lik[k] = normal_lpdf(y[i] |
+                       alpha[FA[i], TI[i], TX[i]] + beta[FA[i]] * pre[i],
+                       sigma[FA[i]]);
+      }
   }
   
   // Copy imputed values for easy extraction

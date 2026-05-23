@@ -1,8 +1,10 @@
 /* 
 A joint model for Metabolic Syndrome Criteria subscores.
-We model each subscore separately with data imputation on both post-intervention
-time-points. Pre-values are co-variate and score-specific treatment 
-effect as the focal parameters
+
+  - Each subscore is modelled separately with data imputation on both 
+  post-intervention time-points and pre-intervention scores. 
+  - Pre-values are co-variates and score-specific treatment 
+effects are the parameters for inference (alpha).
 
 */
 data {
@@ -19,19 +21,40 @@ data {
   
   array[N] int<lower=1, upper=2> time;        // Time indicator
   array[N] int<lower=1, upper=K> type;        // Measurement type
-  array[N] int<lower=1, upper=N_P> P;         // Participant 
+  array[N] int<lower=1, upper=N_P> P;         // Participant
   array[N] int<lower=1, upper=2> treat;       // Treatment index
-  
+  array[N] int<lower=1, upper=2> sex_idx;     // Sex index (1=male, 2=female)
+
   int<lower=0, upper=1> prior_only;         // Prior only flag
 }
 
 transformed data {
   int n_miss_y = N - sum(y_miss);             // Count the number of missing
   int n_miss_pre = N - sum(pre_miss);
+
+  // Diagnostic criteria data
+  array[6] int diag_idx = {2, 4, 6, 8, 9, 10};  
+// set the right index for subscores 
+//
+// analyte  type std_threshold_male std_threshold_female
+// HDL         2            -1.10                -0.233 
+// TG          4             0.947                0.947 
+// dias        6            -0.0200              -0.0200
+// glucose     8             1.88                 1.88  
+// sys         9             0.0638               0.0638
+// waist      10            -0.432               -1.48  
+  
+  vector[6] threshold_male   = [-1.1,   0.947, -0.02, 1.88, 0.0638, -0.432]';
+  vector[6] threshold_female = [-0.233, 0.947, -0.02, 1.88, 0.0638, -1.48]';
+  array[6] int above = {0, 1, 1, 1, 1, 1};   // 1 = above is abnormal
+
+  // Participant-level sex index (constant per participant)
+  array[N_P] int sex_p_idx;
+  for (i in 1:N) sex_p_idx[P[i]] = sex_idx[i];
 }
 
 parameters {
-  // An array per time-point, Type (k) treatments (2)
+  // An array per time-point, Type (k) treatments (N_TX = 2)
   array[2] matrix[K, N_TX] alpha;  
   // Pre-score covariate parameter, separate for each type, time
   matrix[K, 2] beta;                     
@@ -50,6 +73,7 @@ transformed parameters {
   
 
   // Local scope for the declared index vars here (idx_).
+  // (Local scope saves nothing to the posterior.)
  {  
    
   int idx_y = 1;
@@ -86,13 +110,14 @@ transformed parameters {
 model {
 
   // Priors for alpha (across all time/type/treat)
-  // Priors
-  for (t in 1:2)  to_vector(alpha[t]) ~ normal(0, 1); 
+  for (ti in 1:2)  to_vector(alpha[ti]) ~ normal(0, 1); 
   
+  // Priors for beta
   for(ti in 1:2)
    for (ty in 1:K)
   beta[ty, ti] ~ normal(1, 0.4);
   
+  // Priors for sigma
   for(ti in 1:2)
    for (ty in 1:K)
   sigma[ty,ti] ~ exponential(1);
@@ -115,14 +140,68 @@ model {
 generated quantities {
   vector[N] y_rep;
   vector[N_P] log_lik_part;
-  
+
+  // Per-participant, per-time diagnosis: 1 if >= 3 of 5 criteria met
+  matrix[N_P, 3] diagnosed;
+  // Per-participant, per-time count of criteria met (0-5)
+  matrix[N_P, 3] n_criteria;
+
   // Y rep using the row indicies
   for(i in 1:N)
     y_rep[i] = normal_rng(mu[i], sig[i]);
-  
-  // Log lik using participant to correspond to MVNorm models
+
+  // Log lik using participant to correspond to MVNorm models.
+  // Only paired observations (y AND pre observed) contribute the log
+  // likelihood.
   for (p in 1:N_P)
     log_lik_part[p] = 0;
   for (i in 1:N)
-    log_lik_part[P[i]] += normal_lpdf(y[i] | mu[i], sig[i]);
+    if (y_miss[i] == 1 && pre_miss[i] == 1)
+      log_lik_part[P[i]] += normal_lpdf(y[i] | mu[i], sig[i]);
+
+  // Compute diagnosis from continuous biomarker values (incl imputed)
+  {
+    matrix[N_P, K] pre_wide  = rep_matrix(0.0, N_P, K);
+    matrix[N_P, K] y_wide_1  = rep_matrix(0.0, N_P, K);
+    matrix[N_P, K] y_wide_2  = rep_matrix(0.0, N_P, K);
+    for (i in 1:N) {
+      pre_wide[P[i], type[i]] = pre[i];
+      if (time[i] == 1) y_wide_1[P[i], type[i]] = y[i];
+      else              y_wide_2[P[i], type[i]] = y[i];
+    }
+
+    for (p in 1:N_P) {
+      vector[6] thresh;
+      if (sex_p_idx[p] == 1) thresh = threshold_male;
+      else                   thresh = threshold_female;
+
+      // diag_idx order: {HDL=2, TG=4, dias=6, glucose=8, sys=9, waist=10}
+      // BP (dias d=3 OR sys d=5) collapses into a single criterion,
+      // so the maximum count is 5 (HDL, TG, BP, glucose, waist).
+      for (t in 1:3) {
+        int count = 0;
+        int bp_pass = 0;
+        for (d in 1:6) {
+          int k = diag_idx[d];
+          real val;
+          int pass;
+          if (t == 1)      val = pre_wide[p, k];
+          else if (t == 2) val = y_wide_1[p, k];
+          else             val = y_wide_2[p, k];
+
+          if (above[d] == 1) pass = (val >= thresh[d]);
+          else               pass = (val <= thresh[d]);
+
+          if (d == 3 || d == 5) {
+            if (pass == 1) bp_pass = 1;
+          } else {
+            count += pass;
+          }
+        }
+        count += bp_pass;
+        n_criteria[p, t] = count;
+        diagnosed[p, t] = (count >= 3) ? 1.0 : 0.0;
+      }
+    }
+  }
 }

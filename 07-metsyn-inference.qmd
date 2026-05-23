@@ -8,3 +8,431 @@ execute:
 editor_options: 
   chunk_output_type: console
 ---
+
+```{r}
+
+# Source figure options, packages, and main data prep.
+source("./R/fig-opt-fun.R")
+source("./R/packages.R")
+source("./R/data-prep.R")
+source("./R/helpers.R")
+source("./R/sim-fun.R")
+
+
+refit.models <- FALSE
+```
+
+
+
+```{r}
+#| eval: true
+#| label: data-prep-obs-fit
+
+
+d_full <- criteria_dat |> 
+  select(participant, time, treat, sex, age, analyte, value) |>
+  # Add missing values for all missing obs. 
+  pivot_wider(names_from = time, 
+              values_from = value) |> 
+
+  pivot_longer(cols = c(T1, T2, T4), 
+               values_to = "value",
+               names_to = "time" ) |> 
+  
+  pivot_wider(names_from = analyte, 
+              values_from = value) |> 
+
+    pivot_longer(cols = HDL:HOMA2IR, 
+               values_to = "value",
+               names_to = "analyte" ) |> 
+  
+  mutate(value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value)) |> 
+  
+
+  
+  mutate(.by = analyte, 
+         value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE)) |> 
+
+  mutate(participant = paste0("p", participant)) 
+
+
+
+```
+
+
+```{r}
+
+
+# Create a data sets for labelling types
+labels <- d_full |> 
+  distinct(analyte) |> 
+  mutate(type = dense_rank(analyte), 
+         label = case_when(
+           analyte == "HDL" ~ "High density lipoprotein", 
+           analyte == "glucose" ~ "Fasting glucose", 
+           analyte == "TG" ~ "Triglycerides", 
+           analyte == "waist" ~ "Waist circumference", 
+           analyte == "bp" ~ "Mean arterial blood pressure", 
+           analyte == "fat.rel" ~ "Relative fat mass", 
+           analyte == "HOMA2IR" ~ "Insulin resistance index", 
+           analyte == "bmi" ~ "Body mass index", 
+           .default = analyte
+           
+         )) |> 
+  arrange(type)
+
+
+# Including all data
+dat <- d_full |> 
+  filter(time %in% c("T1", "T2","T4")) |> 
+  
+
+  mutate(type = dense_rank(analyte), 
+         participant = dense_rank(participant), 
+         treat_seq = dense_rank(treat), 
+         value_std = if_else(is.na(value_std), -999, value_std)) |> 
+
+    select(-value) |> 
+  
+  pivot_wider(names_from = time, 
+              values_from = c(value_std)) |> 
+  
+  pivot_longer(cols = T2:T4, 
+               names_to = "time",
+               values_to = "y_obs") |> 
+  rename(pre_obs = T1) |> 
+  
+
+  
+  mutate(time = if_else(time == "T2", 1, 2), 
+         sex = if_else(sex == "m", -0.5, 0.5), 
+         y_miss = if_else(y_obs == -999, 0, 1), 
+         pre_miss= if_else(pre_obs == -999, 0, 1)) |> 
+
+  select(y_obs, 
+         pre_obs, 
+         y_miss, 
+         pre_miss, 
+         P = participant, 
+         sex,
+         type,
+         type,
+         time,
+         treat = treat_seq) |> 
+
+  arrange(P, time, type) 
+
+
+# Prepare a data list for models s7-s10
+d <- list(
+  N = nrow(dat), 
+  N_P = length(unique(dat$P)),
+  N_TX = length(unique(dat$treat)),
+  K = length(unique(dat$type)),
+  y_obs = dat$y_obs, 
+  pre_obs = dat$pre_obs, 
+  y_miss = dat$y_miss,
+  pre_miss = dat$pre_miss, 
+  type = dat$type, 
+  treat = dat$treat, 
+  P = dat$P, 
+  prior_only = 0,
+  # Adding sex and time to data structure
+  time = dat$time,
+  sex = dat$sex,
+  sex_idx = if_else(dat$sex < 0, 1L, 2L),
+  # Adding nu as a fixed parameter for model s12
+  nu = 4
+)
+
+# Compile relevant models
+s7 <- cmdstan_model(stan_file = "models/s7.stan", 
+                      exe_file = "models/s7.exe")
+s8 <- cmdstan_model(stan_file = "models/s8.stan", 
+                      exe_file = "models/s8.exe")
+s9 <- cmdstan_model(stan_file = "models/s9.stan", 
+                      exe_file = "models/s9.exe")
+s10 <- cmdstan_model(stan_file = "models/s10.stan", 
+                      exe_file = "models/s10.exe")
+s11 <- cmdstan_model(stan_file = "models/s11.stan", 
+                      exe_file = "models/s11.exe")
+s12 <- cmdstan_model(stan_file = "models/s12.stan", 
+                      exe_file = "models/s12.exe")
+s13 <- cmdstan_model(stan_file = "models/s13.stan", 
+                      exe_file = "models/s13.exe")
+
+
+# Fit model (get posterior distributions)
+fit_wrap(s7, DATA = d, fit = "fit.s7.post")
+fit_wrap(s8, DATA = d, fit = "fit.s8.post")
+fit_wrap(s9, DATA = d, fit = "fit.s9.post")
+fit_wrap(s10, DATA = d, fit = "fit.s10.post")
+fit_wrap(s11, DATA = d, fit = "fit.s11.post")
+fit_wrap(s12, DATA = d, fit = "fit.s12.post")
+fit_wrap(s13, DATA = d, fit = "fit.s13.post")
+
+```
+
+
+```{r}
+
+
+draws.s7 <- fit.s7.post$draws("alpha", format = "df")
+draws.s8 <- fit.s8.post$draws("alpha", format = "df")
+draws.s9 <- fit.s9.post$draws("alpha", format = "df")
+draws.s10 <- fit.s10.post$draws("alpha", format = "df")
+draws.s11 <- fit.s11.post$draws("alpha", format = "df")
+draws.s12 <- fit.s12.post$draws("alpha", format = "df")
+draws.s13 <- fit.s13.post$draws("alpha", format = "df")
+
+
+draws <- draws.s12
+
+ls <- list(s7 = draws.s7, 
+           s8 = draws.s8,
+           s9 = draws.s9,
+           s10 = draws.s10, 
+           s11 = draws.s11,
+           s12 = draws.s12,
+           s13 = draws.s13)
+
+infer_treat <- function(draws_list) {
+  
+  models <- names(draws_list)
+  
+  contrasts <- list()
+  estimates <- list()
+  for (i in seq_along(models)) {
+  
+    estimates[[i]] <- draws_list[[i]] |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  mutate(name = gsub("alpha\\[|\\]", "", name)) |> 
+  
+  separate(name, into = c("time", "type", "treat"))  |> 
+    mutate(treat = if_else(treat == 1, "ctrl", "omega")) |> 
+    mutate(model = models[i])
+  
+  
+  contrasts[[i]] <- estimates[[i]] |> 
+    pivot_wider(names_from = treat, 
+                values_from = value) |> 
+    mutate(contrast = omega - ctrl) |> 
+    mutate(model = models[i])
+    
+  }
+  
+  estimates <- bind_rows(estimates)
+  contrasts <- bind_rows(contrasts)
+  
+  return(list(estimates = estimates, 
+              contrasts = contrasts))
+}
+
+
+infer <- infer_treat(ls)
+
+
+infer$contrasts |> 
+   inner_join(labels |> 
+                mutate(type = as.character(type))) |> 
+  mutate(model = factor(model, levels = paste0("s", 7:13))) |> 
+   ggplot(aes(contrast, color = model )) +
+  geom_line(stat = "density") + 
+   
+   facet_wrap(time ~ label, scales = "free") + 
+  alpha_theme(yaxis = FALSE) +
+  geom_vline(xintercept = 0) + 
+  scale_color_manual(values = c(
+    colscale[2], 
+    colscale[4], 
+    colscale[2], 
+    colscale[4],
+    colscale[4], 
+    colscale[4], 
+    colscale[2])) 
+  
+
+
+  
+
+
+
+
+```
+
+
+```{r}
+
+## Extract diagnostic critera
+
+
+draws.s7 <- fit.s7.post$draws("alpha", format = "df")
+draws.s8 <- fit.s8.post$draws("alpha", format = "df")
+draws.s9 <- fit.s9.post$draws("alpha", format = "df")
+draws.s10 <- fit.s10.post$draws("alpha", format = "df")
+draws.s11 <- fit.s11.post$draws("alpha", format = "df")
+draws.s12 <- fit.s12.post$draws("alpha", format = "df")
+
+
+
+
+draws <- fit.s12.post$draws("n_criteria", format = "df")
+
+
+# Create a data sets with treatment allocations
+  dobs <- d_full |> 
+    mutate(P = as.character(dense_rank(participant)), 
+           time = as.character(dense_rank(time)), 
+           treat = as.character(dense_rank(treat))) |> 
+    distinct(P, time, treat) |> 
+    arrange(P)
+
+
+
+
+
+infer_ncrit <- function(draws, dobs, ndraws = 100) {
+  
+  p <- draws |> 
+    filter(.draw %in% sample(1:8000, ndraws)) |> 
+    pivot_longer(cols = starts_with("n_crit")) |> 
+    mutate(name = gsub("n_criteria\\[|\\]", "", name)) |> 
+    separate(name, into = c("P", "time")) |> 
+
+    inner_join(dobs) |> 
+    summarise(.by = c(treat, .draw, time, value),
+              frac = n()) |> 
+    mutate(.by = c(treat, .draw, time), 
+           frac = 100 * (frac / sum(frac))) |> 
+    mutate(.by = c(treat, time), 
+               .draw = dense_rank(.draw)) |> 
+    
+    ggplot(aes(.draw, frac, fill = as.factor(value))) + 
+    geom_bar(stat = "identity", width = 1) + 
+    facet_wrap(treat ~ time, labeller = label_both) + 
+    scale_alpha_manual(values = c(0.9, 0.3)) +
+    scale_fill_manual(values = c(colscale[1], colscale[6], colscale[4],colscale[5], colscale[3], colscale[2])) +
+    alpha_theme() + 
+    
+    labs(y = "Relative frequency (%)", 
+         fill = "Number of \ndiagnostic criteria") +
+    
+    theme(axis.text.x = element_blank(), 
+          axis.ticks.x = element_blank(), 
+          axis.title.x = element_blank(), 
+          axis.line.x = element_blank(), 
+          legend.position = "bottom")
+  
+}
+
+
+
+draws <- fit.s12.post$draws("diagnosed", format = "df")
+
+
+infer_diagnosed <- function(draws, dobs, ndraws = 500) {
+  
+  draws |> 
+    filter(.draw %in% sample(1:8000, ndraws)) |> 
+    pivot_longer(cols = starts_with("diagnosed")) |> 
+    mutate(name = gsub("diagnosed\\[|\\]", "", name)) |> 
+    separate(name, into = c("P", "time")) |> 
+    inner_join(dobs) |> 
+    summarise(.by = c(treat, time,.draw), 
+              frac.diagnosed = sum(value) / n()) |> 
+        mutate(.by = c(treat, time), 
+               .draw = dense_rank(.draw)) |> 
+    ggplot(aes(.draw, frac.diagnosed, fill = as.factor(treat))) + 
+    geom_bar(stat = "identity", width = 1) + 
+    facet_wrap(treat ~ time, labeller = label_both) + 
+    scale_fill_manual(values = colscale) +
+        labs(y = "Relative frequency (%)", 
+         fill = "Number of \ndiagnostic criteria") +
+    
+    theme(axis.text.x = element_blank(), 
+          axis.ticks.x = element_blank(), 
+          axis.title.x = element_blank(), 
+          axis.line.x = element_blank(), 
+          legend.position = "bottom")
+  
+}
+  
+
+
+# Using seqwrap to infer diagnosed fraction differences 
+# between treatment groups
+
+library(seqwrap)
+
+draws <- fit.s12.post$draws("diagnosed", format = "df")
+
+# Create a data sets with treatment allocations
+  dobs <- d_full |> 
+    mutate(P = as.character(dense_rank(participant)), 
+           time = as.character(dense_rank(time)), 
+           treat = as.character(dense_rank(treat))) |> 
+    distinct(P, time, treat) |> 
+    arrange(P)
+
+
+
+
+infer_seqwrap <- function(draws, dobs, ndraws = 1000) {
+  
+  # Create meta-data 
+  metadata <- dobs |> 
+  mutate(seq_sample_id = paste0("diagnosed", P, "_", time), 
+         treat = paste0("treat", treat), 
+         time = paste0("time", time)) 
+  # Data set 
+  dat <- draws |> 
+    # Re-name seq_sample_id
+  select(.draw, starts_with("diagnosed")) |> 
+  pivot_longer(cols = starts_with("diag")) |> 
+  mutate(name = gsub("\\[|\\]", "", name), 
+         name = gsub(",", "_", name)) |> 
+  pivot_wider(values_from = value, names_from = name) 
+  
+  # Prepare and run seqwrap
+  model <- seqwrap_compose(
+    modelfun = glmmTMB::glmmTMB, 
+    arguments = list(
+      formula = y ~ time * treat + (1|P), 
+      family = stats::binomial
+      ), 
+    data = dat, 
+    samplename = "seq_sample_id",
+    metadata = metadata)
+  
+  results <- seqwrap(model, 
+                       subset = 1:ndraws, 
+                       cores = 12)
+  
+  sw_sums <- seqwrap_summarise(results)
+  
+  return(sums)
+  
+}
+
+
+s12 <- infer_seqwrap(draws, dobs = dobs, 
+                     ndraws = 500)
+
+
+
+
+
+
+
+sw_sums$summaries |> 
+  filter(grepl("timetime\\d+:", term)) |> 
+  ggplot(aes(estimate)) + geom_line(stat = "density") + 
+  facet_wrap(~ term)
+
+
+
+
+
+```
+
+

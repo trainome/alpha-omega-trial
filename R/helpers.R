@@ -391,7 +391,8 @@ cor_plot <- function(d) {
   compl_temp <- d |>
     filter(!is.na(value_std)) |>
     mutate(.by = participant, n = n()) |>
-    filter(n == 24) |>
+    # This is hardcoded and assumes 10 measurements and 3 time points
+    filter(n == 30) |>
     select(-value) |>
     pivot_wider(names_from = time, values_from = value_std)
 
@@ -402,7 +403,7 @@ cor_plot <- function(d) {
   resids_time <- list()
   sigmas <- list()
   analytes <- unique(compl_temp$analyte)
-  for (i in 1:8) {
+  for (i in seq_along(analytes)) {
     temp <- compl_temp |>
       filter(analyte == analytes[i])
     m0 <- lm(T1 ~ sex, data = temp)

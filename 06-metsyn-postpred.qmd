@@ -1,5 +1,5 @@
 ---
-title: "Effects of N-3 supplementation on indications of metabolic syndrome - Posterior predictive simulations"
+title: "Effects of N-3 supplementation on indications of metabolic syndrome - Posterior predictive simulations and model expansions"
 execute:
   echo: false
   warning: false
@@ -19,20 +19,15 @@ source("./R/helpers.R")
 source("./R/sim-fun.R")
 
 
+refit.models <- TRUE
 ```
 
-
-
-Models S7-S10 where next fitted with the observed data. Chain statistics indicated that the HMC algorithm converges with satisfactory results. @fig-chain-stats-s7s8 per-parameter summaries of $\hat{R}$ and effective sample size indicating that no parameter are $\hat{R} << 1.01$ and effective sample sizes are generally > 1000 per chain.
-
+Models S7 to S10 were next fitted with the observed data. Chain statistics indicated that the HMC algorithm converges with satisfactory results. @fig-chain-stats-s7s10-org shows per-parameter summaries of $\hat{R}$ and effective sample size indicating that parameters have $\hat{R} << 1.01$ and effective sample sizes are generally > 1000 per chain.
 
 
 ```{r}
 #| eval: true
 #| label: data-prep-obs-fit
-
-
-
 
 
 d_full <- criteria_dat |> 
@@ -48,7 +43,7 @@ d_full <- criteria_dat |>
   pivot_wider(names_from = analyte, 
               values_from = value) |> 
 
-    pivot_longer(cols = HDL:HOMA2IR, 
+    pivot_longer(cols = HDL:Adiponectin, 
                values_to = "value",
                names_to = "analyte" ) |> 
   
@@ -66,8 +61,68 @@ d_full <- criteria_dat |>
 ```
 
 
-
 ```{r}
+
+
+# Create a data sets for labelling types
+labels <- d_full |> 
+  distinct(analyte) |> 
+  mutate(type = dense_rank(analyte), 
+         label = case_when(
+           analyte == "HDL" ~ "High density lipoprotein", 
+           analyte == "glucose" ~ "Fasting glucose", 
+           analyte == "TG" ~ "Triglycerides", 
+           analyte == "waist" ~ "Waist circumference", 
+           analyte == "dias" ~ "Diastolic blood pressure",
+           analyte == "sys" ~ "Systolic blood pressure",
+           analyte == "fat.rel" ~ "Relative fat mass", 
+           analyte == "HOMA2IR" ~ "Insulin resistance index", 
+           analyte == "bmi" ~ "Body mass index", 
+           analyte == "Adiponectin" ~ "Adiponectin",
+           .default = analyte
+           
+         )) |> 
+  arrange(type)
+
+
+# Double check thresholds and type index
+
+
+#   Subscore = c("HDL Cholesterol", 
+#                "Fasting glucose", 
+#                "Triglycerides", 
+#                "Waist circumference", 
+#                "Blood pressure",), 
+#   Threshold = c("< 40 mg/dL for men, < 50 mg/dL for women", 
+#                 "100 mg/dL or higher (or taking medication)",
+#                 "150 mg/dL or higher (or taking medication)", 
+#                 "> 102 cm for men, > 88 cm for women", 
+#                 "130/85 mm Hg or higher (or taking medication)")) |> 
+# 
+
+
+
+
+# This collects the thresholds values for validation
+
+crit_thresholds <- d_full |> 
+  
+  # TG is on the log-scale
+  mutate(value = if_else(analyte == "TG", log(value), value)) |> 
+
+  summarise(.by = c(analyte), 
+            m = mean(value, na.rm = TRUE), 
+            sd = sd(value, na.rm = TRUE)) |> 
+  mutate(threshold_male = c(1.03, 5.6, log(1.7), 94, 130, 85, NA, NA, NA, NA), 
+         threshold_female = c(1.29, 5.6, log(1.7), 80, 130, 85, NA, NA, NA, NA), 
+         std_threshold_male = (threshold_male - m) / sd, 
+         std_threshold_female = (threshold_female - m) / sd, 
+         type = dense_rank(analyte)) |> 
+  select(analyte, type, std_threshold_male, std_threshold_female) |> 
+  filter(!is.na(std_threshold_male)) |> 
+  arrange(type ) 
+
+
 
 
 # Including all data
@@ -127,213 +182,659 @@ d <- list(
   prior_only = 0,
   # Adding sex and time to data structure
   time = dat$time,
-  sex = dat$sex
+  sex = dat$sex,
+  sex_idx = if_else(dat$sex < 0, 1L, 2L),
+  # Adding nu as a fixed parameter for model s12
+  nu = 4
 )
 
+# Compile models
+s7 <- cmdstan_model(stan_file = "models/s7.stan", 
+                      exe_file = "models/s7.exe")
+s8 <- cmdstan_model(stan_file = "models/s8.stan", 
+                      exe_file = "models/s8.exe")
+s9 <- cmdstan_model(stan_file = "models/s9.stan", 
+                      exe_file = "models/s9.exe")
+s10 <- cmdstan_model(stan_file = "models/s10.stan", 
+                      exe_file = "models/s10.exe")
+
+
+s11 <- cmdstan_model(stan_file = "models/s11.stan", 
+                      exe_file = "models/s11.exe")
+s12 <- cmdstan_model(stan_file = "models/s12.stan", 
+                      exe_file = "models/s12.exe")
+s13 <- cmdstan_model(stan_file = "models/s13.stan", 
+                      exe_file = "models/s13.exe")
 # Fit model (get posterior distributions)
 fit_wrap(s7, DATA = d, fit = "fit.s7.post")
 fit_wrap(s8, DATA = d, fit = "fit.s8.post")
 fit_wrap(s9, DATA = d, fit = "fit.s9.post")
 fit_wrap(s10, DATA = d, fit = "fit.s10.post")
 
-```
-
-
-```{r}
-#| label: fig-chain-stats-s7s8-org
-#| fig-cap: "Summary chain statistics indicate satisfactory results from both models."
-#| eval: true
-#| fig-height: 8
-#| fig-width: 8
-
-sum.s7 <- fit.s7.post$summary()
-sum.s8 <- fit.s8.post$summary()
-sum.s9 <- fit.s9.post$summary()
-sum.s10 <- fit.s10.post$summary()
-
-
-p1 <- sum.s7 |> 
-  filter(!is.na(rhat)) |> 
-  ggplot(aes(ess_bulk, rhat)) + 
-  geom_point(alpha = 0.5, color = colscale[4]) +
-  alpha_theme() + 
-  labs(x = "Effective sample size (bulk)", 
-       y = "Rhat", 
-       subtitle = "Model: S7")
-p2 <- sum.s7 |> 
-  filter(!is.na(rhat)) |> 
-  ggplot(aes(ess_tail, rhat)) + 
-  geom_point(alpha = 0.5, color = colscale[4]) +
-  alpha_theme() + 
-  labs(x = "Effective sample size (tail)", 
-       y = "Rhat", 
-       subtitle = "Model: S7")
-
-
-p3 <- sum.s8 |> 
-  filter(!is.na(rhat)) |> 
-  ggplot(aes(ess_bulk, rhat)) + 
-  geom_point(alpha = 0.5, color = colscale[7]) +
-  alpha_theme() + 
-  labs(x = "Effective sample size (bulk)", 
-       y = "Rhat", 
-       subtitle = "Model: S8")
-p4 <- sum.s8 |> 
-  filter(!is.na(rhat)) |> 
-  ggplot(aes(ess_tail, rhat)) + 
-  geom_point(alpha = 0.5, color = colscale[7]) +
-  alpha_theme() + 
-  labs(x = "Effective sample size (tail)", 
-       y = "Rhat", 
-       subtitle = "Model: S8")
-
-
-(p1 | p2) / (p3 | p4)
-
+fit_wrap(s11, DATA = d, fit = "fit.s11.post")
+fit_wrap(s12, DATA = d, fit = "fit.s12.post")
+fit_wrap(s13, DATA = d, fit = "fit.s13.post")
 
 
 ```
 
 
-Using the observed data set we are next assessing the models tendencies to produce replicated data similar to the observed data. Both model S7 and S8 are still considered in these posterior predictive checks. The overall distributions of replicated data (y^rep^) tend to look very similar to the observed data for each measurement type, treatment, and time-point combinations, both for model S7 (@fig-ppcheck-s7-rep) and model S8 (@fig-ppcheck-s7-rep).
+```{r}
+#| label: fig-chain-stats-s7s10-org
+#| fig-cap: "Summary chain statistics indicate satisfactory results from all models."
+#| eval: true
+#| fig-height: 6
+#| fig-width: 6
+
+
+# Extract relevant variables for summary statistics
+extract_sum <- function(fit) {
+  
+  all_vars <- fit$metadata()$variables
+  keep <- setdiff(
+    all_vars,
+    grep("^(y|y_rep|y_expect|y_impute|pre|pre_impute|pre_wide|
+                 y_wide_1|y_wide_2|mu_wide_1|mu_wide_2|mu|sig|
+                 log_lik_part|diagnosed|n_criteria)\\[",
+         all_vars, value = TRUE)
+  )
+  sum <- fit$summary(variables = keep, .cores = 12)
+  return(sum)
+  
+}
+
+fits <- list(fit.s7.post, 
+             fit.s8.post, 
+             fit.s9.post, 
+             fit.s10.post)
+
+# Extracting chain diagnostics takes some time - Only this if refit.models == TRUE
+# and/or chain diagnostics isn't available. 
+if(!(file.exists("./data-derived/chain-diagnostics-s7-s10.RDS") & refit.models)) {
+  sums <- lapply(fits, extract_sum)
+  models <- paste0("s", 7:10)
+  
+  for(i in 1:4) {
+    sums[[i]] <- sums[[i]] |> 
+    mutate(model = models[i])
+  }
+  
+  saveRDS(sums, "./data-derived/chain-diagnostics-s7-s10.RDS")
+  
+} else {
+  sums <- readRDS("./data-derived/chain-diagnostics-s7-s10.RDS")
+}
+
+
+
+
+# Plot the chain summaries
+
+bind_rows(sums) |>
+  filter(variable != "lp__", 
+         !is.na(rhat)) |> 
+  mutate(model = factor(model, levels = c("s7", "s8", "s9", "s10"))) |> 
+  
+  ggplot(aes(ess_bulk, rhat, size = ess_tail)) + 
+  geom_point(alpha = 0.2, color = colscale[6]) + 
+  facet_wrap(~ model ) +
+  alpha_theme() +
+  labs(x = "Effective sample size (ESS Bulk)", 
+       y = "Rhat", 
+       size = "ESS tail")
+
+
+
+```
+
+
+Using the observed data set we are next assessing the models tendencies to produce replicated data similar to the observed data. All models (s7-s10) are still considered in these posterior predictive checks. The overall distributions of replicated data (y^rep^) tend to look very similar to the observed data for each measurement type, treatment, and time-point combinations, both for all models model S7 (@fig-ppcheck-dist).
 
 ```{r}
-#| label: fig-ppcheck-s7-rep
-#| fig-cap: "Posterior predictive check of model s7. y^rep^ (40 draws from the posterior) and observed data (orange line) indicate that the model replicate the observed data distributions."
+#| label: fig-ppcheck-dist
+#| fig-cap: "Posterior predictive check of models s7-s10. y^rep^ (40 draws from the posterior) and observed data (orange line) indicate that the model replicate the observed data distributions."
 #| eval: true
-#| fig-height: 8
+#| fig-height: 12
 #| fig-width: 8
 
-yrep.s8 <- fit.s8.post$draws("y_rep", format = "df")
+
 yrep.s7 <- fit.s7.post$draws("y_rep", format = "df")
+yrep.s8 <- fit.s8.post$draws("y_rep", format = "df")
+yrep.s9 <- fit.s9.post$draws("y_rep", format = "df")
+yrep.s10 <- fit.s10.post$draws("y_rep", format = "df")
+
+
+yrep.s11 <- fit.s11.post$draws("y_rep", format = "df")
+yrep.s12 <- fit.s12.post$draws("y_rep", format = "df")
+yrep.s13 <- fit.s13.post$draws("y_rep", format = "df")
+
 
 # Obs data
 dobs <- data.frame(
+  miss = d$y_miss,
+  miss_pre = d$pre_miss,
   y = d$y_obs, 
   type = d$type, 
-    sex = d$sex,
+    sex = ifelse(d$sex == -0.5, "m", "f"),
     treat = d$treat, 
   time = d$time
   ) |> 
-  filter(y > -900) 
+    # Filter away missing data obs
+    filter(miss == 1, 
+           miss_pre == 1) 
 
-# Set number of draws for posterior predictive checks
-ndraws <- 40
+
 
 
 # Distribution of observed values vs. distribution of y rep
-p1 <- yrep.s7 |> 
-  filter(.chain == "1", 
-         .iteration %in% 1:ndraws) |> 
+ppcheck_dist <- function(yreps, obsdata, label = FALSE) {
+  
+  # For the caption 
+  caption <- str_wrap(paste("Type labels: ", 
+                   paste0(labels$type, ",", labels$label, collapse = "; ")))
+  
+  
+  
+  # Set number of draws for posterior predictive checks
+  # and sample from random draw
+  ndraws <- 40
+  randraw <- sample(1:(max(yreps$.draw)), ndraws)
+  
+  p <- yreps |> 
+  filter(.draw %in% randraw) |> 
   pivot_longer(starts_with("y_rep")) |> 
   mutate(
+    miss_pre = rep(d$pre_miss, ndraws),
+    miss = rep(d$y_miss, ndraws),
     type = rep(d$type, ndraws), 
-    sex = rep(d$sex, ndraws),
+    sex = rep(ifelse(d$sex == -0.5, "m", "f"), ndraws),
     treat = rep(d$treat, ndraws), 
     time = rep(d$time, ndraws),
   ) |> 
-  ggplot(aes(value, group = .iteration)) + 
+    # Filter simulations not corresponding to observed data
+    # Filter away missing data obs
+    filter(miss == 1, 
+           miss_pre == 1) |> 
+    
+  ggplot(aes(value)) + 
   geom_line(stat = "density", 
+            aes(color = sex, group = paste(.draw, sex)),
             alpha = 0.2) + 
   facet_grid(time + treat ~ type, 
              labeller = label_both) +
   
-  geom_line(data = dobs, 
-            aes(y, group = NULL), 
+  geom_line(data = obsdata, 
+            aes(y, group = NULL, color = sex), 
             stat = "density", 
-            color = colscale[3],
+     
             alpha = 0.8,
             linewidth = 1.2) +
   alpha_theme(yaxis = FALSE) + 
-  theme(axis.title.y =  element_blank())
-
-p1
-
-```
-
-
-```{r}
-#| eval: true
-#| label: fig-ppcheck-s8-rep
-#| fig-cap: "Posterior predictive check of model s8. y^rep^ (40 draws from the posterior) and observed data (orange line) indicate that the model replicate the observed data distributions."
-#| fig-height: 8
-#| fig-width: 8
-
-
-p2 <- yrep.s8 |> 
-  filter(.chain == "1", 
-         .iteration %in% 1:ndraws) |> 
-  pivot_longer(starts_with("y_rep")) |> 
-  mutate(
-    type = rep(d$type, ndraws), 
-    sex = rep(d$sex, ndraws),
-    treat = rep(d$treat, ndraws), 
-    time = rep(d$time, ndraws),
-  ) |> 
-  ggplot(aes(value, group = .iteration)) + 
-  geom_line(stat = "density", 
-            alpha = 0.2) + 
-  facet_grid(time + treat ~ type, 
-             labeller = label_both) +
+    scale_color_manual(values = colscale[c(1, 3)]) +
+  theme(axis.title.y =  element_blank()) + 
+    labs(x = "y^rep^ and observed values", 
+         color = "Sex")  +
+    theme(axis.title.x = element_markdown(), 
+          axis.title.y = element_blank()) 
   
-  geom_line(data = dobs, 
-            aes(y, group = NULL), 
-            stat = "density", 
-            color = colscale[3],
-            alpha = 0.8,
-            linewidth = 1.2) +
-  alpha_theme(yaxis = FALSE) + 
-  theme(axis.title.y =  element_blank())
+  if(label) {
+    p <- p + labs(caption = caption)
+            }
+  
+  return(p)
+  
+}
+
+p1 <- ppcheck_dist(yrep.s7, dobs) + labs(subtitle = "Model s7")
+
+p2 <- ppcheck_dist(yrep.s8, dobs)+ labs(subtitle = "Model s8")
+
+p3 <- ppcheck_dist(yrep.s9, dobs)+ labs(subtitle = "Model s9")
+
+p4 <- ppcheck_dist(yrep.s10, dobs, label = TRUE)+ labs(subtitle = "Model s10")
+
+
+
+
+#p5 <- ppcheck_dist(yrep.s11, dobs)+ labs(subtitle = "Model s11")
+#p6 <- ppcheck_dist(yrep.s12, dobs)+ labs(subtitle = "Model s12")
+#p7 <- ppcheck_dist(yrep.s13, dobs)+ labs(subtitle = "Model s13")
+
+p1 / p2 / p3 / p4
+
+
+
 ```
 
-To further explore model implications we calculate the observed standard deviations and extract distributions implied by the model. In @fig-ppcheck-s7-sd and @fig-ppcheck-s8-sd most distributions of y^rep^ standard deviations contain the empirical standard deviation, however, for both model S7 and S8 the standard deviations observed in the data do not correspond to those implied by the model. 
+To further explore model implications we calculate the observed standard deviations per measurement type and sex and extract distributions implied by the model through y^rep^. In @fig-ppcheck-s7-sd and @fig-ppcheck-s8-sd most distributions of y^rep^ standard deviations contain the empirical standard deviation, however, for both model S7 and S8 the standard deviations observed in the data do not correspond to those implied by the model. 
 
 ```{r}
-#| eval: true
 #| label: fig-ppcheck-s7-sd
 #| fig-cap: "Posterior predictive check of model s7. The distributions of standard deviations calculated from y^rep^"
 #| fig-height: 8
 #| fig-width: 8
+#| eval: false
 
-# New number of draws
-ndraws <- 1000
 
-sumstat <- dobs |> 
-    summarise(.by = c(type, time, treat),
-            s = sd(y)) 
 
-# Statistics vs observed
-
-yrep.s7 |> 
-  filter(.iteration %in% 1:ndraws) |> 
-  pivot_longer(starts_with("y_rep")) |> 
-  mutate(
-    type = rep(d$type, ndraws * 4), 
-    sex = rep(d$sex, ndraws * 4),
-    treat = rep(d$treat, ndraws * 4),
-    time = rep(d$time, ndraws * 4)
-  ) |> 
-  summarise(.by = c(.iteration, type, time, treat),
-            s = sd(value)) |> 
-  ggplot(aes(s)) + geom_histogram() + 
-  facet_grid(type ~ time + treat, 
-             labeller = label_both) + 
-  alpha_theme(yaxis = FALSE) + 
+# Obs data (make sure sex is sorted cerrectly)
+dobs <- data.frame(
   
-  geom_vline(data = sumstat, 
-             aes(xintercept = s, color = as.factor(treat))) + 
-  scale_color_manual(values = colscale) + 
-  labs(x = "Standard deviation", 
-       color = "Treatment") + 
-  theme(axis.title.y = element_blank())
+  miss = d$y_miss,
+  miss_pre = d$pre_miss,
+  pre = d$pre_obs,
+  y = d$y_obs, 
+  type = d$type, 
+    sex = factor(ifelse(d$sex == -0.5, "m", "f"), levels = c("m", "f")),
+    treat = d$treat, 
+  time = d$time
+  ) |> 
+    # Filter away missing data obs
+    filter(miss == 1, 
+           miss_pre == 1) 
 
+
+# Posterior predictive check. the function can be used for a summary statistics
+# function (sd, mean, max, min, quantile).
+# use stat_arg for supplying extra functions to the summary function.
+ppcheck_stat <- function(yreps, obsdata, stat = sd, stat_arg = list(),
+                         group = c("type", "time", "treat", "sex"),
+                         fill_color = "sex", 
+                         plot = TRUE) {
+
+  if (obsdata$sex[1] %in% c(-0.5, 0.5)) stop("Convert sex to a factor with 'm' and 'f'")
+  if (!fill_color %in% group) stop("`fill_color` must be one of `group`")
+
+  sumstat <- obsdata |>
+    summarise(.by = all_of(group),
+              s = do.call(stat, c(list(y), stat_arg)))
+
+  ndraws <- nrow(yreps)
+  caption <- paste("Type labels: ",
+                   paste0(labels$type, ", ", labels$label, collapse = ";\n"))
+
+  y_rep_data <- yreps |>
+    filter(.draw %in% 1:ndraws) |>
+    pivot_longer(starts_with("y_rep")) |>
+    mutate(
+      miss     = rep(d$y_miss,   ndraws),
+      miss_pre = rep(d$pre_miss, ndraws),
+      type     = rep(d$type,     ndraws),
+      sex      = rep(ifelse(d$sex == -0.5, "m", "f"), ndraws),
+      treat    = rep(d$treat,    ndraws),
+      time     = rep(d$time,     ndraws),
+      sex      = factor(sex, levels = c("m", "f"))
+    ) |>
+    filter(miss == 1, miss_pre == 1) |>
+    summarise(.by = all_of(c(".draw", group)),
+              s = do.call(stat, c(list(value), stat_arg)))
+
+  pvals <- y_rep_data |>
+    rename(srep = s) |>
+    inner_join(sumstat) |>
+    summarise(.by = all_of(group), pval = mean(srep >= s)) |>
+    mutate(direction = if_else(pval > 0.5, "over", "under"),
+           pval = pmin(pval, 1 - pval)) |>
+    arrange(pval)
+
+  if(plot) {
+     plot1 <- y_rep_data |>
+    ggplot(aes(s, fill = .data[[fill_color]])) +
+    geom_histogram(binwidth = 0.25) +
+    facet_grid(type ~ time + treat, labeller = label_both, scales = "free") +
+    alpha_theme(yaxis = FALSE) +
+    geom_vline(data = sumstat,
+               aes(xintercept = s, color = .data[[fill_color]])) +
+    scale_color_manual(values = colscale) +
+    scale_fill_manual(values = colscale) +
+    labs(x = "Test statistic",
+         color = fill_color, fill = fill_color,
+         subtitle = "Estimates (T(y^rep^) and T(y^obs^))",
+         caption = caption) +
+    theme(axis.title.y = element_blank(),
+          plot.subtitle = element_markdown())
+
+  plot2 <- y_rep_data |>
+    rename(srep = s) |>
+    inner_join(sumstat) |>
+    mutate(t_diff = srep - s) |>
+    ggplot(aes(t_diff, fill = .data[[fill_color]])) +
+    geom_histogram(binwidth = 0.25) +
+    facet_grid(type ~ time + treat, labeller = label_both, scales = "free") +
+    alpha_theme(yaxis = FALSE) +
+    scale_color_manual(values = colscale) +
+    scale_fill_manual(values = colscale) +
+    labs(x = "Contrast", fill = fill_color,
+         subtitle = "Contrast (T(y^rep^) - T(y^obs^))",
+         caption = caption) +
+    theme(axis.title.y = element_blank(),
+          plot.subtitle = element_markdown())
+  
+  return(list(plot_estimate = plot1, plot_contrast = plot2, pvals = pvals))
+  
+  } else {
+    return(pvals)
+  }
+ 
+
+  
+}
+
+
+
+
+
+### Check SD
+
+stat_check_s7 <- ppcheck_stat(yrep.s7, dobs, stat = sd)
+stat_check_s8 <- ppcheck_stat(yrep.s8, dobs, stat = sd)
+stat_check_s9 <- ppcheck_stat(yrep.s9, dobs, stat = sd)
+stat_check_s10 <- ppcheck_stat(yrep.s10, dobs, stat = sd)
+
+### Check aggregated sd p-values
+sc_pval_s7 <- ppcheck_stat(yrep.s7, dobs, stat = sd, 
+                           group = c("type", "time", "treat"), 
+                           fill_color = "type",
+                           plot = FALSE)
+sc_pval_s8 <- ppcheck_stat(yrep.s8, dobs, stat = sd, 
+                           group = c("type", "time", "treat"), 
+                           fill_color = "type",
+                           plot = FALSE)
+sc_pval_s9 <- ppcheck_stat(yrep.s9, dobs, stat = sd, 
+                           group = c("type", "time", "treat"), 
+                           fill_color = "type",
+                           plot = FALSE)
+sc_pval_s10 <- ppcheck_stat(yrep.s10, dobs, stat = sd, 
+                           group = c("type", "time", "treat"), 
+                           fill_color = "type",
+                           plot = FALSE)
+
+
+
+bind_rows(
+  sc_pval_s7 |> 
+            mutate(model = "s7"),
+  sc_pval_s8 |> 
+            mutate(model = "s8"),
+  sc_pval_s9 |> 
+            mutate(model = "s9"),
+  sc_pval_s10  |> 
+            mutate(model = "s10")) |> 
+  
+  mutate(model = factor(model, levels = paste0("s", 7:10))) |> 
+  
+  ggplot(aes(pval, model, color = as.factor(type))) + 
+  geom_point() +
+  facet_wrap( ~ time, labeller = label_both)
+  
+
+
+
+
+
+stat_check_s13 <- ppcheck_stat(yrep.s13, dobs, stat = sd)
+
+stat_check_s7$plot_estimate
+stat_check_s9$plot_estimate
+stat_check_s8$plot_estimate
+stat_check_s10$plot_estimate
+
+
+
+  
+  
+
+
+### Check MEAN
+fun <- 
+
+stat_check_s7 <- ppcheck_stat(yrep.s7, dobs, stat = fun)
+stat_check_s9 <- ppcheck_stat(yrep.s9, dobs, stat = fun)
+stat_check_s13 <- ppcheck_stat(yrep.s13, dobs, stat = fun)
+
+stat_check_s7$plot_estimate
+stat_check_s9$plot_estimate
+stat_check_s13$plot_estimate
+
+
+stat_check_s8 <- ppcheck_stat(yrep.s8, dobs, stat = fun)
+stat_check_s10 <- ppcheck_stat(yrep.s10, dobs, stat = fun)
+stat_check_s11 <- ppcheck_stat(yrep.s11, dobs, stat = fun)
+stat_check_s12 <- ppcheck_stat(yrep.s12, dobs, stat = fun)
+
+stat_check_s8$plot_estimate
+stat_check_s10$plot_estimate
+stat_check_s11$plot_estimate
+stat_check_s12$plot_estimate
+
+
+
+bind_rows(
+  stat_check_s7$pvals |> 
+            mutate(model = "s7"),
+  stat_check_s8$pvals |> 
+            mutate(model = "s8"),
+  stat_check_s9$pvals |> 
+            mutate(model = "s9"),
+  stat_check_s10$pvals |> 
+            mutate(model = "s10"),
+  stat_check_s11$pvals |> 
+            mutate(model = "s11"),
+  stat_check_s12$pvals |> 
+            mutate(model = "s12"),
+  stat_check_s13$pvals |> 
+            mutate(model = "s13")) |> 
+  
+  mutate(model = factor(model, levels = paste0("s", 7:13))) |> 
+  
+  ggplot(aes(pval, model, color = as.factor(type), shape = direction)) + 
+  geom_point() +
+  facet_wrap(time ~ treat, labeller = label_both)
+  
+
+bind_rows(
+  stat_check_s7$pvals_aggregate |> 
+            mutate(model = "s7"),
+  stat_check_s8$pvals_aggregate |> 
+            mutate(model = "s8"),
+  stat_check_s9$pvals_aggregate |> 
+            mutate(model = "s9"),
+  stat_check_s10$pvals_aggregate |> 
+            mutate(model = "s10"),
+  stat_check_s11$pvals_aggregate |> 
+            mutate(model = "s11"),
+  stat_check_s12$pvals_aggregate |> 
+            mutate(model = "s12"),
+  stat_check_s13$pvals_aggregate |> 
+            mutate(model = "s13")) |> 
+  
+  mutate(model = factor(model, levels = paste0("s", 7:13))) |> 
+  
+  ggplot(aes(pval, model, color = as.factor(type), shape = direction)) + 
+  geom_point() 
 
 ```
 
 
 
 ```{r}
-#| eval: true
+#| eval: false
+# Check nu parameters for the multivariate-t models 
+nu.s13 <- fit.s13.post$draws("nu", format = "df")
+
+  nu.s13 |> 
+    
+  pivot_longer(cols = starts_with("nu")) |> 
+    
+    mutate(type = gsub("\\[|\\]|nu", "", name)) |> 
+  inner_join(labels |> 
+               mutate(type = as.character(type))) |> 
+
+  ggplot(aes(value, color = label)) + 
+    geom_density(stat = "density") +
+    coord_cartesian(xlim = c(0, 50))
+
+```
+
+
+
+
+
+
+```{r}
+#| eval: false
+# Check log likelihood 
+
+# Extract participants with no missing values
+no_miss_part <- data.frame(
+  part = d$P,
+  y_miss = d$y_miss,
+  pre_miss = d$pre_miss
+) |> 
+  summarise(.by = part, 
+            y = sum(y_miss), 
+            pre = sum(pre_miss)) |> 
+  filter(y == 20,
+         pre == 20) |> 
+  pull(part) 
+
+no_miss_part <- paste0("log_lik_part[", no_miss_part, "]")
+
+
+library(loo)
+
+loo_routine <- function(fit, vars) {
+  
+  log_lik_mat <- fit$draws(variables = vars, format = "matrix")  # iters x N_P
+  
+  r_eff <- relative_eff(exp(log_lik_mat),
+                        chain_id = rep(1:fit$num_chains(),
+                                       each = fit$metadata()$iter_sampling))
+  
+  loo1 <- loo(log_lik_mat, r_eff = r_eff, save_psis = TRUE)
+  return(loo1)
+  
+}
+
+loo.s7 <- loo_routine(fit.s7.post, vars = no_miss_part)
+loo.s9 <- loo_routine(fit.s9.post, vars = no_miss_part)
+loo.s13 <- loo_routine(fit.s13.post, vars = no_miss_part)
+
+
+loo.s8 <- loo_routine(fit.s8.post, vars = no_miss_part)
+loo.s10 <- loo_routine(fit.s10.post, vars = no_miss_part)
+loo.s11 <- loo_routine(fit.s11.post, vars = no_miss_part)
+loo.s12 <- loo_routine(fit.s12.post, vars = no_miss_part)
+
+  
+print(loo_compare(list(
+  s7 = loo.s7,
+  s8 = loo.s8,
+  s9 = loo.s9,
+  s10 = loo.s10,
+  s11 = loo.s11,
+  s12 = loo.s12,
+  s13 = loo.s13 )), simplify = FALSE)
+  
+
+print(loo_compare(list(
+  s8 = loo.s8,
+
+  s10 = loo.s10,
+  s11 = loo.s11,
+  s12 = loo.s12)), simplify = FALSE)
+
+plot(loo.s12)
+
+
+
+## Plotting observed data and 
+# Obs data (make sure sex is sorted cerrectly)
+dobs <- data.frame(
+  P = d$P,
+  miss = d$y_miss,
+  miss_pre = d$pre_miss,
+  pre = d$pre_obs,
+  y = d$y_obs, 
+  type = d$type, 
+    sex = factor(ifelse(d$sex == -0.5, "m", "f"), levels = c("m", "f")),
+    treat = d$treat, 
+  time = d$time
+  ) |> 
+    # Filter away missing data obs
+    filter(miss == 1, 
+           miss_pre == 1) 
+
+# Extract participants with no missing values
+no_miss_part <- data.frame(
+  part = d$P,
+  y_miss = d$y_miss,
+  pre_miss = d$pre_miss
+) |> 
+  summarise(.by = part, 
+            y = sum(y_miss), 
+            pre = sum(pre_miss)) |> 
+  filter(y == 20,
+         pre == 20) |> 
+  pull(part) 
+
+pointwise <- loo.s12$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "P") |> 
+  mutate(P = gsub("log_lik_part\\[|\\]","", P), 
+         P = as.integer(P)) |> 
+  print()
+
+
+dobs |> 
+  filter(P %in% no_miss_part) |> 
+  # add pareto K estimates
+  inner_join(pointwise) |> 
+  mutate(flag = if_else(influence_pareto_k > 0.7, "high", "low")) |> 
+  ggplot(aes(pre, y, color = flag)) + geom_point(aes(alpha = flag)) + 
+  facet_wrap(type ~ time, labeller = label_both) + 
+  scale_alpha_manual(values = c(0.9, 0.3))
+
+
+
+
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Archive
+
+
+
+```{r}
+#| eval: false
 #| label: fig-ppcheck-s8-sd
 #| fig-cap: "Posterior predictive check of model s8. The distributions of standard deviations calculated from y^rep^"
 #| fig-height: 8
@@ -378,7 +879,7 @@ Similarly to posterior predictive checks of the standard deviations, comparing p
 
 
 ```{r}
-#| eval: true
+#| eval: false
 #| label: fig-ppcheck-s7-quantiles
 #| fig-cap: "Posterior predictive check of model s7. The distributions of percentiles (5 and 95%) calculated from y^rep^"
 #| fig-height: 8
@@ -433,7 +934,7 @@ yrep.s7 |>
 
 
 ```{r}
-#| eval: true
+#| eval: false
 #| label: fig-ppcheck-s8-quantiles
 #| fig-cap: "Posterior predictive check of model s8. The distributions of percentiles (5 and 95%) calculated from y^rep^"
 #| fig-height: 8

@@ -1034,6 +1034,10 @@ sim_wrap2 <- function(
 #   - Residuals are drawn from the correlation matrix (unit scales), then
 #     rescaled per participant based on that participant's treatment.
 #   - New treat_col argument picks the treatment column from preds.
+#   - prop_noise, proportion of simulated values that should be added extra
+#     noise.
+#   - sd_noise, the added noise is drawn from a normal distribution with mean
+#     0 and SD of sd_noise.
 #
 # Everything else -- pre-intervention draws, design matrix, mu_mat,
 # missingness, and output structure -- is identical to sim_type2.
@@ -1050,7 +1054,7 @@ sim_type3 <- function(
   S1,
   Lambda2,
   psi2,
-  S2,              # list of 2; each element a K x N_TX matrix
+  S2, # list of 2; each element a K x N_TX matrix
   C_cross,
   missing_form_t2 = NULL,
   missing_form_t4 = NULL,
@@ -1058,6 +1062,8 @@ sim_type3 <- function(
   missing_beta_t4,
   missing_y_prop = 0,
   missing_pre_prop = 0,
+  prop_noise = 0,
+  sd_noise = 0,
   treat_col = "group",
   verbose = TRUE
 ) {
@@ -1090,7 +1096,7 @@ sim_type3 <- function(
   if (!(treat_col %in% colnames(preds)))
     stop(sprintf("treat_col '%s' not found in preds", treat_col))
   treat_raw <- preds[[treat_col]]
-  treat_idx <- as.integer(as.factor(treat_raw))   # 1..N_TX
+  treat_idx <- as.integer(as.factor(treat_raw)) # 1..N_TX
   if (max(treat_idx) > N_TX)
     stop("Number of treatment levels in preds exceeds S2 column count")
 
@@ -1126,7 +1132,11 @@ sim_type3 <- function(
     if (!all(dim(betas[[t]]) == c(p, K)))
       stop(sprintf(
         "betas[[%d]] must be %d x %d (predictors x K), got %d x %d",
-        t, p, K, nrow(betas[[t]]), ncol(betas[[t]])
+        t,
+        p,
+        K,
+        nrow(betas[[t]]),
+        ncol(betas[[t]])
       ))
   }
 
@@ -1149,9 +1159,9 @@ sim_type3 <- function(
   Z_std <- MASS::mvrnorm(n, rep(0, 2 * K), R_full)
 
   # Row i of s_mat is c(S2[[1]][, treat_idx[i]], S2[[2]][, treat_idx[i]])
-  s_t1 <- t(S2[[1]])[treat_idx, , drop = FALSE]   # n x K
-  s_t2 <- t(S2[[2]])[treat_idx, , drop = FALSE]   # n x K
-  s_mat <- cbind(s_t1, s_t2)                      # n x 2K
+  s_t1 <- t(S2[[1]])[treat_idx, , drop = FALSE] # n x K
+  s_t2 <- t(S2[[2]])[treat_idx, , drop = FALSE] # n x K
+  s_mat <- cbind(s_t1, s_t2) # n x 2K
 
   Z <- Z_std * s_mat
   Y <- Z + mu_mat
@@ -1160,6 +1170,32 @@ sim_type3 <- function(
   y_t2 <- Y[, (K + 1):(2 * K)]
   colnames(y_t1) <- paste0("type", 1:K)
   colnames(y_t2) <- paste0("type", 1:K)
+
+  # Add noise to prop_noise proportion of observations (post-treatment)
+  if (prop_noise > 0 && sd_noise > 0) {
+    n_y1 <- length(y_t1)
+    n_y2 <- length(y_t2)
+    n_total <- n_y1 + n_y2
+    n_noise <- round(prop_noise * n_total, 0)
+    if (n_noise > 0) {
+      idx <- sample.int(n_total, n_noise)
+      eps <- rnorm(n_noise, 0, sd_noise)
+      flat <- c(as.vector(y_t1), as.vector(y_t2))
+      flat[idx] <- flat[idx] + eps
+      y_t1 <- matrix(
+        flat[1:n_y1],
+        n,
+        K,
+        dimnames = list(NULL, paste0("type", 1:K))
+      )
+      y_t2 <- matrix(
+        flat[(n_y1 + 1):n_total],
+        n,
+        K,
+        dimnames = list(NULL, paste0("type", 1:K))
+      )
+    }
+  }
 
   if (verbose) {
     cat("Heteroskedastic sim (sim_type3). Treatment-specific SDs:\n")
@@ -1257,6 +1293,9 @@ sim_type3 <- function(
 #   null and non-null regimes in one simulation.
 # sigma_base,   K-vector of baseline (treat 1) SDs per type. Default rep(1, K).
 #
+# prop_noise, proportion of observed measurements with additional noise.
+# sd_noise, SD of the additional noise.
+#
 # The cross-time correlation C_cross and pre-intervention structure are
 # handled as in sim_wrap2.
 sim_wrap3 <- function(
@@ -1267,7 +1306,9 @@ sim_wrap3 <- function(
   sigma_base = rep(1, 8),
   sigma_ratio = c(1.5, 0.6, 1.0, 1.0, 1.3, 0.8, 1.0, 1.0),
   N = 148,
-  K = 8
+  K = 8,
+  prop_noise = 0.025,
+  sd_noise = 1.5
 ) {
   if (length(group1) != K) stop("group1 must have length K")
   if (length(group2) != K) stop("group2 must have length K")
@@ -1277,9 +1318,7 @@ sim_wrap3 <- function(
   form_pre <- ~ 1 + age + sex
 
   betas_pre <- matrix(
-    c(rep(0, K),
-      runif(8, -0.2, 0.2),
-      runif(8, -0.2, 0.2)),
+    c(rep(0, K), runif(8, -0.2, 0.2), runif(8, -0.2, 0.2)),
     nrow = 3,
     ncol = K,
     byrow = TRUE
@@ -1290,11 +1329,15 @@ sim_wrap3 <- function(
 
   betas_t1 <- matrix(
     c(rep(0, K), beta_pre, group1, rep(0, 8)),
-    nrow = 4, ncol = K, byrow = TRUE
+    nrow = 4,
+    ncol = K,
+    byrow = TRUE
   )
   betas_t2 <- matrix(
     c(rep(0, K), beta_pre, group2, rep(0, 8)),
-    nrow = 4, ncol = K, byrow = TRUE
+    nrow = 4,
+    ncol = K,
+    byrow = TRUE
   )
 
   preds_all <- data.frame(
@@ -1306,7 +1349,8 @@ sim_wrap3 <- function(
   # Pre-intervention loading structure (identical to sim_wrap2)
   Lambda1 <- matrix(
     rbeta(16, loadings_beta[1, 1], loadings_beta[1, 2]),
-    ncol = 2, byrow = TRUE
+    ncol = 2,
+    byrow = TRUE
   )
   psi1 <- 1 - rowSums(Lambda1)
   Lambda1 <- sqrt(Lambda1)
@@ -1315,11 +1359,13 @@ sim_wrap3 <- function(
 
   Lambda2a <- matrix(
     rbeta(32, loadings_beta[2, 1], loadings_beta[2, 2]),
-    ncol = 4, byrow = TRUE
+    ncol = 4,
+    byrow = TRUE
   )
   Lambda2b <- matrix(
     rbeta(32, loadings_beta[3, 1], loadings_beta[3, 2]),
-    ncol = 4, byrow = TRUE
+    ncol = 4,
+    byrow = TRUE
   )
   psi2a <- 1 - rowSums(Lambda2a)
   psi2b <- 1 - rowSums(Lambda2b)
@@ -1366,6 +1412,8 @@ sim_wrap3 <- function(
     missing_beta_t4 = miss_beta_t4,
     missing_pre_prop = miss_prop_pre,
     missing_y_prop = miss_prop_y,
+    prop_noise = prop_noise,
+    sd_noise = sd_noise,
     treat_col = "group",
     verbose = FALSE
   )
@@ -1377,7 +1425,7 @@ sim_wrap3 <- function(
     full = d3_full,
     miss = d3_miss,
     true_effects = matrix(c(group1, group2), ncol = 8, byrow = TRUE),
-    true_sigma = S2    # K x 2 matrices per time, for recovery checks
+    true_sigma = S2 # K x 2 matrices per time, for recovery checks
   )
 
   return(out)

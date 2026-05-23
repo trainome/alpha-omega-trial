@@ -520,12 +520,16 @@ draws.m2 |>
   
     pivot_wider(names_from = treat, 
                 values_from = alpha) |> 
-    
-    mutate(contrats = omega - ctrl, 
-           rel_contrast = exp(contrats), 
+
+  
+        inner_join(fat_sum) |> 
+
+    mutate(contrats = omega - ctrl,
+           # Here we need to multiply with the standardization
+           rel_contrast = exp(s * contrats), 
            time = if_else(TI == 1, "T2", "T4")) |>
     
-    inner_join(fat_sum) |> 
+
     
     ggplot(aes(x = rel_contrast, 
                fill = time)) + 
@@ -611,8 +615,6 @@ percent_miss_t2 <- round(100 * fat_n_compl[2, 3][[1]], 0)
 percent_miss_t4 <- round(100 * fat_n_compl[3, 3][[1]], 0)
 
 ```
-
-
 
 
 Extending the former model with missing data imputations allows us to estimate the effect of treatment of fatty acid profiles with intention-to-treat (ITT). Missing data imputation is done on post-treatment scores only with the total sample size being n = `r totaln_fa` with `r percent_miss_t2` and `r percent_miss_t4`% of participants missing at time points T2 and T4, respectively.
@@ -902,7 +904,6 @@ draws.m3 |>
 The imputation model generally agreed with the complete-case analysis on the effect of treatment of serum fatty acid profiles (@fig-m3-predictions, @fig-m3-contrast, @fig-m3m2-predictions, and @fig-m2m3-comp).
 
 
-
 ```{r}
 #| fig-width: 6
 #| fig-height: 7
@@ -1128,11 +1129,15 @@ draws.m3 |>
     pivot_wider(names_from = treat, 
                 values_from = alpha) |> 
     
+     inner_join(fat_sum_compl) |> 
+
+  
     mutate(contrats = omega - ctrl, 
-           rel_contrast = exp(contrats), 
+           # Multiplying the standardizer to get the correct contrast (fold-diff)
+           rel_contrast = exp(s * contrats), 
            time = if_else(TI == 1, "T2", "T4")) |>
     
-    inner_join(fat_sum_compl) |> 
+ 
     
     ggplot(aes(x = rel_contrast, 
                fill = time)) + 
@@ -1285,12 +1290,12 @@ bind_rows(
   
     pivot_wider(names_from = treat, 
                 values_from = alpha) |> 
-    
+     inner_join(fat_sum_compl) |> 
     mutate(contrats = omega - ctrl, 
-           rel_contrast = exp(contrats), 
+           rel_contrast = exp(s * contrats), 
            time = if_else(TI == 1, "T2", "T4")) |>
     
-    inner_join(fat_sum_compl) |> 
+   
     
     mutate(model = "m3"), 
   
@@ -1339,12 +1344,12 @@ bind_rows(
   
     pivot_wider(names_from = treat, 
                 values_from = alpha) |> 
-    
+      inner_join(fat_sum) |> 
     mutate(contrats = omega - ctrl, 
-           rel_contrast = exp(contrats), 
+           rel_contrast = exp(s * contrats), 
            time = if_else(TI == 1, "T2", "T4")) |>
     
-    inner_join(fat_sum) |> 
+  
     
     mutate(model = "m2") ) |> 
   
@@ -1385,5 +1390,360 @@ bind_rows(
 
 
 ```
+
+
+### Model expansion: Heterogenous variance
+
+Model `m3` does not enable treatment- and time-wise heterogenous variation. In model `m4` we therefore add $\sigma_{\text{[FA, TI, TX]}} \sim \operatorname{Exponential}(1)$. 
+
+```{r}
+
+# Compiling the model
+m4 <- cmdstan_model(stan_file = "models/m4.stan", 
+                      exe_file = "models/m4.exe")
+
+
+
+d$prior_only <- 1
+
+# Prior predictive check
+fit_wrap(m4, DATA = d, fit = "fit.m4")
+
+draws.m4 <- fit.m4$draws(format = "df")
+
+
+draws.m4 |>
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .iteration, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  inner_join(
+    draws.m4 |>
+      filter(.chain == 1) |> 
+      select(starts_with("beta"), .iteration) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             beta = value 
+         ) ) |> 
+
+  
+  expand_grid(pre = seq(from = -2, to = 2, by = 0.1)) |> 
+   
+  mutate(mu = alpha + beta * pre) |> 
+  
+  summarise(.by = c(FA, TI, TX, pre), 
+            m = mean(mu), 
+            lwr = quantile(mu, 0.05), 
+            upr = quantile(mu, 0.95)) |> 
+  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
+             color = TX, 
+             fill = TX)) + 
+  geom_line() + 
+  geom_ribbon(alpha = 0.2, aes(color = NULL)) + 
+  facet_grid(FA ~ TI) + 
+  labs(x = "Pre-inteverntion values", 
+       y = "Prior predictive distribution of post-intervention values (std.)", 
+       fill = "Treatment", 
+       color = "Treatment") + 
+  
+  scale_color_manual(values = colscale) + 
+  scale_fill_manual(values = colscale) 
+
+
+
+```
+
+
+```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Model performance metrics model 4."
+#| echo: false
+#| label: fig-m4-performance
+#| message: false
+#| warning: false
+
+
+
+d$prior_only <- 0
+
+# Sample from the posterior
+fit_wrap(m4, DATA = d, fit = "fit.m4p")
+
+# Diagnostics 
+# fit.m3p$diagnostic_summary()
+
+# Model performance
+sum.m4 <- fit.m4p$summary(.cores = 12)
+
+
+# Get (most) problematic parameters
+vars <- sum.m4 |> 
+    filter(grepl(paste(
+    c("alpha","beta", "sigma", "y_imp"), collapse = "|"), 
+               variable)) |> 
+  arrange(-rhat) |> 
+  slice_head(n = 3) |> 
+  pull(variable)
+
+
+
+p1 <- sum.m4 |> 
+  filter(grepl(paste(
+    c("alpha","beta", "sigma", "y_imp"), collapse = "|"), 
+               variable)) |> 
+  mutate(variable_type = variable) |> 
+  separate(variable_type, into = c("variable_type", "index"), sep = "\\[") |> 
+  
+  mutate(highlight = if_else(variable %in% vars, variable, "")) |> 
+  
+  ggplot(aes(ess_bulk, rhat, size = ess_tail, color = variable_type)) + 
+  geom_point(alpha = 0.3) + 
+  
+  geom_text_repel(aes(label = highlight, 
+                color = NULL, 
+               
+                size = NULL), 
+                show.legend = FALSE) +
+  
+  labs(x = "(Bulk) effective sample size", 
+       y = "R-hat", 
+       color = "Parameter type", 
+       size = "(Tail) effective sample size") +
+  scale_color_manual(values = colscale) +
+  labs(title = "A")
+
+
+
+
+draws.m4 <- fit.m4p$draws(format = "df")
+
+
+p2  <- draws.m4 |> 
+  select(.iteration, .chain, all_of(vars)) |> 
+  pivot_longer(cols = all_of(vars)) |> 
+  ggplot(aes(.iteration, value, 
+             color = as.factor(.chain))) + 
+  geom_line(alpha = 0.5) + 
+  facet_wrap(~ name, ncol = 1, 
+             scales = "free_y") + 
+  scale_color_manual(values = colscale) + 
+  labs(x = "Iteration", 
+       color = "Chain", 
+       y = "Parameter value") +
+  labs(title = "B")
+
+
+
+p1 / p2
+
+
+```
+
+
+
+```{r}
+
+yreps4 <- fit.m4p$draws("y_rep", format = "df")
+yreps3 <- fit.m3p$draws("y_rep", format = "df")
+
+
+
+dat <- data.frame(
+  FA = d$FA, 
+  TX = d$TX, 
+  TI = d$TI, 
+  y = d$y,
+  obs = as.character(1:d$N)
+) |> 
+  filter(y > -900) 
+  
+  
+keep_obs <- dat |> 
+  pull(obs)
+  
+
+sum_obs <- dat |> 
+   summarise(.by = c(FA, TI), 
+            s = sd(y)) 
+
+
+
+bind_rows(
+  yreps4 |>
+
+  pivot_longer(cols = starts_with("y_rep")) |> 
+  mutate(obs = gsub("y_rep\\[|\\]", "", name)) |> 
+  filter(obs %in% keep_obs) |> 
+  inner_join(dat) |> 
+  
+  summarise(.by = c(FA,  TI, .draw), 
+            s = sd(value)) |>
+    mutate(model = "m4"), 
+  
+    yreps3 |>
+
+  pivot_longer(cols = starts_with("y_rep")) |> 
+  mutate(obs = gsub("y_rep\\[|\\]", "", name)) |> 
+  filter(obs %in% keep_obs) |> 
+  inner_join(dat) |> 
+  
+  summarise(.by = c(FA,  TI, .draw), 
+            s = sd(value)) |>
+    mutate(model = "m3")) |> 
+  
+  mutate(TI = as.character(TI)) |> 
+
+  
+  ggplot(aes(s, color = TI, group = paste(TI, model))) +
+  geom_line(stat = "density", 
+            aes(linetype = model))  + 
+  
+  geom_vline(data = sum_obs, 
+             aes(xintercept = s, 
+                 color = as.character(TI))) +
+  
+  facet_wrap( ~ FA, 
+             labeller = label_both) + 
+  scale_linetype_manual(values = c(2,1))
+  
+
+
+
+
+
+
+
+
+```
+
+
+```{r}
+
+library(loo)
+
+log_lik4 <- fit.m4p$draws("log_lik", format = "matrix")
+log_lik3 <- fit.m3p$draws("log_lik", format = "matrix")
+
+loo4 <- loo(log_lik4, save_psis = TRUE)
+loo3 <- loo(log_lik3, save_psis = TRUE)
+
+plot(loo4, label_points = TRUE)
+
+loo_compare(list("m3" = loo3,"m4" = loo4))
+
+
+ids <- pareto_k_ids(loo4, threshold = 0.7)
+
+
+
+```
+
+
+```{r}
+
+# Refit without problematic obs
+
+
+
+
+
+
+
+```
+
+
+
+
+
+## Inference
+
+
+
+```{r}
+
+
+
+draws.m3 |>
+  filter(.chain == 1) |> 
+  select(starts_with("alpha"), .iteration) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .iteration, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws.m3 |>
+      filter(.chain == 1) |> 
+      select(starts_with("sigma"), .iteration) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws.m3 |>
+      filter(.chain == 1) |> 
+      select(starts_with("beta"), .iteration) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .iteration, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA)) |> 
+
+    # Compute contrasts
+    mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
+    select(.iteration:TI, treat, alpha) |> 
+  
+    pivot_wider(names_from = treat, 
+                values_from = alpha) |> 
+     inner_join(fat_sum_compl) |> 
+    mutate(
+      # Adjusted group means
+      omega_adj = exp(s*omega + m), 
+      ctrl_adj  = exp(s*ctrl + m),
+      contrast_nat = omega_adj - ctrl_adj,
+      contrats_log = omega - ctrl, 
+      rel_contrast = exp(s * contrats_log),
+      rel_contrast_nat = omega_adj/ctrl_adj,
+      time = if_else(TI == 1, "T2", "T4")) |> 
+  
+  slice_head(n = 1000) |> 
+  ggplot(aes(rel_contrast, rel_contrast_nat)) + geom_point()
+  
+  print()
+
+
+
+
+```
+
+
+
+
+
+
+
 
 
