@@ -3,12 +3,9 @@
 This document includes supplementary data and computational details related to the paper "Effects of ... ". 
 
 
-
-
-
 ## Project organisation
 
-This notebook is built from source code available at the github repository [trainome/alpha-omega-trial](https://github.com/dhammarstrom/alpha-omega-trial/).  
+This notebook is built from source code available at the github repository [trainome/alpha-omega-trial](https://github.com/trainome/alpha-omega-trial/).  
 
 ### Chapters
 

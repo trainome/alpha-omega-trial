@@ -1,0 +1,44 @@
+---
+title: "README"
+format: html
+---
+
+
+```{r}
+source("./R/data-prep.R")
+
+
+criteria_dat |> 
+  filter(analyte == "bmi") |> 
+  mutate(bmi_t = if_else(value > 30, 1, 0)) |> 
+  summarise(.by = c(treat, bmi_t), 
+            n = n() , 
+            m = mean(value)) |> 
+  
+  print()
+
+
+```
+
+
+
+## List of tables
+- Table 1: Participants
+  * Per treatment, sex, age, weight, stature, metabolic syndrome components and diagnosis, medication, physical activity
+- Table 2: 
+
+
+
+## List of figures
+
+- Figure 1: Enrollment-allocation - Study design - Fatty acid analysis
+- Figure 2: OGTT
+- Figure 3: Metabolic syndrome - components and diagnostic criteria
+- Figure 4: Effects of BMI (or) Met-syn on treatment-responses
+
+
+## TODO
+
+- Add HbA1c to the met-syn analysis
+- Add LDL to the met-syn 
+

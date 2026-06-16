@@ -24,15 +24,15 @@ refit.models <- FALSE
 
 
 
-Fatty acids, including including EPA (C205n3) and DHA (226n3) where measured in whole blood. We will assess the effect of supplementation on group level fatty acid profiles. As preliminary models indicated heteroscedasticity of residuals, log-transformed and standardized data was used in modelling. This allows for the same weakly regularizing priors for all fatty acis ($\text{FA}$). 
+Fatty acids, including including EPA (C205n3) and DHA (226n3) where measured in red blood cells. We will assess the effect of n-3 supplementation on group level fatty acid profiles. As preliminary models indicated heteroscedasticity of residuals, log-transformed and standardized data was used in modelling. This allows for the same weakly regularizing priors for all fatty acids ($\text{FA}$). 
 
-The model was designed to estimate differences between treatments ($\text{TX}$) at post-treatment time-points (T2 and T4). The full model definition for each time point is:
+The model was designed to estimate differences between treatments ($\text{TX}$) at post-treatment time-points (T2 and T4) using pre-treatment ($\text{Pre}_{i[\text{FA}]}$) values as a covariate. The intercept in the model ($\alpha_{\text{[FA, TI, TX]}}$) gives us mean estimates for fatty-acid $\text{FA}$, time-point $\text{TI}$, and treatment $\text{TX}$.
 
 
 $$
 \begin{align}
 y_{i[\text{FA}]} &\sim \operatorname{Normal}(\mu_{i[\text{FA}]}, \sigma_{\text{FA}}) \\
-\mu_{i[\text{FA}]} &= \alpha_{\text{[FA, TI, TX]}} + \beta_{\text{FA}} \times \text{Pre}_i \\ 
+\mu_{i[\text{FA}]} &= \alpha_{\text{[FA, TI, TX]}} + \beta_{\text{FA}} \times \text{Pre}_{i[\text{FA}]} \\ 
 \alpha_{\text{[FA, TX]}} &\sim \operatorname{Normal}(0, 1) \\
 \beta_{\text{FA}} &\sim \operatorname{Normal}(1, 1) \\
 \sigma_{\text{FA}} &\sim \operatorname{Exponential}(1)\\
@@ -245,7 +245,7 @@ p1 / p2
 ```
 
 
-A first model uses only complete-cases. The prior predictive check confirms that the model expects eleven fatty acid, a positive relationship between pre-intervention values and post-treatment values, and no differences in treatments (@fig-m2-priorpred). Sampling from the posterior was non-problematic as R-hat values approached 1 and chains mixed and converged well (@fig-m2-modelperformance).
+A first model uses only complete-cases. The prior predictive check confirms that the model expects eleven fatty acids, a positive relationship between pre-intervention values and post-treatment values, and no differences in treatments (@fig-m2-priorpred). Sampling from the posterior was non-problematic as R-hat values approached 1 and chains mixed and converged well (@fig-m2-modelperformance).
 
 Posterior predictive checks showed satisfactory patterns between replicated data (y<sup>rep</sup>; thin lines, one per draw in @fig-m2-postpred) and observed data (thick lines in @fig-m2-postpred).
 
@@ -301,7 +301,7 @@ draws.m2 |>
 
 ```
 
-Treatment with N-3 fatty acids robustly increased serum levels of C205n3, C225n3 and C226n3 fatty acids compared to placebo (@fig-m2-meanpred and @fig-m2-contrast). Post-treatment values were lower in the N-3 group for C181c9, C183n6, C203n6 and C204n6 with high probability at both T2 and T4 (@fig-m2-contrast). 
+Treatment with N-3 fatty acids robustly increased red blood cell fatty acid composition levels of C205n3, C225n3 and C226n3 fatty acids compared to placebo (@fig-m2-meanpred and @fig-m2-contrast). Post-treatment values were lower in the N-3 group for C181c9, C183n6, C203n6 and C204n6 with high probability at both T2 and T4 (@fig-m2-contrast). 
 
 
 ```{r}
@@ -617,16 +617,16 @@ percent_miss_t4 <- round(100 * fat_n_compl[3, 3][[1]], 0)
 ```
 
 
-Extending the former model with missing data imputations allows us to estimate the effect of treatment of fatty acid profiles with intention-to-treat (ITT). Missing data imputation is done on post-treatment scores only with the total sample size being n = `r totaln_fa` with `r percent_miss_t2` and `r percent_miss_t4`% of participants missing at time points T2 and T4, respectively.
+Extending the first model with missing data imputations allows us to estimate the effect of treatment on fatty acid profiles with intention-to-treat (ITT) by averaging over the uncertainty associated with the missing values. Missing data imputation is done on post-treatment scores only with the total sample size being n = `r totaln_fa` with `r percent_miss_t2` and `r percent_miss_t4`% of participants missing at time points T2 and T4, respectively.
 
-The imputation mechanism replaces missing values with parameters estimated from observed data (pre-treatment values and treatment allocation) though the likelihood. 
+The imputation mechanism replaces missing values with parameters estimated from observed data (pre-treatment values and treatment allocation) through the likelihood. 
 
-The imputation model thus is defined as:
+The imputation model is defined as:
 
 $$
 \begin{align}
 y_{i[\text{FA}]}^\text{all} &\sim \operatorname{Normal}(\mu_{i[\text{FA}]}, \sigma_{\text{FA}}) \\
-\mu_{i[\text{FA}]} &= \alpha_{\text{[FA, TI, TX]}} + \beta_{\text{FA}} \times \text{Pre}_i \\ 
+\mu_{i[\text{FA}]} &= \alpha_{\text{[FA, TI, TX]}} + \beta_{\text{FA}} \times \text{Pre}_{i[\text{FA}]} \\ 
 y_{i[\text{FA}]}^{\text{all}} &= 
 \begin{cases} 
 y_{i[\text{FA}]}^{\text{obs}} & \text{if observed}  \\
@@ -1392,16 +1392,25 @@ bind_rows(
 ```
 
 
-### Model expansion: Heterogenous variance
+### Model expansion: Heterogeneous variance
 
-Model `m3` does not enable treatment- and time-wise heterogenous variation. In model `m4` we therefore add $\sigma_{\text{[FA, TI, TX]}} \sim \operatorname{Exponential}(1)$. 
+Model `m3` does not enable treatment- and time-wise heterogeneous variation. In model `m4` we therefore add $\sigma_{\text{[FA, TX]}} \sim \operatorname{Exponential}(1)$, in model `m5` we add  $\sigma_{\text{[FA, TI]}} \sim \operatorname{Exponential}(1)$, and model `m6` adds $\sigma_{\text{[FA, TI, TX]}} \sim \operatorname{Exponential}(1)$. Model performance metrics confirmed that all three extended models provided reliable chain convergence characteristics (@fig-m4-performance). 
 
 ```{r}
+#| fig-width: 6
+#| fig-height: 6
+#| fig-cap: "Prior predictive check of Models 4-6."
+#| echo: false
+#| label: fig-m4-priorpred
+#| message: false
+#| warning: false
+#| eval: false
+
+
 
 # Compiling the model
 m4 <- cmdstan_model(stan_file = "models/m4.stan", 
                       exe_file = "models/m4.exe")
-
 
 
 d$prior_only <- 1
@@ -1465,40 +1474,53 @@ draws.m4 |>
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 6
-#| fig-cap: "Model performance metrics model 4."
+#| fig-width: 8
+#| fig-height: 10
+#| fig-cap: "Model performance metrics models 4, 5, and 6."
 #| echo: false
 #| label: fig-m4-performance
 #| message: false
 #| warning: false
 
 
+m4 <- cmdstan_model(stan_file = "models/m4.stan",
+                      exe_file  = "models/m4.exe",
+                      compile_model_methods = TRUE)
+m5 <- cmdstan_model(stan_file = "models/m5.stan",
+                      exe_file  = "models/m5.exe",
+                      compile_model_methods = TRUE)
+m6 <- cmdstan_model(stan_file = "models/m6.stan",
+                      exe_file  = "models/m6.exe",
+                      compile_model_methods = TRUE)
 
 d$prior_only <- 0
 
 # Sample from the posterior
-fit_wrap(m4, DATA = d, fit = "fit.m4p")
-
-# Diagnostics 
-# fit.m3p$diagnostic_summary()
+fit_wrap(m4, DATA = d, fit = "fit.m4p", iter = 2000)
+fit_wrap(m5, DATA = d, fit = "fit.m5p", iter = 2000)
+fit_wrap(m6, DATA = d, fit = "fit.m6p", iter = 2000)
 
 # Model performance
 sum.m4 <- fit.m4p$summary(.cores = 12)
+sum.m5 <- fit.m5p$summary(.cores = 12)
+sum.m6 <- fit.m6p$summary(.cores = 12)
 
 
-# Get (most) problematic parameters
-vars <- sum.m4 |> 
+
+# Plot (most) problematic parameters
+sum_plot <- function(sum, fit) {
+  
+  vars <- sum |> 
     filter(grepl(paste(
     c("alpha","beta", "sigma", "y_imp"), collapse = "|"), 
                variable)) |> 
   arrange(-rhat) |> 
   slice_head(n = 3) |> 
   pull(variable)
+  
+  
 
-
-
-p1 <- sum.m4 |> 
+  p1 <- sum |> 
   filter(grepl(paste(
     c("alpha","beta", "sigma", "y_imp"), collapse = "|"), 
                variable)) |> 
@@ -1521,15 +1543,19 @@ p1 <- sum.m4 |>
        color = "Parameter type", 
        size = "(Tail) effective sample size") +
   scale_color_manual(values = colscale) +
-  labs(title = "A")
+  labs(title = "A") +
+    alpha_theme() +
+    theme(legend.position = "bottom") +
+    guides(color=guide_legend(nrow=4, byrow=TRUE), 
+           size = guide_legend(nrow=4, byrow=TRUE))
 
 
 
 
-draws.m4 <- fit.m4p$draws(format = "df")
+  draws <- fit$draws(format = "df")
 
 
-p2  <- draws.m4 |> 
+  p2  <- draws |> 
   select(.iteration, .chain, all_of(vars)) |> 
   pivot_longer(cols = all_of(vars)) |> 
   ggplot(aes(.iteration, value, 
@@ -1541,21 +1567,48 @@ p2  <- draws.m4 |>
   labs(x = "Iteration", 
        color = "Chain", 
        y = "Parameter value") +
-  labs(title = "B")
+    alpha_theme() +
+    theme(legend.position = "bottom") +
+    guides(color=guide_legend(nrow=2, byrow=TRUE))
 
 
 
-p1 / p2
+  px <- p1 / p2
+
+  
+}
+
+
+p1 <- sum_plot(sum.m4, fit.m4p)
+p2 <- sum_plot(sum.m5, fit.m5p)
+p3 <- sum_plot(sum.m6, fit.m6p)
+
+
+p1 + plot_annotation(title = "Model m4") | p2 + plot_annotation(title = "Model m5") |
+  p3 + plot_annotation(title = "Model m6")
+
 
 
 ```
 
 
+Comparing the fit of the models through posterior predictive simulations of condition-specific (time, treatment and fatty-acid) SD across models indicated that no model displayed extreme deviations in replicated values compared to observed variation in the data (@tbl-postpred-m4-m6). This comparison agreed with the out of sample predictive performance where models `m3` to `m5` where comparable. Model `m6`, the most heavily parameterized model showed four unreliable Pareto k values but was also slightly worse in in out of sample predictions (@tbl-loo). Together this suggest that model `m4`is the preferred model with model `m6` being the worst model. 
+
+
 
 ```{r}
+#| eval: true
+#| label: tbl-postpred-m4-m6
+#| warning: false
+#| message: false
+#| echo: false
+#| tbl-cap: "Posterior predictive p-values comparing models m3 to m6. "
 
-yreps4 <- fit.m4p$draws("y_rep", format = "df")
+
 yreps3 <- fit.m3p$draws("y_rep", format = "df")
+yreps4 <- fit.m4p$draws("y_rep", format = "df")
+yreps5 <- fit.m5p$draws("y_rep", format = "df")
+yreps6 <- fit.m6p$draws("y_rep", format = "df")
 
 
 
@@ -1574,95 +1627,99 @@ keep_obs <- dat |>
   
 
 sum_obs <- dat |> 
-   summarise(.by = c(FA, TI), 
-            s = sd(y)) 
+   summarise(.by = c(FA, TX, TI), 
+            s_obs = sd(y)) |> 
+  mutate(TI = as.character(TI))
+
+# for code development
+ndraws <- 8000
+
+keep_draws <- sample(1:8000, ndraws)
+
+grouped_sd <- function(yreps, model_name) {
+  yreps |>
+    filter(.draw %in% keep_draws) |>
+    pivot_longer(cols = starts_with("y_rep")) |>
+    mutate(obs = gsub("y_rep\\[|\\]", "", name)) |>
+    filter(obs %in% keep_obs) |>
+    inner_join(dat, by = "obs") |>          # name the join key explicitly
+    summarise(.by = c(FA, TX, TI, .draw), s = sd(value)) |>
+    mutate(model = model_name)
+}
 
 
+models <- list(m3 = yreps3, m4 = yreps4, m5 = yreps5, m6 = yreps6)
 
-bind_rows(
-  yreps4 |>
+ppc_sd <- imap(models, grouped_sd) |>
+  bind_rows() |>
+  mutate(TI = as.character(TI)) |>
+  inner_join(sum_obs, by = c("FA", "TX", "TI"))
 
-  pivot_longer(cols = starts_with("y_rep")) |> 
-  mutate(obs = gsub("y_rep\\[|\\]", "", name)) |> 
-  filter(obs %in% keep_obs) |> 
-  inner_join(dat) |> 
+# Calculate "p"-values and make to a table
+
+ppc_sd |> 
+  summarise(
+    .by = c(model, FA, TX, TI),
+    p = mean(s >= s_obs),        # obs_sd = observed sd for that cell, from sum_obs
+    n_draws = n()
+  ) |>
+  summarise(
+    .by = model,
+    prop_extreme = mean(p < 0.05 | p > 0.95),   # fraction of badly-fit cells
+    median_p     = median(p),
+    min_p        = min(p),
+    max_p        = max(p)
+  ) |> 
   
-  summarise(.by = c(FA,  TI, .draw), 
-            s = sd(value)) |>
-    mutate(model = "m4"), 
+  gt()  |> 
+  fmt_auto() |> 
+  cols_label(
+    model = "Model", 
+    prop_extreme = md("Proportion extreme p<br>(< 0.05 | > 0.95)"), 
+    median_p = "Median p", 
+    min_p = "Min p", 
+    max_p = "Max p")
   
-    yreps3 |>
-
-  pivot_longer(cols = starts_with("y_rep")) |> 
-  mutate(obs = gsub("y_rep\\[|\\]", "", name)) |> 
-  filter(obs %in% keep_obs) |> 
-  inner_join(dat) |> 
   
-  summarise(.by = c(FA,  TI, .draw), 
-            s = sd(value)) |>
-    mutate(model = "m3")) |> 
-  
-  mutate(TI = as.character(TI)) |> 
-
-  
-  ggplot(aes(s, color = TI, group = paste(TI, model))) +
-  geom_line(stat = "density", 
-            aes(linetype = model))  + 
-  
-  geom_vline(data = sum_obs, 
-             aes(xintercept = s, 
-                 color = as.character(TI))) +
-  
-  facet_wrap( ~ FA, 
-             labeller = label_both) + 
-  scale_linetype_manual(values = c(2,1))
-  
-
-
-
-
-
-
 
 
 ```
 
 
 ```{r}
+#| eval: true
+#| label: tbl-loo
+#| warning: false
+#| message: false
+#| echo: false
+#| tbl-cap: "Expected pointwise predictive density across models."
 
 library(loo)
 
-log_lik4 <- fit.m4p$draws("log_lik", format = "matrix")
-log_lik3 <- fit.m3p$draws("log_lik", format = "matrix")
 
-loo4 <- loo(log_lik4, save_psis = TRUE)
-loo3 <- loo(log_lik3, save_psis = TRUE)
-
-plot(loo4, label_points = TRUE)
-
-loo_compare(list("m3" = loo3,"m4" = loo4))
+loo3 <- fit.m3p$loo(save_psis = TRUE)
+loo4 <- fit.m4p$loo( save_psis = TRUE)
+loo5 <- fit.m5p$loo( save_psis = TRUE)
+loo6 <- fit.m6p$loo( save_psis = TRUE)
 
 
-ids <- pareto_k_ids(loo4, threshold = 0.7)
-
-
-
-```
-
-
-```{r}
-
-# Refit without problematic obs
-
-
-
-
-
-
+loo_compare(list("m3" = loo3,
+                 "m4" = loo4, 
+                 "m5" = loo5, 
+                 "m6" = loo6)) |> 
+  data.frame() |> 
+  rownames_to_column(var = "model") |> 
+  dplyr::select(model, elpd_diff:elpd_loo) |> 
+  gt() |> 
+  fmt_auto() |> 
+  cols_label(
+    model = "Model", 
+    elpd_diff = md("&Delta;ELPD"),
+    se_diff = md("SE(&Delta;ELPD)"), 
+    elpd_loo = "ELPD LOO"
+  )
 
 ```
-
-
 
 
 
@@ -1671,10 +1728,14 @@ ids <- pareto_k_ids(loo4, threshold = 0.7)
 
 
 ```{r}
+#| eval: false
 
 
 
-draws.m3 |>
+draws <- fit.m4p$draws(format = "df")
+
+
+draws |>
   filter(.chain == 1) |> 
   select(starts_with("alpha"), .iteration) |> 
   pivot_longer(cols = starts_with("alpha")) |> 
@@ -1732,7 +1793,6 @@ draws.m3 |>
   slice_head(n = 1000) |> 
   ggplot(aes(rel_contrast, rel_contrast_nat)) + geom_point()
   
-  print()
 
 
 

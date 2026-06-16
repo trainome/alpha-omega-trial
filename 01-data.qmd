@@ -10,14 +10,16 @@ editor_options:
 
 ## Data analysis
 
-Descriptive data are presented as mean and standard deviations (SD). For inferential statistics, Bayesian models were constructed using the Stan probabilistic programming language [@stanpaper] and fitted using the `cmdstanr` interface [@cmdstanr] in R [@R]. All sampling from the prior and joint posterior distribution was done using the Hamiltonian Monte Carlo (HMC) no-U-turn sampler ([Stan Reference Manual: MCMC sampling](https://mc-stan.org/docs/reference-manual/mcmc.html)). Performance of the HMC algorithm was assessed by inspecting chain convergence statistics (R-hat) and visually inspecting convergence and stationary sampling across multiple HMC chains. A general workflow was adopted where models were incrementally built and tested for validity through simulations. First, implications of prior distributions were evaluated using prior predictive simulations. Priors where selected to constrain model predictions and parameter values to *a priori* plausible ranges. This approach encourage the use of weakly informative priors on model parameters which regularizes models and provide shrinkage of estimates and predictions without distorting the influence of the data on inference [@lemoine2019,@mcelreath2020,@gelman2014]. Synthetic data was used to confirm to that models were not misspecified. Samples from the joint posterior distribution sampled using observed data were used to create posterior predictive checks where model implications are simulated and compared to characteristics of the observed data [@gelman2014, pp. 141]. Selected models were also assessed for inferential capabilities using synthetic data simulations where parameter values are known. Sensitivity of model specifications on inference was assessed by comparing predictions from different models.
+Descriptive data are presented as mean and standard deviation (SD). For inferential statistics, Bayesian models were constructed using the Stan probabilistic programming language [@stanpaper] and fitted using the `cmdstanr` interface [@cmdstanr] in R [@R]. All sampling from 
+prior and posterior distributions were done using the Hamiltonian Monte Carlo (HMC) no-U-turn sampler ([Stan Reference Manual: MCMC sampling](https://mc-stan.org/docs/reference-manual/mcmc.html)). Performance of the HMC algorithm was assessed through chain convergence statistics (R-hat) and visually inspecting convergence and stationary sampling across multiple HMC chains. A general workflow was adopted where models were incrementally built and tested for validity through simulations. First, implications of prior distributions were evaluated using prior-predictive simulations. Priors were selected to constrain model predictions and parameter values to *a priori* plausible ranges. This approach encourages the use of weakly informative priors on model parameters, which regularize models and shrink estimates and predictions without distorting the data's influence on inference [@lemoine2019;@mcelreath2020;@gelman2014]. In relevant cases, synthetic data were used to confirm that model inferences were not biased by model misspecification. Samples from the joint posterior distribution were used to create posterior predictive checks, in which model implications are simulated and compared with characteristics of the observed data [@gelman2014, pp. 141]. Selected models were also assessed for inferential capabilities using synthetic data simulations where parameter values are known. The sensitivity of model specifications to inference was assessed by comparing predictions across different models.
  
 
 ## Description of the data set and participants
 
-The overall objective of the present analysis is to determine the effect of N-3 supplementation in combination with resistance training on indications of metabolic health. Outcome variables in the analysis are:
+The overall objective of the present analysis is to determine the effect of N-3 supplementation in combination with resistance training on glucose metabolism and indicators of metabolic health. Outcome variables in the analysis are:
 
-- Metabolic syndrome (derived from sub-scores; *primary*)
+- Blood glucose in response to a oral glucose tolerance-test
+- Metabolic syndrome (derived from sub-scores)
    * Triglycerides
    * Waist circumference
    * Blood pressure 
@@ -26,9 +28,9 @@ The overall objective of the present analysis is to determine the effect of N-3 
 - Body mass index
 - Relative fat mass
 - HOMA2-IR
-- OGTT
 - Adiponectin
-- Fatty acid composition
+- Whole blood fatty acid composition
+
 
 ```{r}
 
@@ -109,7 +111,7 @@ n_female_ctrl <-  n_total[4,3][[1]]
 N <- sum(n_total$n)
 ```
 
-A total of `r N` participants are included in the data analysis. Participants were randomized into two groups, an active treatment-group (N-3 fatty acids, XX mg day^-1^) and a placebo control group (Placebo; @tbl-participants).
+A total of `r N` participants are included in the data analysis. Participants were randomized into two groups, an active treatment-group (N-3 fatty acids, 1 mg day^-1^) and a placebo control group (Placebo; @tbl-participants).
 
 
 
@@ -126,13 +128,13 @@ baseline_dat |>
             max = max(value), 
             n = n()) |> 
   mutate(stats = paste0(
-    sprintf("%.0f", round(m, 0)), 
+    sprintf("%.1f", round(m, 1)), 
     " (", 
-    sprintf("%.0f", round(s, 0)), 
+    sprintf("%.1f", round(s, 1)), 
     ") [",
-    sprintf("%.0f", round(min, 0)), 
+    sprintf("%.1f", round(min, 1)), 
     " - ", 
-    sprintf("%.0f", round(max, 0)), 
+    sprintf("%.1f", round(max, 1)), 
     "]"), 
     n = n) |> 
   
@@ -170,5 +172,78 @@ baseline_dat |>
   tab_footnote(footnote = "Data are presnted as Mean (SD) [Min-Max]")
 
 ```
+
+
+
+
+```{r}
+#| fig-height: 8
+#| fig-width: 6
+#| fig-cap: "Participant recruitment, allocation and drop-out."
+
+
+# Shared styling
+main_box_gp <- grid::gpar(fill = adjustcolor(colscale[4], alpha = 0.2), col = colscale[4], lwd = 1.5)
+group_box_gp <- grid::gpar(fill = "white", col = colscale[1], lwd = 1.5)
+excl_box_gp  <- grid::gpar(fill = "white", col = colscale[3], lwd = 1.2)
+drop_box_gp  <- grid::gpar(fill = "white", col = colscale[3], lwd = 1.2)
+main_con_gp  <- grid::gpar(col = colscale[4], lwd = 1.5, fill = colscale[4])
+excl_con_gp  <- grid::gpar(col = colscale[3], lwd = 1.2, fill = colscale[3])
+
+grid::grid.newpage()
+flowchart(
+  source = boxGrob(glue::glue("Population Lillehammer municipaly \nn = {pop}", pop = txtInt(16896)),
+                   box_gp = main_box_gp),
+  eligible = boxGrob(glue::glue("Eligible\nn = {pop}", pop = txtInt(10032)),
+                     box_gp = main_box_gp),
+  included = boxGrob(glue::glue("Randomized\nn = {incl}", incl = txtInt(147)),
+                     box_gp = main_box_gp),
+  dropout = boxGrob(glue::glue("Drop-out\nn = {incl}", incl = txtInt(52)),
+                     box_gp = main_box_gp),
+  groups = list(
+    boxGrob(glue::glue("Treatment A\nn = {n}", n = txtInt(43)),        box_gp = group_box_gp),
+    boxGrob(glue::glue("Treatment B\nn = {n}", n = txtInt(122-43-30)), box_gp = group_box_gp)
+  )) |>
+  spread(axis = "y") |>
+  spread(subelement = "groups", axis = "x") |>
+  equalizeWidths(subelement = list("source", "eligible", "included", "dropout")) |>
+  equalizeWidths(subelement = "groups") |>
+  insert(list(excluded = boxHeaderGrob(
+                header = glue::glue("Excluded (n = {tot}):", tot = 30),
+                body   = glue::glue(" - not interested: {n1}\n - contra-indicated: {n2}",
+                              n1 = 12, n2 = 18),
+                bjust      = "left",
+                box_gp     = excl_box_gp,
+                header_gp  = grid::gpar(col = colscale[3], cex = 1))),
+         after = "eligible",
+         name  = "excluded") |>
+  
+    insert(list(dropout = boxHeaderGrob(
+                header = glue::glue("Drop-out (n = {tot}):", tot = 14),
+                body   = glue::glue(" - not interested: {n1}\n - contra-indicated: {n2}",
+                              n1 = 12, n2 = 18),
+                bjust      = "left",
+                box_gp     = drop_box_gp,
+                header_gp  = grid::gpar(col = colscale[3], cex = 1))),
+         after = "included",
+         name  = "dropout") |>
+  
+  
+  move(subelement = "excluded", x = .8) |>
+  move(subelement = "dropout", x = .8) |>
+  connect("eligible", "excluded", type = "L",    lty_gp = excl_con_gp, arrow_size = 3,
+          label = "Excluded") |>
+    connect("included", "dropout", type = "L",    lty_gp = excl_con_gp, arrow_size = 3,
+          label = "Drop-out") |>
+  connect("source",   "eligible", type = "vert", lty_gp = main_con_gp, arrow_size = 3,
+          smooth = TRUE) |>
+  connect("eligible", "included", type = "vert", lty_gp = main_con_gp, arrow_size = 3,
+          smooth = TRUE) |>
+  connect("included", "groups",   type = "N",    lty_gp = main_con_gp, arrow_size = 3,
+          smooth = TRUE)
+
+```
+
+
 
 

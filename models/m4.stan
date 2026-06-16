@@ -1,7 +1,6 @@
 /* 
 Analysis of fatty acid profiles in all available data. Imputation of post-treat
-values are done in the model. Heterogenous sigma between time-points and 
-treatments. 
+values are done in the model. Heterogenous sigma between treatments. 
 */
 data {
   int<lower=0> N;
@@ -50,7 +49,7 @@ parameters {
   array[N_FA, N_TI, N_TX] real alpha;
   vector[N_FA] beta;
   // Heterogenous sigma
-  array[N_FA, N_TI, N_TX] real<lower=0> sigma;
+  array[N_FA, N_TX] real<lower=0> sigma;
   
   // Imputed missing outcomes
   vector[N_mis] y_mis;
@@ -69,7 +68,7 @@ model {
   vector[N] sig;
   for (n in 1:N) {
     mu[n] = alpha[FA[n], TI[n], TX[n]] + beta[FA[n]] * pre[n];
-    sig[n] = sigma[FA[n], TI[n], TX[n]];
+    sig[n] = sigma[FA[n], TX[n]];
   }
   
   // Priors
@@ -80,9 +79,8 @@ model {
   beta  ~ normal(1, 1);
   
   for (fa in 1:N_FA)
-    for (ti in 1:N_TI)
       for (tx in 1:N_TX)
-        sigma[fa, ti, tx] ~ exponential(1);
+        sigma[fa, tx] ~ exponential(1);
   
   // Prior on missing values
   y_mis ~ normal(0, 2);
@@ -100,13 +98,13 @@ generated quantities {
   if (prior_only == 0) {
     for (n in 1:N) {
       real mu_n = alpha[FA[n], TI[n], TX[n]] + beta[FA[n]] * pre[n];
-      y_rep[n] = normal_rng(mu_n, sigma[FA[n],  TI[n], TX[n]]);
+      y_rep[n] = normal_rng(mu_n, sigma[FA[n], TX[n]]);
     }
     for (k in 1:N_obs) {                    
         int i = ii_obs[k];
         log_lik[k] = normal_lpdf(y[i] |
                        alpha[FA[i], TI[i], TX[i]] + beta[FA[i]] * pre[i],
-                       sigma[FA[i],  TI[i], TX[i]]);
+                       sigma[FA[i], TX[i]]);
       }
   }
   

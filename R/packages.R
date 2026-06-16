@@ -8,3 +8,4 @@ library(gt)
 library(ggh4x)
 library(cmdstanr)
 library(corrr)
+library(Gmisc) # For flowchart table

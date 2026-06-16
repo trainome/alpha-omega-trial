@@ -20,17 +20,18 @@ library(AOData)
 library(tidyverse)
 library(brms)
 library(marginaleffects)
+library(mgcv)
 
 # Data sets
 
 # Glucose
-glucose_dat <- AOData::glucose %>%
-  select(participant:glucose) %>%
+glucose_dat <- AOData::glucose |>
+  select(participant:glucose) |>
   print()
 
 # Grouping
-AOData::idkeys %>%
-  select(participant, treat) %>%
+AOData::idkeys |>
+  select(participant, treat) |>
   print()
 
 
@@ -47,24 +48,24 @@ AOData::idkeys %>%
 ```{r}
 
 # Use a complete data set (no missing data) at time 1 to set up models
-pre_dat <- glucose_dat %>%
-  filter(time == "T1") %>%
-  filter(!(is.na(glucose))) %>%
+pre_dat <- glucose_dat |>
+  filter(time == "T1") |>
+  filter(!(is.na(glucose))) |>
   mutate(stglucose = (glucose - mean(glucose)) / sd(glucose), 
-         participant = as.factor(participant)) %>%
+         participant = as.factor(participant)) |>
   # To avoid problems, dropping participants with less than 7 
   # measurements
   mutate(.by = participant, 
-         n = n()) %>%
+         n = n()) |>
   filter(n == 7)
   
 
 
 
-pre_dat %>%
-  group_by(participant) %>%
-  summarise(n = n()) %>%
-  ungroup() %>%
+pre_dat |>
+  group_by(participant) |>
+  summarise(n = n()) |>
+  ungroup() |>
   summarise(n.participants = n(), 
             avg.samples = mean(n), 
             min.samples = min(n)) 
@@ -83,7 +84,7 @@ f1 <- bf(stglucose ~ 1 + s(min, bs = "tp", k = 7) +
             s(min, by = participant, m = 1, bs = "tp", k = 7) + 
             (1 | participant))
 
-
+default_prior(f1, data = pre_dat)
 get_prior(f1, 
           family = gaussian(),
           data = pre_dat)
@@ -91,7 +92,7 @@ get_prior(f1,
 # Set priors
 
 p1 <- c(prior(normal(-1, 1.5), class = Intercept), 
-        prior(normal(0, 1), class = b, coef = "smin:participant_1"), 
+        prior(normal(0, 1), class = sds, coef = "smin:participant_1"), 
         prior(normal(0, 1), class = b, coef = "smin_1"), 
         prior(exponential(1), class = sd),
         prior(normal(2, 2), class = sds, lb = 0), 
@@ -130,8 +131,8 @@ preds_prior <- predictions(m1_pp,
                                                  participant = c(1, 2, 3)), 
             allow_new_levels = TRUE)
 
-posterior_draws(preds_prior) %>%
-  filter(drawid %in% 1:500) %>%
+posterior_draws(preds_prior) |>
+  filter(drawid %in% 1:500) |>
   ggplot(aes(min, 
              draw, 
              group = paste(drawid, participant), 
@@ -179,9 +180,9 @@ nd <- expand_grid(min = seq(0, 120, 5),
 preds <- predictions(m1, newdata = nd) 
 
 
-posterior_draws(preds) %>%
-  filter(drawid %in% 1:500) %>%
-  filter(participant %in% c("501", "503", "504", "506")) %>%
+posterior_draws(preds) |>
+  filter(drawid %in% 1:500) |>
+  filter(participant %in% c("501", "503", "504", "506")) |>
   ggplot(aes(min, draw, group = paste0(participant,drawid))) + 
   
   
@@ -265,8 +266,8 @@ preds_prior <- predictions(m2_pp, newdata = expand_grid(min = seq(0, 120, 10),
                            allow_new_levels = TRUE)
 
 
-posterior_draws(preds_prior) %>%
-  filter(drawid %in% 1:500) %>%
+posterior_draws(preds_prior) |>
+  filter(drawid %in% 1:500) |>
   ggplot(aes(min, draw, group = paste(participant, drawid))) + 
   geom_line(alpha = 0.1) + 
   
@@ -313,9 +314,9 @@ nd <- expand_grid(min = seq(0, 120, 5),
 preds <- predictions(m2, newdata = nd, allow_new_levels = TRUE) 
 
 
-posterior_draws(preds) %>%
-  filter(drawid %in% 1:500) %>%
-  filter(participant %in% c("501", "503", "504", "506")) %>%
+posterior_draws(preds) |>
+  filter(drawid %in% 1:500) |>
+  filter(participant %in% c("501", "503", "504", "506")) |>
   ggplot(aes(min, draw, group = paste0(participant,drawid))) + 
   
   
@@ -363,27 +364,27 @@ posterior_draws(preds) %>%
 
 ```{r}
 
-part_t2 <- AOData::idkeys %>%
-  filter(completed != "t1") %>%
+part_t2 <- AOData::idkeys |>
+  filter(completed != "t1") |>
   pull(participant)
 
 
 
-compl_dat <- glucose_dat %>%
+compl_dat <- glucose_dat |>
   # Keep data only from time 1 and 2
-  filter(time %in% c("T1", "T2")) %>%
+  filter(time %in% c("T1", "T2")) |>
   # Filter participants who have completed T2
-  filter(participant %in% part_t2) %>%
+  filter(participant %in% part_t2) |>
   # Remove NAs -- might update this to allow for not completly missing data 
   # to be imputed
-  filter(!is.na(glucose)) %>%
+  filter(!is.na(glucose)) |>
   # Standardize glucose measurements
-  mutate(stglucose = (glucose - mean(glucose)) /sd(glucose)) %>%
+  mutate(stglucose = (glucose - mean(glucose)) /sd(glucose)) |>
   ## Add treatment variable
-  inner_join(AOData::idkeys %>%
-  select(participant, treat)) %>%
+  inner_join(AOData::idkeys |>
+  select(participant, treat)) |>
   ## Combine data into a single variable (time/treat)
-  mutate(tx = paste(time, treat, sep = "_")) %>%
+  mutate(tx = paste(time, treat, sep = "_")) |>
   print()
 
 
@@ -465,9 +466,9 @@ m3_pp <- brm(stglucose ~ 0 + tx +
 
 nd <- expand_grid(min = seq(0, 120, 10), 
                   participant = c(1, 2, 3, 4),
-                  time = c("T1", "T2")) %>%
+                  time = c("T1", "T2")) |>
   mutate(treat = if_else(participant %in% c(1, 2), "ctrl", "omega"), 
-         tx = paste(time, treat, sep = "_")) %>%
+         tx = paste(time, treat, sep = "_")) |>
   print()
 
 
@@ -476,8 +477,8 @@ preds_prior <- predictions(m3_pp, newdata = nd,
                            allow_new_levels = TRUE)
 
 
-posterior_draws(preds_prior) %>%
-  filter(drawid %in% 1:500) %>%
+posterior_draws(preds_prior) |>
+  filter(drawid %in% 1:500) |>
   ggplot(aes(min, draw,
              color = tx,
              group = paste(participant, drawid))) + 
@@ -534,8 +535,8 @@ print(m2)
 nd <- expand_grid(min = seq(0, 120, 5), 
                   time = c("T1", "T2"), 
                   treat = c("ctrl", "omega"), 
-                  participant = NA) %>%
-  mutate(tx = paste(time, treat, sep = "_")) %>%
+                  participant = NA) |>
+  mutate(tx = paste(time, treat, sep = "_")) |>
   print()
 
 
@@ -544,27 +545,27 @@ preds <- predictions(m3, newdata = nd, re_formula = NA)
 
 
 
-comp_df <- posterior_draws(preds) %>%
-  filter(drawid %in% 1:2000) %>%
-  select(drawid, min, draw, tx, participant) %>%
-  pivot_wider(names_from = tx, values_from = draw) %>%
+comp_df <- posterior_draws(preds) |>
+  filter(drawid %in% 1:2000) |>
+  select(drawid, min, draw, tx, participant) |>
+  pivot_wider(names_from = tx, values_from = draw) |>
   
   # Compare "groups" as within group differences between time points
   # Compare differences over time between groups (tx_contrast)
   mutate(ctrl = T2_ctrl - T1_ctrl, 
          omega = T2_omega - T1_omega, 
-         tx_contrast = omega - ctrl) %>%
+         tx_contrast = omega - ctrl) |>
   
-  pivot_longer(cols = T1_ctrl:tx_contrast) %>%
+  pivot_longer(cols = T1_ctrl:tx_contrast) |>
    
   print()
 
   
 # Using the data we can calculate 95% credible intervals for the differences between groups.
   
-m3_comp <- comp_df %>%  
+m3_comp <- comp_df |>  
   # Group the data frame by sample time
-  group_by(min, name) %>%
+  group_by(min, name) |>
   # ... and calculate summary statistics for the differences
   summarise(m = median(value, na.rm = TRUE), 
             l95 = quantile(value, 0.025, na.rm = TRUE), 
@@ -573,11 +574,11 @@ m3_comp <- comp_df %>%
             u50 = quantile(value, 0.75, na.rm = TRUE)) 
 
   
-m3_comp %>%
+m3_comp |>
   
-  filter(name %in% c("T1_ctrl", "T1_omega", "T2_ctrl", "T2_omega")) %>%
+  filter(name %in% c("T1_ctrl", "T1_omega", "T2_ctrl", "T2_omega")) |>
   
-  separate(name, into = c("time", "treat")) %>%
+  separate(name, into = c("time", "treat")) |>
 
   ggplot(aes(min, m, fill = time)) + 
   geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2) +
@@ -588,9 +589,9 @@ m3_comp %>%
   facet_wrap(~ treat)
 
 
-m3_comp %>%
+m3_comp |>
   
-  filter(name %in% c("ctrl", "omega")) %>%
+  filter(name %in% c("ctrl", "omega")) |>
   
 
   ggplot(aes(min, m, fill = name)) + 
@@ -602,9 +603,9 @@ m3_comp %>%
        title = "Comparisons")
 
 
-m3_comp %>%
+m3_comp |>
   
-  filter(name %in% c("tx_contrast")) %>%
+  filter(name %in% c("tx_contrast")) |>
   
 
   ggplot(aes(min, m)) + 
@@ -624,27 +625,27 @@ m3_comp %>%
 ```{r}
 # Data set 
 
-part_t4 <- AOData::idkeys %>%
-  filter(completed == "t4") %>%
+part_t4 <- AOData::idkeys |>
+  filter(completed == "t4") |>
   pull(participant)
 
 
 
-compl_train_dat <- glucose_dat %>%
+compl_train_dat <- glucose_dat |>
   # Keep data only from time 1 and 2
-  filter(time %in% c("T2", "T4")) %>%
+  filter(time %in% c("T2", "T4")) |>
   # Filter participants who have completed T2
-  filter(participant %in% part_t4) %>%
+  filter(participant %in% part_t4) |>
   # Remove NAs -- might update this to allow for not completly missing data 
   # to be imputed
-  filter(!is.na(glucose)) %>%
+  filter(!is.na(glucose)) |>
   # Standardize glucose measurements
-  mutate(stglucose = (glucose - mean(glucose)) /sd(glucose)) %>%
+  mutate(stglucose = (glucose - mean(glucose)) /sd(glucose)) |>
   ## Add treatment variable
-  inner_join(AOData::idkeys %>%
-  select(participant, treat)) %>%
+  inner_join(AOData::idkeys |>
+  select(participant, treat)) |>
   ## Combine data into a single variable (time/treat)
-  mutate(tx = paste(time, treat, sep = "_")) %>%
+  mutate(tx = paste(time, treat, sep = "_")) |>
   print()
 
 
@@ -730,9 +731,9 @@ m4_pp <- brm(stglucose ~ 0 + tx +
 
 nd <- expand_grid(min = seq(0, 120, 10), 
                   participant = c(1, 2, 3, 4),
-                  time = c("T2", "T4")) %>%
+                  time = c("T2", "T4")) |>
   mutate(treat = if_else(participant %in% c(1, 2), "ctrl", "omega"), 
-         tx = paste(time, treat, sep = "_")) %>%
+         tx = paste(time, treat, sep = "_")) |>
   print()
 
 
@@ -745,8 +746,8 @@ preds_prior <- predictions(m4_pp, newdata = nd,
                            allow_new_levels = TRUE)
 
 
-posterior_draws(preds_prior) %>%
-  filter(drawid %in% 1:500) %>%
+posterior_draws(preds_prior) |>
+  filter(drawid %in% 1:500) |>
   ggplot(aes(min, draw,
              color = tx,
              group = paste(participant, drawid))) + 
@@ -803,8 +804,8 @@ print(m4)
 nd <- expand_grid(min = seq(0, 120, 5), 
                   time = c("T2", "T4"), 
                   treat = c("ctrl", "omega"), 
-                  participant = NA) %>%
-  mutate(tx = paste(time, treat, sep = "_")) %>%
+                  participant = NA) |>
+  mutate(tx = paste(time, treat, sep = "_")) |>
   print()
 
 
@@ -813,27 +814,27 @@ preds <- predictions(m4, newdata = nd, re_formula = NA)
 
 
 
-comp_df <- posterior_draws(preds) %>%
-  filter(drawid %in% 1:2000) %>%
-  select(drawid, min, draw, tx, participant) %>%
-  pivot_wider(names_from = tx, values_from = draw) %>%
+comp_df <- posterior_draws(preds) |>
+  filter(drawid %in% 1:2000) |>
+  select(drawid, min, draw, tx, participant) |>
+  pivot_wider(names_from = tx, values_from = draw) |>
   
   # Compare "groups" as within group differences between time points
   # Compare differences over time between groups (tx_contrast)
   mutate(ctrl = T4_ctrl - T2_ctrl, 
          omega = T4_omega - T2_omega, 
-         tx_contrast = omega - ctrl) %>%
+         tx_contrast = omega - ctrl) |>
   
-  pivot_longer(cols = T2_ctrl:tx_contrast) %>%
+  pivot_longer(cols = T2_ctrl:tx_contrast) |>
    
   print()
 
   
 # Using the data we can calculate 95% credible intervals for the differences between groups.
   
-sum_comp <- comp_df %>%  
+sum_comp <- comp_df |>  
   # Group the data frame by sample time
-  group_by(min, name) %>%
+  group_by(min, name) |>
   # ... and calculate summary statistics for the differences
   summarise(m = median(value, na.rm = TRUE), 
             l95 = quantile(value, 0.025, na.rm = TRUE), 
@@ -842,12 +843,12 @@ sum_comp <- comp_df %>%
             u50 = quantile(value, 0.75, na.rm = TRUE)) 
   
   
-sum_comp %>%
+sum_comp |>
   filter(name %in% c("T2_omega", 
                    "T4_omega", 
                    "T2_ctrl", 
-                   "T4_ctrl")) %>%
-  separate(name, into = c("time", "treat")) %>%
+                   "T4_ctrl")) |>
+  separate(name, into = c("time", "treat")) |>
 
   ggplot(aes(min, m, fill = time)) + 
   geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2) +
@@ -857,10 +858,10 @@ sum_comp %>%
   facet_wrap(~ treat)
 
 
-sum_comp %>%
+sum_comp |>
   filter(name %in% c("omega", 
                     
-                   "ctrl")) %>%
+                   "ctrl")) |>
 
   ggplot(aes(min, m, fill = name)) + 
   geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2) +
@@ -871,8 +872,8 @@ sum_comp %>%
   facet_wrap(~ name)
 
 
-sum_comp %>%
-  filter(name %in% c("tx_contrast")) %>%
+sum_comp |>
+  filter(name %in% c("tx_contrast")) |>
   
   
   
@@ -894,27 +895,27 @@ sum_comp %>%
 ```{r}
 # Data set 
 
-part_t4 <- AOData::idkeys %>%
-  filter(completed == "t4") %>%
+part_t4 <- AOData::idkeys |>
+  filter(completed == "t4") |>
   pull(participant)
 
 
 
-compl_train_dat <- glucose_dat %>%
+compl_train_dat <- glucose_dat |>
   # Keep data only from time 1 and 2
-  filter(time %in% c("T1", "T2", "T4")) %>%
+  filter(time %in% c("T1", "T2", "T4")) |>
   # Filter participants who have completed T2
-  filter(participant %in% part_t4) %>%
+  filter(participant %in% part_t4) |>
   # Remove NAs -- might update this to allow for not completly missing data 
   # to be imputed
-  filter(!is.na(glucose)) %>%
+  filter(!is.na(glucose)) |>
   # Standardize glucose measurements
-  mutate(stglucose = (glucose - mean(glucose)) /sd(glucose)) %>%
+  mutate(stglucose = (glucose - mean(glucose)) /sd(glucose)) |>
   ## Add treatment variable
-  inner_join(AOData::idkeys %>%
-  select(participant, treat)) %>%
+  inner_join(AOData::idkeys |>
+  select(participant, treat)) |>
   ## Combine data into a single variable (time/treat)
-  mutate(tx = paste(time, treat, sep = "_")) %>%
+  mutate(tx = paste(time, treat, sep = "_")) |>
   print()
 
 
@@ -1014,9 +1015,9 @@ m5_pp <- brm(stglucose ~ 0 + tx +
 
 nd <- expand_grid(min = seq(0, 120, 10), 
                   participant = c(1, 2, 3, 4),
-                  time = c("T1", "T2", "T4")) %>%
+                  time = c("T1", "T2", "T4")) |>
   mutate(treat = if_else(participant %in% c(1, 2), "ctrl", "omega"), 
-         tx = paste(time, treat, sep = "_")) %>%
+         tx = paste(time, treat, sep = "_")) |>
   print()
 
 
@@ -1029,8 +1030,8 @@ preds_prior <- predictions(m5_pp, newdata = nd,
                            allow_new_levels = TRUE)
 
 
-posterior_draws(preds_prior) %>%
-  filter(drawid %in% 1:500) %>%
+posterior_draws(preds_prior) |>
+  filter(drawid %in% 1:500) |>
   ggplot(aes(min, draw,
              color = tx,
              group = paste(participant, drawid))) + 
@@ -1087,8 +1088,8 @@ print(m5)
 nd <- expand_grid(min = seq(0, 120, 5), 
                   time = c("T1", "T2", "T4"), 
                   treat = c("ctrl", "omega"), 
-                  participant = NA) %>%
-  mutate(tx = paste(time, treat, sep = "_")) %>%
+                  participant = NA) |>
+  mutate(tx = paste(time, treat, sep = "_")) |>
   print()
 
 
@@ -1097,10 +1098,10 @@ preds <- predictions(m5, newdata = nd, re_formula = NA)
 
 
 
-comp_df <- posterior_draws(preds) %>%
-  filter(drawid %in% 1:2000) %>%
-  select(drawid, min, draw, tx, participant) %>%
-  pivot_wider(names_from = tx, values_from = draw) %>%
+comp_df <- posterior_draws(preds) |>
+  filter(drawid %in% 1:2000) |>
+  select(drawid, min, draw, tx, participant) |>
+  pivot_wider(names_from = tx, values_from = draw) |>
   
   # Compare "groups" as within group differences between time points
   # Compare differences over time between groups (tx_contrast)
@@ -1112,17 +1113,17 @@ comp_df <- posterior_draws(preds) %>%
          omega_suppl_train = T4_omega - T1_omega,
          tx_suppl = omega_suppl - ctrl_suppl,
          tx_train = omega_train - ctrl_train, 
-         tx_suppl_train = omega_suppl_train - ctrl_suppl_train) %>%
-  pivot_longer(cols = T1_ctrl:tx_suppl_train) %>%
+         tx_suppl_train = omega_suppl_train - ctrl_suppl_train) |>
+  pivot_longer(cols = T1_ctrl:tx_suppl_train) |>
    
   print()
 
   
 # Using the data we can calculate 95% credible intervals for the differences between groups.
   
-sum_comp <- comp_df %>%  
+sum_comp <- comp_df |>  
   # Group the data frame by sample time
-  group_by(min, name) %>%
+  group_by(min, name) |>
   # ... and calculate summary statistics for the differences
   summarise(m = median(value, na.rm = TRUE), 
             l95 = quantile(value, 0.025, na.rm = TRUE), 
@@ -1131,14 +1132,14 @@ sum_comp <- comp_df %>%
             u50 = quantile(value, 0.75, na.rm = TRUE)) 
   
   
-sum_comp %>%
+sum_comp |>
   filter(name %in% c("T2_omega", 
                    "T4_omega", 
                    "T2_ctrl", 
                    "T4_ctrl", 
                    "T1_omega", 
-                   "T1_ctrl")) %>%
-  separate(name, into = c("time", "treat")) %>%
+                   "T1_ctrl")) |>
+  separate(name, into = c("time", "treat")) |>
 
   ggplot(aes(min, m, fill = time)) + 
   geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2) +
@@ -1148,10 +1149,10 @@ sum_comp %>%
   facet_wrap(~ treat)
 
 
-sum_comp %>%
+sum_comp |>
   filter(name %in% c("omega_suppl_train", 
                     
-                   "ctrl_suppl_train")) %>%
+                   "ctrl_suppl_train")) |>
 
   ggplot(aes(min, m, fill = name)) + 
   geom_ribbon(aes(ymin = l95, ymax = u95), alpha = 0.2) +
@@ -1162,8 +1163,8 @@ sum_comp %>%
   facet_wrap(~ name)
 
 
-sum_comp %>%
-  filter(name %in% c("tx_suppl_train", "tx_suppl", "tx_train")) %>%
+sum_comp |>
+  filter(name %in% c("tx_suppl_train", "tx_suppl", "tx_train")) |>
   
   
   
@@ -1184,14 +1185,14 @@ sum_comp %>%
 ```{r}
 library(splines)
 
-pre_dat <- glucose_dat %>%
-  filter(time == "T1") %>%
-  inner_join(AOData::idkeys) %>%
+pre_dat <- glucose_dat |>
+  filter(time == "T1") |>
+  inner_join(AOData::idkeys) |>
   
-  select(participant:treat, sex, bmi) %>%
+  select(participant:treat, sex, bmi) |>
   
-  filter(!is.na(glucose)) %>%
-  mutate(stglucose = (glucose - mean(glucose)) / sd(glucose)) %>%
+  filter(!is.na(glucose)) |>
+  mutate(stglucose = (glucose - mean(glucose)) / sd(glucose)) |>
   
   print()
 
@@ -1250,8 +1251,8 @@ preds_prior <- predictions(m6_pp, newdata = expand_grid(min = seq(0, 120, 10),
                            allow_new_levels = TRUE)
 
 
-posterior_draws(preds_prior) %>%
-  filter(drawid %in% 1:500) %>%
+posterior_draws(preds_prior) |>
+  filter(drawid %in% 1:500) |>
   ggplot(aes(min, draw, group = paste(participant, drawid, bmi))) + 
   geom_line(alpha = 0.1) + 
   
@@ -1297,9 +1298,9 @@ nd <- expand_grid(min = seq(0, 120, 5),
 preds <- predictions(m2, newdata = nd, allow_new_levels = TRUE) 
 
 
-posterior_draws(preds) %>%
-  filter(drawid %in% 1:500) %>%
-  filter(participant %in% c("501", "503", "504", "506")) %>%
+posterior_draws(preds) |>
+  filter(drawid %in% 1:500) |>
+  filter(participant %in% c("501", "503", "504", "506")) |>
   ggplot(aes(min, draw, group = paste0(participant,drawid))) + 
   
   

@@ -1119,6 +1119,9 @@ Simulating a full (K = 8) data set of synthetic data, with missing values, resul
 #| message: false
 #| warning: false
 
+
+set.seed(123)
+
   N <- 148 # Number of participants
   K <- 8 # number of measurement types
 
