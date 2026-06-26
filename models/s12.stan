@@ -8,11 +8,11 @@ Model S12:
   inference as the MVN (see example in BDA p. 441). The value of nu is added to 
   the model as data, this will allow us to re-fit the mode under different 
   nu values.
-- Sex heterogeneity in residual scales retained: effective scale for participant
-  p, time t, type k is
-    sigma[t][k, treat_p] * exp(gamma_sex[k, t] * sex_p).
+- Residual scale is time-, type- and treatment-specific (as in S10): the scale
+  for participant p, time t, type k is sigma[t][k, treat_p]. No sex-specific
+  residual scaling.
   Note: under the t likelihood, this parameterizes the *scale* matrix; the
-  marginal SD is sqrt(nu/(nu-2)) * sigma_eff (for nu > 2).
+  marginal SD is sqrt(nu/(nu-2)) * sigma (for nu > 2).
 - Pre-value imputation model remains multivariate normal.
 - Metabolic syndrome diagnosis is derived in generated quantities from
   the continuous biomarker model (hard threshold: >= 3 of 5 criteria).
@@ -35,10 +35,12 @@ data {
   array[N] int<lower=1, upper=2> treat;       // Treatment index
 
   array[N] real<lower=-0.5, upper=0.5> sex;   // Sex
+  array[N] int<lower=0, upper=1> cc;          // Complete case indicator
+  // Used in the log-likelihood to create comparable data sets for loo.
 
   int<lower=0, upper=1> prior_only;           // Prior only flag
-  
-  int<lower=1, upper=30> nu;                  // nu parameter for the mvt-dist     
+
+  int<lower=1, upper=30> nu;                  // nu parameter for the mvt-dist
   
 }
 transformed data {
@@ -46,16 +48,16 @@ transformed data {
   int M = 2 * K;
 
   // Diagnostic criteria data
-  array[6] int diag_idx = {2, 4, 6, 8, 9, 10};
+  array[6] int diag_idx = {2, 5, 7, 9, 10, 11};
 // set the right index for subscores
 //
 // analyte  type std_threshold_male std_threshold_female
 // HDL         2            -1.10                -0.233
-// TG          4             0.947                0.947
-// dias        6            -0.0200              -0.0200
-// glucose     8             1.88                 1.88
-// sys         9             0.0638               0.0638
-// waist      10            -0.432               -1.48
+// TG          5             0.947                0.947
+// dias        7            -0.0200              -0.0200
+// glucose     9             1.88                 1.88
+// sys         10             0.0638               0.0638
+// waist       11            -0.432               -1.48
 
   vector[6] threshold_male   = [-1.1,   0.947, -0.02, 1.88, 0.0638, -0.432]';
   vector[6] threshold_female = [-0.233, 0.947, -0.02, 1.88, 0.0638, -1.48]';
@@ -138,6 +140,24 @@ transformed data {
       valid_count[p] = c;
     }
   }
+
+  // Complete-case participant index for complete-case log-lik (loo)
+  array[N_P] int cc_p = rep_array(0, N_P);
+  for (i in 1:N) cc_p[P[i]] = cc[i];
+
+  // Number of complete-case participants
+  int N_CC = 0;
+  for (p in 1:N_P) N_CC += cc_p[p];
+
+  // cc_pos[p] = column of participant p in log_lik (0 if not complete case)
+  // cc_id[j]  = participant id for column j
+  array[N_P] int cc_pos = rep_array(0, N_P);
+  array[N_CC] int cc_id;
+  {
+    int j = 1;
+    for (p in 1:N_P)
+      if (cc_p[p] == 1) { cc_pos[p] = j; cc_id[j] = p; j += 1; }
+  }
 }
 parameters {
   // Time-specific intercepts: alpha[time][type, treat]
@@ -149,11 +169,8 @@ parameters {
 
   // Shared correlation; treatment-specific scales
   cholesky_factor_corr[M] L_Omega;
-  // sigma[t][k, tx] = residual SD at time t, type k, treatment tx (male baseline)
+  // sigma[t][k, tx] = residual SD at time t, type k, treatment tx
   array[2] matrix<lower=0>[K, 2] sigma;
-  // Log SD-ratio per outcome and time between sexes;
-  // exp(gamma_sex[k, t]) = female/male scale ratio for outcome k at time t
-  matrix[K, 2] gamma_sex;
 
   // Missing data parameters
   vector[n_miss_y] y_impute;
@@ -221,9 +238,8 @@ model {
   to_vector(beta_sex) ~ normal(0, 0.5);
 
   for (t in 1:2) to_vector(sigma[t]) ~ exponential(1);
-  to_vector(gamma_sex) ~ normal(0, 0.3);
 
-  L_Omega ~ lkj_corr_cholesky(2);
+  L_Omega ~ lkj_corr_cholesky(4);   // stronger LKJ regularises near-singular modes
   mu_pre ~ normal(0, 1);
   sigma_pre ~ exponential(1);
   L_Omega_pre ~ lkj_corr_cholesky(2);
@@ -241,13 +257,11 @@ model {
     for (p in 1:N_P) pre_vec[p] = pre_wide[p]';
     pre_vec ~ multi_normal_cholesky(mu_pre, L_Sigma_pre);
 
-    // Full post-int model: per-participant L_Sigma with treat- and sex-specific scales
+    // Full post-int model: per-participant L_Sigma with treat-specific scales
     for (p in 1:N_P) {
-      vector[K] sex_scale_1 = exp(gamma_sex[, 1] * sex_p[p]);
-      vector[K] sex_scale_2 = exp(gamma_sex[, 2] * sex_p[p]);
       vector[M] sig_p;
-      sig_p[1:K]     = sigma[1][, treat_p[p]] .* sex_scale_1;
-      sig_p[(K+1):M] = sigma[2][, treat_p[p]] .* sex_scale_2;
+      sig_p[1:K]     = sigma[1][, treat_p[p]];
+      sig_p[(K+1):M] = sigma[2][, treat_p[p]];
       matrix[M, M] L_Sigma_p = diag_pre_multiply(sig_p, L_Omega);
 
       vector[M] y_p;
@@ -284,11 +298,9 @@ generated quantities {
 
   {
     for (p in 1:N_P) {
-      vector[K] sex_scale_1 = exp(gamma_sex[, 1] * sex_p[p]);
-      vector[K] sex_scale_2 = exp(gamma_sex[, 2] * sex_p[p]);
       vector[M] sig_p;
-      sig_p[1:K]     = sigma[1][, treat_p[p]] .* sex_scale_1;
-      sig_p[(K+1):M] = sigma[2][, treat_p[p]] .* sex_scale_2;
+      sig_p[1:K]     = sigma[1][, treat_p[p]];
+      sig_p[(K+1):M] = sigma[2][, treat_p[p]];
       matrix[M, M] L_Sigma_p = diag_pre_multiply(sig_p, L_Omega);
 
       vector[M] mu_stacked;
@@ -344,6 +356,14 @@ generated quantities {
       }
     }
   }
+
+  // Complete-case log-lik for cross-model loo comparison. Named "log_lik" so
+  // loo() picks it up by default. For a complete case every entry is valid, so
+  // this is the full multivariate density of the participant vector.
+  vector[N_CC] log_lik;
+  for (p in 1:N_P)
+    if (cc_p[p] == 1)
+      log_lik[cc_pos[p]] = log_lik_part[p];
 
   // Compute diagnosis from continuous biomarker values
   // diag_idx order: {HDL=2, TG=4, dias=6, glucose=8, sys=9, waist=10}

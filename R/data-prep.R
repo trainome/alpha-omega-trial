@@ -19,6 +19,11 @@
 # - participant_complete_T2: Vector of participants completed T2
 # - participant_complete_T4: Vector of participants completed T4
 
+# The data load function preps observed data for models s7 to s10->
+#
+#
+#
+
 source("./R/packages.R")
 
 ## Body composition
@@ -188,7 +193,20 @@ criteria_dat <- bind_rows(
   # Add body composition
   body_comp,
   # Add homa2IR and adipondectin
-  glucose_dat
+  glucose_dat,
+  # Add LDL (no threshold)
+  AOData::bloodvar |>
+    inner_join(
+      AOData::idkeys |>
+        select(participant, sex)
+    ) |>
+    filter(analyte == "LDL") |>
+    # Convert to mg/dl: 1 mmol/L = 38,6654 mg/dL
+    # Keeping on mmol/L
+    mutate(
+      threshold = NA
+    ) |>
+    select(participant, time, sex, analyte, value, threshold),
 ) |>
   # Create binomial variable for individual criteria
   mutate(crit = if_else(threshold == TRUE, 1, 0)) |>
@@ -206,7 +224,9 @@ criteria_dat <- bind_rows(
 # from T1 to T4. No missing values are allowed in the complete case analysis.
 # For the missingness analysis, participants completing T2 are also sorted out.
 participant_complete_T4 <- criteria_dat |>
-  filter(analyte %in% c("HDL", "TG", "waist", "glucose", "sys", "dias")) |>
+  filter(
+    analyte %in% c("HDL", "TG", "waist", "glucose", "sys", "dias")
+  ) |>
   select(participant, time, treat, sex, analyte, value) |>
   # Critera measures
   pivot_wider(names_from = analyte, values_from = value) |>
@@ -220,7 +240,9 @@ participant_complete_T4 <- criteria_dat |>
 
 
 participant_complete_T2 <- criteria_dat |>
-  filter(analyte %in% c("HDL", "TG", "waist", "glucose", "sys", "dias")) |>
+  filter(
+    analyte %in% c("HDL", "TG", "waist", "glucose", "sys", "dias")
+  ) |>
   select(participant, time, treat, sex, analyte, value) |>
   # Critera measures
   pivot_wider(names_from = analyte, values_from = value) |>
@@ -231,3 +253,110 @@ participant_complete_T2 <- criteria_dat |>
   filter(complete.cases(pick(T2))) |>
   distinct(participant) |>
   pull(participant)
+
+
+# Data load function - Prepare data for models s7 -
+#
+#
+#
+#
+data_load_s7s10 <- function() {
+  d_full <- criteria_dat |>
+    select(participant, time, treat, sex, age, analyte, value) |>
+    # Add missing values for all missing obs.
+    pivot_wider(names_from = time, values_from = value) |>
+
+    pivot_longer(
+      cols = c(T1, T2, T4),
+      values_to = "value",
+      names_to = "time"
+    ) |>
+
+    pivot_wider(names_from = analyte, values_from = value) |>
+
+    pivot_longer(cols = HDL:LDL, values_to = "value", names_to = "analyte") |>
+
+    mutate(
+      value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value)
+    ) |>
+
+    mutate(
+      .by = analyte,
+      value_std = (value_std - mean(value_std, na.rm = TRUE)) /
+        sd(value_std, na.rm = TRUE)
+    ) |>
+
+    mutate(participant = paste0("p", participant))
+
+  # Including all data
+  dat <- d_full |>
+    filter(time %in% c("T1", "T2", "T4")) |>
+
+    mutate(
+      type = dense_rank(analyte),
+      participant = dense_rank(participant),
+      treat_seq = dense_rank(treat),
+      value_std = if_else(is.na(value_std), -999, value_std)
+    ) |>
+
+    select(-value) |>
+
+    pivot_wider(names_from = time, values_from = c(value_std)) |>
+
+    pivot_longer(cols = T2:T4, names_to = "time", values_to = "y_obs") |>
+    rename(pre_obs = T1) |>
+
+    mutate(
+      time = if_else(time == "T2", 1, 2),
+      sex = if_else(sex == "m", -0.5, 0.5),
+      y_miss = if_else(y_obs == -999, 0, 1),
+      pre_miss = if_else(pre_obs == -999, 0, 1)
+    ) |>
+    # Complete cases for log likelihood calculations
+    mutate(.by = participant, n_y = sum(y_miss), n_pre = sum(pre_miss)) |>
+    mutate(cc = if_else(n_y == max(n_y) & n_pre == max(n_pre), 1, 0)) |>
+
+    select(
+      y_obs,
+      pre_obs,
+      y_miss,
+      pre_miss,
+      P = participant,
+      sex,
+      type,
+      type,
+      time,
+      treat = treat_seq,
+      cc
+    ) |>
+
+    arrange(P, time, type)
+
+  # Prepare a data list for models s7-s10
+  d <- list(
+    N = nrow(dat),
+    N_P = length(unique(dat$P)),
+    N_TX = length(unique(dat$treat)),
+    K = length(unique(dat$type)),
+    y_obs = dat$y_obs,
+    pre_obs = dat$pre_obs,
+    y_miss = dat$y_miss,
+    pre_miss = dat$pre_miss,
+    type = dat$type,
+    treat = dat$treat,
+    P = dat$P,
+    prior_only = 0,
+    # Adding sex and time to data structure
+    time = dat$time,
+    sex = dat$sex,
+    sex_idx = if_else(dat$sex < 0, 1L, 2L),
+    # Adding nu as a fixed parameter for model s12
+    nu = 4,
+    # Adding number of latent factors for models s14-s17
+    D = 3,
+    # Using only complete cases for log-lik (1 when all data observed)
+    cc = dat$cc
+  )
+
+  return(list(d = d, dat = dat))
+}

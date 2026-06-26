@@ -14,6 +14,7 @@
 # chains, number of chains
 # pchains, number of parrallel chains,
 # refresh, progress refresh
+# ad, adapt delta
 fit_wrap <- function(
   model,
   DATA = d,
@@ -23,6 +24,8 @@ fit_wrap <- function(
   chains = 4,
   pchains = 4,
   refresh = 1000,
+  ad = 0.8,
+  init = NULL,
   refit = refit.models
 ) {
   fit.filepath <- paste0("fits/paper1/", fit, ".RDS")
@@ -38,7 +41,9 @@ fit_wrap <- function(
       iter_warmup = iterwu, # Number of warm-up iterations
       chains = chains, # Number of Markov chains
       parallel_chains = pchains, # Number of parallel chains
-      refresh = refresh
+      refresh = refresh,
+      adapt_delta = ad,
+      init = init # NULL -> cmdstan random init; or list/function/number/path
     ) # Number of iterations before each print
     # Save the model for easy access
     fittedmodel$save_object(file = fit.filepath) # <-- use this
@@ -48,6 +53,33 @@ fit_wrap <- function(
   # Assign the model object to the environment.
   assign(fit, fittedmodel, envir = parent.frame())
 }
+
+
+# Check for effect of divergent transitions in parameters
+#
+# fit, a cmdstanr fit (e.g., from fit_wrap)
+# vars, a string indicating which parameter names should be used. The string
+#  is used in a grep call. Use e.g., "^(psi|lambda_lower|lambda_diag|
+#  sigma|sigma_pre|mu_pre)".
+# nparam, how many parameters of top affected parameters?
+# returns a vector of standardized differences between divergenet/non-divergent
+#  transistions
+ceck_div <- function(fit, vars, nparam = 15) {
+  div <- fit$sampler_diagnostics(format = "df")$divergent__ # aligned row-wise with dd
+
+  if (all(div == 0)) {
+    message("No divergent transitions detected")
+  } else {
+    draws <- fit$draws(format = "df")
+    vars <- grep(vars, colnames(dd), value = TRUE)
+    scan <- sapply(vars, function(v) {
+      x <- dd[[v]]
+      (mean(x[div == 1]) - mean(x[div == 0])) / sd(x, na.rm = TRUE) # std. mean diff
+    })
+    sort(abs(scan), decreasing = TRUE)[1:nparam]
+  }
+}
+
 
 #
 #
@@ -388,11 +420,14 @@ comp_fun2 <- function(d, mods) {
 # d, a data set with participant, treat, sex,
 # age, time, analyte, value.
 cor_plot <- function(d) {
+  # Check distinct to help with debug
+  if (length(unique(d$analyte)) != 11) stop("The function expect 11 analytes")
+
   compl_temp <- d |>
     filter(!is.na(value_std)) |>
     mutate(.by = participant, n = n()) |>
-    # This is hardcoded and assumes 10 measurements and 3 time points
-    filter(n == 30) |>
+    # This is hardcoded and assumes 11 measurements and 3 time points
+    filter(n == 33) |>
     select(-value) |>
     pivot_wider(names_from = time, values_from = value_std)
 

@@ -14,13 +14,12 @@ book:
     - 01-data.qmd
     - 02-fa.qmd
     - 03-metsyn-intro.qmd
-  #  - 04-metsyn-models.qmd
- #   - 05-metsyn-simulations.qmd
-  #  - 06-metsyn-postpred.qmd
+    - 04-metsyn-models.qmd
+    - 05-metsyn-simulations.qmd
+    - 06-metsyn-postpred.qmd
   #  - 07-metsyn-inference.qmd
 
 bibliography: resources/bibliography.bib
 csl: vancouver
-
 format:
   typst

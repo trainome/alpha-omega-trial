@@ -2,11 +2,11 @@
 Model S9:
 Extension of S7 (univariate normal per observation, missing-data imputation,
 pre-value covariate, time-specific treatment effects) where the residual
-SD is treatment-, time-, type- and sex-specific.
+SD is treatment-, time- and type-specific.
 
-sigma is indexed by sex x time x type x treat, so the model can represent
-different within-group dispersion between treatments and between sexes in
-the same type/time cell.
+sigma is indexed by time x type x treat, so the model can represent
+different within-group dispersion between treatments in the same type/time
+cell.
 
 Structure otherwise identical to S7 so the two can be compared via
 log_lik_part / loo and by the same y_rep-based posterior predictive checks.
@@ -29,6 +29,8 @@ data {
   array[N] int<lower=1, upper=N_P> P;         // Participant
   array[N] int<lower=1, upper=2> treat;       // Treatment index
   array[N] int<lower=1, upper=2> sex_idx;     // Sex index (1=male, 2=female)
+  array[N] int<lower=0, upper=1> cc;          // Complete case indicator
+  // Used in the log-likelihood to create comparable data sets for loo.
 
   int<lower=0, upper=1> prior_only;         // Prior only flag
 }
@@ -38,16 +40,16 @@ transformed data {
   int n_miss_pre = N - sum(pre_miss);
 
   // Diagnostic criteria data
-  array[6] int diag_idx = {2, 4, 6, 8, 9, 10};
+  array[6] int diag_idx = {2, 5, 7, 9, 10, 11};
 // set the right index for subscores
 //
 // analyte  type std_threshold_male std_threshold_female
 // HDL         2            -1.10                -0.233
-// TG          4             0.947                0.947
-// dias        6            -0.0200              -0.0200
-// glucose     8             1.88                 1.88
-// sys         9             0.0638               0.0638
-// waist      10            -0.432               -1.48
+// TG          5             0.947                0.947
+// dias        7            -0.0200              -0.0200
+// glucose     9             1.88                 1.88
+// sys         10             0.0638               0.0638
+// waist       11            -0.432               -1.48
 
   vector[6] threshold_male   = [-1.1,   0.947, -0.02, 1.88, 0.0638, -0.432]';
   vector[6] threshold_female = [-0.233, 0.947, -0.02, 1.88, 0.0638, -1.48]';
@@ -56,6 +58,24 @@ transformed data {
   // Participant-level sex index (constant per participant)
   array[N_P] int sex_p_idx;
   for (i in 1:N) sex_p_idx[P[i]] = sex_idx[i];
+
+  // Complete-case participant index for complete-case log-lik (loo)
+  array[N_P] int cc_p = rep_array(0, N_P);
+  for (i in 1:N) cc_p[P[i]] = cc[i];
+
+  // Number of complete-case participants
+  int N_CC = 0;
+  for (p in 1:N_P) N_CC += cc_p[p];
+
+  // cc_pos[p] = column of participant p in log_lik (0 if not complete case)
+  // cc_id[j]  = participant id for column j
+  array[N_P] int cc_pos = rep_array(0, N_P);
+  array[N_CC] int cc_id;
+  {
+    int j = 1;
+    for (p in 1:N_P)
+      if (cc_p[p] == 1) { cc_pos[p] = j; cc_id[j] = p; j += 1; }
+  }
 }
 
 parameters {
@@ -63,9 +83,9 @@ parameters {
   array[2] matrix[K, N_TX] alpha;
   // Pre-score covariate parameter, separate for each type, time
   matrix[K, 2] beta;
-  // Sex-, time-, type- and treatment-specific sigmas:
-  // sigma[sex_idx][time][type, treat]
-  array[2, 2] matrix<lower=0>[K, N_TX] sigma;
+  // Time-, type- and treatment-specific sigmas:
+  // sigma[time][type, treat]
+  array[2] matrix<lower=0>[K, N_TX] sigma;
 
   // Missing data parameters
   vector[n_miss_y] y_impute;
@@ -107,7 +127,7 @@ transformed parameters {
 
   for(i in 1:N) {
     mu[i] = alpha[time[i]][type[i], treat[i]] + beta[type[i],time[i]] * pre[i];
-    sig[i]= sigma[sex_idx[i], time[i]][type[i], treat[i]];
+    sig[i]= sigma[time[i]][type[i], treat[i]];
   }
 
 }
@@ -122,7 +142,7 @@ model {
    for (ty in 1:K)
   beta[ty, ti] ~ normal(1, 0.4);
 
-  for (s in 1:2) for (ti in 1:2) to_vector(sigma[s, ti]) ~ exponential(1);
+  for (ti in 1:2) to_vector(sigma[ti]) ~ exponential(1);
 
   // Weak prior on imputed values
   // if (prior_only == 1) {
@@ -159,6 +179,14 @@ generated quantities {
   for (i in 1:N)
     if (y_miss[i] == 1 && pre_miss[i] == 1)
       log_lik_part[P[i]] += normal_lpdf(y[i] | mu[i], sig[i]);
+
+  // Complete-case log-lik for cross-model loo comparison. Named "log_lik" so
+  // loo() picks it up by default. For a complete case every observation is
+  // valid, so this is the full density of the participant.
+  vector[N_CC] log_lik;
+  for (p in 1:N_P)
+    if (cc_p[p] == 1)
+      log_lik[cc_pos[p]] = log_lik_part[p];
 
   // Compute diagnosis from continuous biomarker values (incl imputed)
   {

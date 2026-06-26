@@ -24,7 +24,7 @@ refit.models <- FALSE
 
 
 
-Fatty acids, including including EPA (C205n3) and DHA (226n3) where measured in red blood cells. We will assess the effect of n-3 supplementation on group level fatty acid profiles. As preliminary models indicated heteroscedasticity of residuals, log-transformed and standardized data was used in modelling. This allows for the same weakly regularizing priors for all fatty acids ($\text{FA}$). 
+Fatty acids, including including EPA (C205n3) and DHA (226n3) where measured in whole blood. We will assess the effect of n-3 supplementation on group level fatty acid profiles. As preliminary models indicated heteroscedasticity of residuals, log-transformed and standardized data was used in modelling. This allows for the same weakly regularizing priors for all fatty acids ($\text{FA}$). 
 
 The model was designed to estimate differences between treatments ($\text{TX}$) at post-treatment time-points (T2 and T4) using pre-treatment ($\text{Pre}_{i[\text{FA}]}$) values as a covariate. The intercept in the model ($\alpha_{\text{[FA, TI, TX]}}$) gives us mean estimates for fatty-acid $\text{FA}$, time-point $\text{TI}$, and treatment $\text{TX}$.
 
@@ -301,7 +301,7 @@ draws.m2 |>
 
 ```
 
-Treatment with N-3 fatty acids robustly increased red blood cell fatty acid composition levels of C205n3, C225n3 and C226n3 fatty acids compared to placebo (@fig-m2-meanpred and @fig-m2-contrast). Post-treatment values were lower in the N-3 group for C181c9, C183n6, C203n6 and C204n6 with high probability at both T2 and T4 (@fig-m2-contrast). 
+Treatment with N-3 fatty acids robustly increased whole blood fatty acid composition levels of C205n3, C225n3 and C226n3 fatty acids compared to placebo (@fig-m2-meanpred and @fig-m2-contrast). Post-treatment values were lower in the N-3 group for C181c9, C183n6, C203n6 and C204n6 with high probability at both T2 and T4 (@fig-m2-contrast). 
 
 
 ```{r}
@@ -1592,8 +1592,7 @@ p1 + plot_annotation(title = "Model m4") | p2 + plot_annotation(title = "Model m
 ```
 
 
-Comparing the fit of the models through posterior predictive simulations of condition-specific (time, treatment and fatty-acid) SD across models indicated that no model displayed extreme deviations in replicated values compared to observed variation in the data (@tbl-postpred-m4-m6). This comparison agreed with the out of sample predictive performance where models `m3` to `m5` where comparable. Model `m6`, the most heavily parameterized model showed four unreliable Pareto k values but was also slightly worse in in out of sample predictions (@tbl-loo). Together this suggest that model `m4`is the preferred model with model `m6` being the worst model. 
-
+Comparing the models in posterior predictive simulations of condition-specific (time, treatment and fatty-acid) SD across models indicated that no model displayed extreme deviations in replicated values compared to observed variation in the data (@tbl-postpred-m4-m6). This comparison agreed with the out of sample predictive performance where models `m3` to `m5` where comparable. Model `m6`, the most heavily parameterized model showed four unreliable Pareto k values but was also slightly worse in in out of sample predictions (@tbl-loo). Together this suggest that model `m4`is the preferred model with model `m6` being the worst model. 
 
 
 ```{r}
@@ -1725,75 +1724,52 @@ loo_compare(list("m3" = loo3,
 
 ## Inference
 
-
+We draw inference from model `m4` regarding the effect of treatment on whole blood fatty acid profiles. 
 
 ```{r}
-#| eval: false
+
+# Labels 
+fa_labels <- data.frame(
+  fa = c("C16", 
+         "C18", 
+         "C181c9", 
+         "C182n6", 
+         "C183n3", 
+         "C183n6", 
+         "C203n6", 
+         "C204n6", 
+         "C205n3", 
+         "C225n3", 
+         "C226n3"), 
+  fa_lab = c("Palmitic Acid", 
+             "Stearic Acid", 
+              "Oleic Acid", 
+              "Linoleic Acid (n-6)", 
+             "Gamma-linolenic Acid (n-6)", 
+             "Alpha-linolenic Acid (n-3)", 
+             "Dihomo-gamma-linolenic Acid (n-6)", 
+             "Arachidonic Acid (n-6)", 
+              "Eicosapentaenoic Acid (EPA, n-3)", 
+             "Docosapentaenoic Acid (n-3)", 
+             "Docosahexaenoic Acid (DHA, n-3)")) |> 
+  mutate(fa_lab = factor(fa_lab, 
+                         levels = c("Docosahexaenoic Acid (DHA, n-3)", 
+                                    "Eicosapentaenoic Acid (EPA, n-3)",
+                                    "Docosapentaenoic Acid (n-3)", 
+                                    "Alpha-linolenic Acid (n-3)",
+                                    "Arachidonic Acid (n-6)", 
+                                    "Dihomo-gamma-linolenic Acid (n-6)", 
+                                    "Gamma-linolenic Acid (n-6)", 
+                                     "Linoleic Acid (n-6)", 
+                                    "Oleic Acid", 
+                                    "Stearic Acid", 
+                                    "Palmitic Acid")))
 
 
 
-draws <- fit.m4p$draws(format = "df")
 
 
-draws |>
-  filter(.chain == 1) |> 
-  select(starts_with("alpha"), .iteration) |> 
-  pivot_longer(cols = starts_with("alpha")) |> 
-  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
-  mutate(TX = gsub("\\]", "", TX)) |> 
-  select(- param, 
-         .iteration, 
-         FA:TX,
-         alpha = value, 
-         ) |> 
   
-  inner_join(
-    draws.m3 |>
-      filter(.chain == 1) |> 
-      select(starts_with("sigma"), .iteration) |> 
-      pivot_longer(cols = starts_with("sigma")) |>
-      separate(name, into = c("param", "FA"), sep = "\\[") |> 
-     mutate(FA = gsub("\\]", "", FA)) |> 
-        select(- param, 
-             .iteration, 
-             FA,
-             sigma = value 
-         ) ) |> 
-  inner_join(
-   draws.m3 |>
-      filter(.chain == 1) |> 
-      select(starts_with("beta"), .iteration) |> 
-      pivot_longer(cols = starts_with("beta")) |>
-      separate(name, into = c("param", "FA"), sep = "\\[") |> 
-     mutate(FA = gsub("\\]", "", FA)) |> 
-        select(- param, 
-             .iteration, 
-             FA,
-             beta = value 
-         ) ) |> 
-  mutate(FA = as.integer(FA)) |> 
-
-    # Compute contrasts
-    mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
-    select(.iteration:TI, treat, alpha) |> 
-  
-    pivot_wider(names_from = treat, 
-                values_from = alpha) |> 
-     inner_join(fat_sum_compl) |> 
-    mutate(
-      # Adjusted group means
-      omega_adj = exp(s*omega + m), 
-      ctrl_adj  = exp(s*ctrl + m),
-      contrast_nat = omega_adj - ctrl_adj,
-      contrats_log = omega - ctrl, 
-      rel_contrast = exp(s * contrats_log),
-      rel_contrast_nat = omega_adj/ctrl_adj,
-      time = if_else(TI == 1, "T2", "T4")) |> 
-  
-  slice_head(n = 1000) |> 
-  ggplot(aes(rel_contrast, rel_contrast_nat)) + geom_point()
-  
-
 
 
 
@@ -1801,9 +1777,700 @@ draws |>
 
 
 
+```{r}
+#| eval: true
+#| label: fig-fa-infer
+#| fig-cap: "Adjusted group means and treatment contrasts of fatty acids concentrations in whole blood. Error bars in treatment-group means represents 95% CrI, posterior contrasts are displayed as the full posterior distribution ratio between N-3 to Placebo estimates at time-point T2 and T4 (1 indicating equivalent concentrations)."
+#| fig-width: 3.543
+#| fig-height: 9.448
+
+
+
+draws <- fit.m4p$draws(format = "df")
+
+### Posterior predictions
+
+
+pre_int_means <- fat_dat_compl2 |> 
+  filter(TI == 1) |> 
+  summarise(.by = FA, 
+            pre = mean(T1))
+
+
+sumdat <- draws |>
+
+  select(starts_with("alpha"), .draw) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .draw, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws |>
+
+      select(starts_with("sigma"), .draw) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |>
+      separate(FA, into = c("FA", "TX")) |>
+        select(- param, 
+             .draw, 
+             FA,
+             TX,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws |>
+
+      select(starts_with("beta"), .draw) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .draw, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA), 
+         TX = as.integer(TX)) |> 
+  
+
+  
+  inner_join(pre_int_means) |> 
+  rowwise() |> 
+
+
+  mutate(mu = alpha + beta * pre, 
+         y_pred = rnorm(1, alpha + beta * pre, sigma)) |> 
+  ungroup() |> 
+  summarise(
+    .by = c(FA, TI, TX), 
+    Mu  = mean(mu), 
+    lwr99 = quantile(mu, 0.005), 
+    upr99 = quantile(mu, 0.995), 
+    lwr95 = quantile(mu, 0.025), 
+    upr95 = quantile(mu, 0.975), 
+    lwr50 = quantile(mu, 0.25), 
+    upr50 = quantile(mu, 0.75),
+    
+    lwr_pred95 = quantile(y_pred, 0.025), 
+    upr_pred95 = quantile(y_pred, 0.975) ) |> 
+  
+  # Back-transform all estimates
+  pivot_longer(cols = Mu:upr_pred95, 
+               names_to = "est", 
+               values_to = "value") |> 
+  inner_join(fat_sum_compl) |> 
+
+
+  mutate(value_org = exp(value * s + m)) |> 
+  
+  select(FA:est, fa, value_org) |> 
+  pivot_wider(names_from = est, 
+              values_from = value_org) |> 
+  
+  mutate(time = if_else(TI == 1, "T2", "T4"), 
+         treat = if_else(TX == 1, "ctrl", "omega"), 
+         treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3"))) |> 
+  
+  add_row(
+    fat_dat_compl |> 
+      filter(time == "T1") |> 
+      summarise(.by = c(time, fa), 
+                Mu = mean(value, na.rm = TRUE)) |> 
+      mutate(TX = NA, 
+             TI = NA,
+             FA = NA) |> 
+      expand_grid(treat = c("ctrl", "omega")) |> 
+      mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo", "N-3")))
+  )   |> 
+    inner_join(fa_labels) 
+  
+
+## Plotting predictions without individual data   
+
+p1b <- sumdat |> 
+  ggplot() +
+  geom_errorbar(aes(time, Mu, 
+                    ymin = lwr99, 
+                    ymax = upr99, 
+                    group = treat,
+                    color = NULL), 
+                width = 0.1, 
+                position = position_dodge(width = 0.2)) +
+  
+
+    geom_line(aes(time, Mu, group = treat, color = NULL), 
+            alpha = 1, 
+                position = position_dodge(width = 0.2)) +
+  
+
+    geom_point(aes(time, Mu, fill = treat, group = NULL),
+             color = "black",
+             size = 3,
+             alpha = 1,
+             shape = 21, 
+                position = position_dodge(width = 0.2)) +
+
+  scale_color_manual(values = colscale) +
+  scale_fill_manual(values = colscale) +
+  
+   facet_wrap(~ fa_lab, ncol = 1, scales = "free_y") +
+  
+  labs(subtitle = "Fatty acid concentration<br>(&mu;g ml<sup>-1</sup>)", 
+       x = "Time point", 
+       fill = "Treatment", 
+       color = "Treatment") + 
+  theme_classic() +
+  theme(axis.title.y = element_blank(), 
+        plot.subtitle = element_markdown(size = 8),
+        axis.text.y = element_text(size = 7),
+        legend.title = element_blank(),
+        strip.background = element_rect(color = "white"),   
+        strip.text = element_text(hjust = 0, size = 6), 
+        legend.position = "bottom")
 
 
 
 
+
+### Posterior contrasts
+
+p2 <- draws|>
+
+  select(starts_with("alpha"), .draw) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .draw, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws |>
+
+      select(starts_with("sigma"), .draw) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+      separate(FA, into = c("FA", "TX")) |> 
+        select(
+             .draw, 
+             FA,
+             TX,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws |>
+
+      select(starts_with("beta"), .draw) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .draw, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA), 
+         TI = as.integer(TI)) |> 
+
+    # Compute contrasts
+    mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
+    select(.draw:TI, treat, alpha) |> 
+  
+    pivot_wider(names_from = treat, 
+                values_from = alpha) |> 
+     inner_join(fat_sum_compl) |> 
+    mutate(contrats = omega - ctrl, 
+           rel_contrast = exp(s * contrats), 
+           time = if_else(TI == 1, "T2", "T4"))  |> 
+  inner_join(fa_labels) |> 
+  
+  
+    ggplot(aes(x = rel_contrast, color = time)) + 
+    geom_line(alpha = 1, 
+              stat = "density",
+              linewidth = 1.1,
+              aes(lty = time)) +
+    facet_wrap(~ fa_lab, scales = "free", ncol = 1) +
+    
+  scale_linetype_manual(values = c(6, 1)) +
+  
+    labs(x = "Fold-difference<br>(N-3 vs. Placebo)", 
+         y = "Posterior density", 
+         subtitle = "Treatment contrasts<br>(Posterior densities)") +
+    alpha_theme(yaxis = FALSE) + 
+  
+  
+  
+  theme(legend.position = "bottom",
+        plot.subtitle = element_markdown(size = 8),
+        legend.title = element_blank(),
+        strip.background = element_blank(), 
+        axis.title.y = element_blank(), 
+        axis.title.x = element_markdown(),
+        strip.text = element_blank()) +
+  
+  geom_vline(xintercept = 1, 
+             lty = 2, 
+             color = "gray50") +
+
+
+  
+  scale_color_manual(values = colscale[c(6, 7)])
+  
+
+  
+fig1c <- p1b + p2 + plot_layout(widths = c(1, 0.8), ncol = 2)
+
+ggsave(fig1c, filename = "figures/preliminary-figures/fig1-c.pdf", 
+       width = 90, 
+       height = 240, unit = "mm")
+
+
+fig1c
+
+
+```
+
+```{r}
+#| label: results-fa
+
+
+## For inference in text
+
+contr_text <- draws|>
+  
+  filter(.draw %in% 1:100) |> 
+  
+  select(starts_with("alpha"), .draw) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .draw, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws |>
+
+         filter(.draw %in% 1:100) |> 
+      
+      select(starts_with("sigma"), .draw) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+      separate(FA, into = c("FA", "TX")) |> 
+        select(- param, 
+             .draw, 
+             FA,
+             TX,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws |>
+
+         filter(.draw %in% 1:100) |> 
+     
+      select(starts_with("beta"), .draw) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .draw, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA)) |> 
+    # Compute contrasts
+    mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
+    select(.draw:TI, treat, alpha) |> 
+    inner_join(fat_sum_compl) |> 
+  mutate(mu = alpha * s + m) |> 
+  dplyr::select(.draw, fa, TI, treat, mu) |> 
+    pivot_wider(names_from = treat, 
+                values_from = mu) |> 
+     
+  mutate(contrast = omega - ctrl, 
+         contrast = 100 * (exp(contrast)-1))  |> 
+  summarise(.by = c(fa, TI), 
+            m = median(contrast), 
+            lwr = quantile(contrast, 0.025), 
+            upr = quantile(contrast, 0.975)) |> 
+    inner_join(fa_labels) |> 
+  
+  mutate(stat = paste0(sprintf("%.1f", round(m, 1)), 
+                       "% [",
+                       sprintf("%.1f", round(lwr, 1)),
+                       ", ", 
+                       sprintf("%.1f", round(upr, 1)), 
+                       "]")) 
+
+
+
+
+
+
+
+
+
+## For supplementary table 
+# Descriptive data 
+
+obs_mean <- fat_dat_compl2 |> 
+  filter(y != -999) |> 
+  mutate(TI = if_else(TI == 1, "T2", "T4")) |> 
+
+  pivot_wider(names_from = TI, values_from = y) |> 
+  pivot_longer(names_to = "time", 
+               values_to = "y", 
+               cols = c("T1", "T2", "T4")) |> 
+  inner_join(fat_sum_compl) |> 
+  # Back transform
+  mutate(conc = exp(y * s + m)) |> 
+  # Summarise for observed mean, sd, min-max
+  filter(!is.na(conc)) |> 
+  summarise(.by = c(fa, TX, time), 
+            m = mean(conc, na.rm = TRUE), 
+            s = sd(conc, na.rm = TRUE), 
+            min = min(conc, na.rm = TRUE), 
+            max = max(conc, na.rm = TRUE)) |> 
+  
+  mutate(.by = fa,
+         dec = max(0, 2 - floor(log10(max(m, na.rm = TRUE))))) |> 
+  rowwise() |> 
+  mutate(m   = formatC(m,   digits = dec, format = "f"),
+         s   = formatC(s,   digits = dec, format = "f"),
+         min = formatC(min, digits = dec, format = "f"),
+         max = formatC(max, digits = dec, format = "f"),
+         stat = paste0(m, " (", s, ")")) |> 
+  inner_join(fa_labels) |> 
+  ungroup() |> 
+  mutate(TX = if_else(TX == 1, "Placebo", "n3")) |> 
+  
+  dplyr::select(TI = time, TX, fa_lab, stat) |> 
+  pivot_wider(names_from = c(TX), 
+              values_from = stat) |> 
+  arrange(fa_lab) |> 
+  
+  dplyr::select(fa_lab,TI,  Placebo, n3) 
+
+
+
+# Adjusted mean, prediction intervals and contrast
+
+adj_mean <- sumdat |> 
+  dplyr::select(FA, TI, TX, fa, Mu, lwr95, upr95, lwr_pred95, upr_pred95) |> 
+    inner_join(fa_labels) |> 
+  dplyr::select(TI, TX, fa_lab, Mu:upr_pred95) |> 
+  mutate(TI = if_else(TI == 1, "T2", "T4"), 
+         TX = if_else(TX == 1, "Placebo", "n3")) |> 
+  filter(!is.na(TI)) |> 
+  
+  mutate(.by = fa_lab,
+         dec = max(0, 2 - floor(log10(max(Mu, na.rm = TRUE))))) |> 
+  rowwise() |> 
+  mutate(Mu   = formatC(Mu,   digits = dec, format = "f"),
+         lwr95   = formatC(lwr95,   digits = dec, format = "f"),
+         upr95 = formatC(upr95, digits = dec, format = "f"),
+         lwr_pred95 = formatC(lwr_pred95, digits = dec, format = "f"),
+         upr_pred95 = formatC(upr_pred95, digits = dec, format = "f"),
+         cri = paste0("[", lwr95, ", ", upr95, "]"), 
+         pred = paste0("[", lwr_pred95, ", ", upr_pred95, "]"), 
+         Mu = paste0(Mu," ", cri)) |> 
+
+  select(fa_lab, TX, TI, Mu, pred) |> 
+  pivot_wider(names_from = c(TX), 
+              values_from = Mu:pred)  |> 
+
+  dplyr::select(fa_lab, TI, Mu_Placebo,  Mu_n3) |> 
+   arrange(fa_lab) 
+
+
+contr <- draws|>
+
+  select(starts_with("alpha"), .draw) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .draw, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws |>
+
+      select(starts_with("sigma"), .draw) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+      separate(FA, into = c("FA", "TX")) |> 
+        select(- param, 
+             .draw, 
+             FA,
+             TX,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws |>
+
+      select(starts_with("beta"), .draw) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .draw, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA)) |> 
+    # Compute contrasts
+    mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
+    select(.draw:TI, treat, alpha) |> 
+    inner_join(fat_sum_compl) |> 
+  mutate(mu = exp(alpha * s + m)) |> 
+  dplyr::select(.draw, fa, TI, treat, mu) |> 
+    pivot_wider(names_from = treat, 
+                values_from = mu) |> 
+     
+  mutate(contrast = omega - ctrl,
+         time = if_else(TI == 1, "T2", "T4"))  |> 
+  summarise(.by = c(fa, TI), 
+            m = median(contrast), 
+            lwr = quantile(contrast, 0.025), 
+            upr = quantile(contrast, 0.975)) |> 
+    inner_join(fa_labels) |> 
+
+  mutate(dec = 2) |> 
+  rowwise() |> 
+  mutate(m   = formatC(m,   digits = dec, format = "f"),
+         lwr   = formatC(lwr,   digits = dec, format = "f"),
+         upr = formatC(upr, digits = dec, format = "f"), 
+         contrast = paste0(m, " [", lwr, ", ", upr,"]")) |> 
+  dplyr::select(fa_lab, TI, contrast) |> 
+  mutate(TI = if_else(TI == 1, "T2", "T4")) |> 
+
+   arrange(fa_lab) 
+  
+
+
+```
+
+
+Fish-oil supplementation led to robust increases in Docosahexaenoic (DHA; time-point T2 N-3 vs. Placebo, `r contr_text[contr_text$fa == "C226n3" & contr_text$TI == 1, 7]`; T4, `r contr_text[contr_text$fa == "C226n3" & contr_text$TI == 2, 7]`), Eicosapentaenoic (EPA; T2, `r contr_text[contr_text$fa == "C205n3" & contr_text$TI == 1, 7]`; T4, `r contr_text[contr_text$fa == "C205n3" & contr_text$TI == 2, 7]`), and Docosapentaenoic acid (T2, `r contr_text[contr_text$fa == "C225n3" & contr_text$TI == 1, 7]`; T4, `r contr_text[contr_text$fa == "C225n3" & contr_text$TI == 2, 7]`; @fig-fa-infer, @tbl-infer-fa). At the same time, omega-6 fatty acids were reduced in the N-3 group compared to Placebo at both time-points (Alpha-linolenic acid T2, `r contr_text[contr_text$fa == "C183n6" & contr_text$TI == 1, 7]`; Alpha-linolenic acid T4, `r contr_text[contr_text$fa == "C183n6" & contr_text$TI == 2, 7]`; Arachidonic acid T2, `r contr_text[contr_text$fa == "C204n6" & contr_text$TI == 1, 7]`; Arachidonic acid T4, `r contr_text[contr_text$fa == "C204n6" & contr_text$TI == 2, 7]`; Dihomo-gamma-linolenic acid T2, `r contr_text[contr_text$fa == "C203n6" & contr_text$TI == 1, 7]`; Dihomo-gamma-linolenic acid T4, `r contr_text[contr_text$fa == "C203n6" & contr_text$TI == 2, 7]`; @fig-fa-infer, @tbl-infer-fa). While gamma-linolenic, linoleic, steraic and palmitic acids remained stable unchanged in N-3 compared to Placebo (@fig-fa-infer, @tbl-infer-fa), Oleic acid was reduced in N-3 compared to control at T2 (`r contr_text[contr_text$fa == "C181c9" & contr_text$TI == 1, 7]`) but not at T4 (`r contr_text[contr_text$fa == "C181c9" & contr_text$TI == 2, 7]`).  
+
+
+```{=typst}
+#[
+  #set text(size: 7pt)
+```
+
+
+```{r}
+#| label: tbl-infer-fa
+#| tbl-cap: "Descriptive data, adjusted mean estimates, prediction intervals and treatment contrasts for fatty acids measured in whole blood before the intervention (time-point T1), after supplementation-only (T2), and after supplementation and resistance training (T4). All values are reported on the measurement scale (&mu;g ml<sup>-1</sup>)."
+
+
+# Descriptive data 
+
+obs_mean <- fat_dat_compl2 |> 
+  filter(y != -999) |> 
+  mutate(TI = if_else(TI == 1, "T2", "T4")) |> 
+
+  pivot_wider(names_from = TI, values_from = y) |> 
+  pivot_longer(names_to = "time", 
+               values_to = "y", 
+               cols = c("T1", "T2", "T4")) |> 
+  inner_join(fat_sum_compl) |> 
+  # Back transform
+  mutate(conc = exp(y * s + m)) |> 
+  # Summarise for observed mean, sd, min-max
+  filter(!is.na(conc)) |> 
+  summarise(.by = c(fa, TX, time), 
+            m = mean(conc, na.rm = TRUE), 
+            s = sd(conc, na.rm = TRUE), 
+            min = min(conc, na.rm = TRUE), 
+            max = max(conc, na.rm = TRUE)) |> 
+  
+  mutate(.by = fa,
+         dec = max(0, 2 - floor(log10(max(m, na.rm = TRUE))))) |> 
+  rowwise() |> 
+  mutate(m   = formatC(m,   digits = dec, format = "f"),
+         s   = formatC(s,   digits = dec, format = "f"),
+         min = formatC(min, digits = dec, format = "f"),
+         max = formatC(max, digits = dec, format = "f"),
+         stat = paste0(m, " (", s, ")")) |> 
+  inner_join(fa_labels) |> 
+  ungroup() |> 
+  mutate(TX = if_else(TX == 1, "Placebo", "n3")) |> 
+  
+  dplyr::select(TI = time, TX, fa_lab, stat) |> 
+  pivot_wider(names_from = c(TX), 
+              values_from = stat) |> 
+  arrange(fa_lab) |> 
+  
+  dplyr::select(fa_lab,TI,  Placebo, n3) 
+
+
+
+# Adjusted mean, prediction intervals and contrast
+
+adj_mean <- sumdat |> 
+  dplyr::select(FA, TI, TX, fa, Mu, lwr95, upr95, lwr_pred95, upr_pred95) |> 
+    inner_join(fa_labels) |> 
+  dplyr::select(TI, TX, fa_lab, Mu:upr_pred95) |> 
+  mutate(TI = if_else(TI == 1, "T2", "T4"), 
+         TX = if_else(TX == 1, "Placebo", "n3")) |> 
+  filter(!is.na(TI)) |> 
+  
+  mutate(.by = fa_lab,
+         dec = max(0, 2 - floor(log10(max(Mu, na.rm = TRUE))))) |> 
+  rowwise() |> 
+  mutate(Mu   = formatC(Mu,   digits = dec, format = "f"),
+         lwr95   = formatC(lwr95,   digits = dec, format = "f"),
+         upr95 = formatC(upr95, digits = dec, format = "f"),
+         lwr_pred95 = formatC(lwr_pred95, digits = dec, format = "f"),
+         upr_pred95 = formatC(upr_pred95, digits = dec, format = "f"),
+         cri = paste0("[", lwr95, ", ", upr95, "]"), 
+         pred = paste0("[", lwr_pred95, ", ", upr_pred95, "]"), 
+         Mu = paste0(Mu," ", cri)) |> 
+
+  select(fa_lab, TX, TI, Mu, pred) |> 
+  pivot_wider(names_from = c(TX), 
+              values_from = Mu:pred)  |> 
+
+  dplyr::select(fa_lab, TI, Mu_Placebo,  Mu_n3) |> 
+   arrange(fa_lab) 
+
+
+contr <- draws|>
+
+  select(starts_with("alpha"), .draw) |> 
+  pivot_longer(cols = starts_with("alpha")) |> 
+  separate(name, into = c("param", "FA", "TI", "TX"), sep = "[,\\[]") |> 
+  mutate(TX = gsub("\\]", "", TX)) |> 
+  select(- param, 
+         .draw, 
+         FA:TX,
+         alpha = value, 
+         ) |> 
+  
+  inner_join(
+    draws |>
+
+      select(starts_with("sigma"), .draw) |> 
+      pivot_longer(cols = starts_with("sigma")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+      separate(FA, into = c("FA", "TX")) |> 
+        select(- param, 
+             .draw, 
+             FA,
+             TX,
+             sigma = value 
+         ) ) |> 
+  inner_join(
+   draws |>
+
+      select(starts_with("beta"), .draw) |> 
+      pivot_longer(cols = starts_with("beta")) |>
+      separate(name, into = c("param", "FA"), sep = "\\[") |> 
+     mutate(FA = gsub("\\]", "", FA)) |> 
+        select(- param, 
+             .draw, 
+             FA,
+             beta = value 
+         ) ) |> 
+  mutate(FA = as.integer(FA)) |> 
+    # Compute contrasts
+    mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
+    select(.draw:TI, treat, alpha) |> 
+    inner_join(fat_sum_compl) |> 
+  mutate(mu = exp(alpha * s + m)) |> 
+  dplyr::select(.draw, fa, TI, treat, mu) |> 
+    pivot_wider(names_from = treat, 
+                values_from = mu) |> 
+     
+  mutate(contrast = omega - ctrl,
+         time = if_else(TI == 1, "T2", "T4"))  |> 
+  summarise(.by = c(fa, TI), 
+            m = median(contrast), 
+            lwr = quantile(contrast, 0.025), 
+            upr = quantile(contrast, 0.975)) |> 
+    inner_join(fa_labels) |> 
+
+  mutate(dec = 2) |> 
+  rowwise() |> 
+  mutate(m   = formatC(m,   digits = dec, format = "f"),
+         lwr   = formatC(lwr,   digits = dec, format = "f"),
+         upr = formatC(upr, digits = dec, format = "f"), 
+         contrast = paste0(m, " [", lwr, ", ", upr,"]")) |> 
+  dplyr::select(fa_lab, TI, contrast) |> 
+  mutate(TI = if_else(TI == 1, "T2", "T4")) |> 
+
+   arrange(fa_lab) 
+  
+
+
+obs_mean |> 
+  inner_join(adj_mean) |> 
+  inner_join(contr) |> 
+
+  
+  add_row(obs_mean |> 
+            filter(TI == "T1")) |> 
+    arrange(fa_lab, TI) |> 
+  mutate(across(everything(), \(x) if_else(is.na(x), " ", as.character(x)))) |> 
+
+  gt(groupname_col = "fa_lab", row_group_as_column = TRUE) |> 
+
+  cols_label(
+    fa_lab = "", 
+    TI = "Time-point", 
+    Placebo = md("Placebo"), 
+    n3 = md("n-3"), 
+    Mu_Placebo = "Placebo", 
+    Mu_n3 = "n-3", 
+    pred_Placebo = "Placebo", 
+  ) |> 
+  tab_spanner(
+    label = md("Observed $\\bar{x}\\text{ }(\\text{SD})$"), 
+    columns = c(3, 4)
+  ) |> 
+  tab_spanner(
+    label = md("Estimate $\\mu\\text{ }[95\\%]$"), 
+    columns = c(5, 6)
+  ) |> 
+
+    tab_spanner(
+    label = md("Contrast $[95\\%]$"), 
+    columns = c(7)
+  ) |> 
+    tab_options(
+    table.font.size = px(6)
+  ) 
+  
+
+
+
+```
+
+
+```{=typst}
+]
+```
 
 

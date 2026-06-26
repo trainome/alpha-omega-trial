@@ -11,6 +11,7 @@ colscale <- c(
   "#CC79A7",
   "darkmagenta",
   "coral2",
+  "forestgreen",
   "#000000"
 )
 

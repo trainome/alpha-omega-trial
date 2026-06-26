@@ -24,8 +24,13 @@ data {
   array[N] int<lower=1, upper=N_P> P;         // Participant
   array[N] int<lower=1, upper=2> treat;       // Treatment index
   array[N] int<lower=1, upper=2> sex_idx;     // Sex index (1=male, 2=female)
-
+  array[N] int<lower=0, upper=1> cc;          // Complete case indicator
+  // The complete case indicator is used in the log-likelihood to create 
+  // comparable data sets for loo across models.
+  
   int<lower=0, upper=1> prior_only;         // Prior only flag
+  
+  
 }
 
 transformed data {
@@ -33,16 +38,16 @@ transformed data {
   int n_miss_pre = N - sum(pre_miss);
 
   // Diagnostic criteria data
-  array[6] int diag_idx = {2, 4, 6, 8, 9, 10};  
-// set the right index for subscores 
+  array[6] int diag_idx = {2, 5, 7, 9, 10, 11};
+// set the right index for subscores
 //
 // analyte  type std_threshold_male std_threshold_female
-// HDL         2            -1.10                -0.233 
-// TG          4             0.947                0.947 
-// dias        6            -0.0200              -0.0200
-// glucose     8             1.88                 1.88  
-// sys         9             0.0638               0.0638
-// waist      10            -0.432               -1.48  
+// HDL         2            -1.10                -0.233
+// TG          5             0.947                0.947
+// dias        7            -0.0200              -0.0200
+// glucose     9             1.88                 1.88
+// sys         10             0.0638               0.0638
+// waist       11            -0.432               -1.48
   
   vector[6] threshold_male   = [-1.1,   0.947, -0.02, 1.88, 0.0638, -0.432]';
   vector[6] threshold_female = [-0.233, 0.947, -0.02, 1.88, 0.0638, -1.48]';
@@ -51,6 +56,26 @@ transformed data {
   // Participant-level sex index (constant per participant)
   array[N_P] int sex_p_idx;
   for (i in 1:N) sex_p_idx[P[i]] = sex_idx[i];
+  
+  // Complete case participants index for log-lik loo
+  array[N_P] int cc_p = rep_array(0, N_P);
+  for (i in 1:N) cc_p[P[i]] = cc[i];
+  
+  // Increment the number of complete casers
+  int N_CC = 0;
+  for (p in 1:N_P) N_CC += cc_p[p];
+  
+  // cc_pos[p] = column of participant p in log_lik_cc (0 if not complete case)
+  // cc_id[j]  = participant id for column j  (handy for mapping loo cols back)
+  array[N_P] int cc_pos = rep_array(0, N_P);
+  array[N_CC] int cc_id;
+    {
+      int j = 1;
+      for (p in 1:N_P)
+        if (cc_p[p] == 1) { cc_pos[p] = j; cc_id[j] = p; j += 1; }
+    }
+  
+  
 }
 
 parameters {
@@ -139,7 +164,6 @@ model {
 
 generated quantities {
   vector[N] y_rep;
-  vector[N_P] log_lik_part;
 
   // Per-participant, per-time diagnosis: 1 if >= 3 of 5 criteria met
   matrix[N_P, 3] diagnosed;
@@ -150,14 +174,16 @@ generated quantities {
   for(i in 1:N)
     y_rep[i] = normal_rng(mu[i], sig[i]);
 
-  // Log lik using participant to correspond to MVNorm models.
-  // Only paired observations (y AND pre observed) contribute the log
-  // likelihood.
-  for (p in 1:N_P)
-    log_lik_part[p] = 0;
-  for (i in 1:N)
-    if (y_miss[i] == 1 && pre_miss[i] == 1)
-      log_lik_part[P[i]] += normal_lpdf(y[i] | mu[i], sig[i]);
+  // Log lik using participant to correspond to MVNorm models with complete
+  // case only. Set name to log_lik to avoid searching for alternative names in 
+  // loo.
+  vector[N_CC] log_lik = rep_vector(0, N_CC);
+
+    // Only complete-case participants
+    // (cc == 1 implies fully observed) but keep miss == 1 for safety.
+    for (i in 1:N)
+      if (cc[i] == 1 && y_miss[i] == 1 && pre_miss[i] == 1)
+        log_lik[cc_pos[P[i]]] += normal_lpdf(y[i] | mu[i], sig[i]);
 
   // Compute diagnosis from continuous biomarker values (incl imputed)
   {

@@ -26,15 +26,13 @@ refit.models <- FALSE # Should fit_wrap refit models.
 
 ## Effects of N-3 supplementation on indicies of metabolic syndrome 
 
-Here we aim to model the sub-scores for the metabolic syndrome diagnostic criteria, along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will allow for assessing the probability of meeting criteria thresholds for having at least 3 of 5 diagnostic criteria for metabolic syndrome in each treatment group while accounting for uncertainty associated with missing observations. @fig-descriptive-data shows distributions of the variables selected for joint modeling, including variables used to define metabolic syndrome. 
+Here we aim to model the sub-scores for the metabolic syndrome diagnostic criteria, along with related body composition outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting criteria thresholds for having at least 3 of 5 diagnostic criteria for metabolic syndrome in each treatment group while accounting for uncertainty associated with missing observations. @fig-descriptive-data shows distributions of the variables selected for joint modeling, including variables used to define metabolic syndrome. 
 
 ```{r}
 #| label: fig-descriptive-data
 #| fig-height: 8
 #| fig-width: 6
 #| fig-cap: "Observed data distributions of main outcomes."
-
-
 
 d_full <- criteria_dat |> 
   
@@ -51,7 +49,7 @@ d_full <- criteria_dat |>
   pivot_wider(names_from = analyte, 
               values_from = value) |> 
 
-    pivot_longer(cols = HDL:Adiponectin, 
+    pivot_longer(cols = HDL:LDL, 
                values_to = "value",
                names_to = "analyte" ) |> 
   
@@ -80,6 +78,7 @@ d_full |>
            
            analyte == "TG" ~ "Triglycerides<br>(mmol L<sup>-1</sup>)", 
            analyte == "HDL" ~ "HDL Cholesterol<br>(mmol L<sup>-1</sup>)", 
+           analyte == "LDL" ~ "LDL Cholesterol<br>(mmol L<sup>-1</sup>)", 
            analyte == "fat.rel" ~ "Relative fat mass<br>(%)", 
            analyte == "bmi" ~ "Body mass index<br>(kg m<sup>-2</sup>)",
            analyte == "HOMA2IR" ~ "Insulin sensitivity<br>index", 
@@ -261,12 +260,14 @@ data.frame(
                "Relative fat mass", 
                "Body mass index", 
                "Insulin resistance index", 
-               "Adiponectin"), 
+               "Adiponectin", 
+               "LDL Cholesterol"), 
   Threshold = c("< 40 mg/dL for men, < 50 mg/dL for women", 
                 "100 mg/dL or higher (or taking medication)",
                 "150 mg/dL or higher (or taking medication)", 
                 "> 102 cm for men, > 88 cm for women", 
                 "130/85 mm Hg or higher (or taking medication)", 
+                "NA", 
                 "NA", 
                 "NA", 
                 "NA", 
@@ -303,7 +304,7 @@ d_full <- criteria_dat |>
   pivot_wider(names_from = analyte, 
               values_from = value) |> 
 
-    pivot_longer(cols = HDL:Adiponectin, 
+    pivot_longer(cols = HDL:LDL, 
                values_to = "value",
                names_to = "analyte" ) |> 
   
@@ -345,7 +346,7 @@ d_full |>
 
   
     # Add indicator for met syn criteria. 
-  mutate(met_sym_crit = if_else(analyte %in% c("bmi", "fat.rel", "HOMA2IR", "Adiponectin"), 0, 1)) |> 
+  mutate(met_sym_crit = if_else(analyte %in% c("bmi", "fat.rel", "HOMA2IR","LDL", "Adiponectin"), 0, 1)) |> 
   
 
 
@@ -364,7 +365,7 @@ d_full |>
            analyte == "glucose" ~ "Resting glucose" ,
            analyte == "dias" ~ "Diastolic blood pressure",
            analyte == "sys" ~ "Systolic blood pressure",
-           
+           analyte == "LDL" ~ "LDL Cholesterol",
            analyte == "TG" ~ "Triglycerides", 
            analyte == "HDL" ~ "HDL Cholesterol",
            analyte == "fat.rel" ~ "Relative fat mass", 
@@ -381,6 +382,7 @@ d_full |>
                                      "Systolic blood pressure",
                                      "Triglycerides",
                                      "HDL Cholesterol", 
+                                     "LDL Cholesterol",
                                      "Relative fat mass", 
                                      "Body mass index", 
                                      "Insulin sensitivity index", 
@@ -396,7 +398,7 @@ d_full |>
                                 "Body composition")) |> 
     arrange(participant, time, analyte) |> 
     mutate(.by = participant,
-         coord = rep(1:10, 3))|> 
+         coord = rep(1:11, 3))|> 
 
 
   
@@ -459,7 +461,7 @@ miss_dat <- criteria_dat |>
   filter(time == "T1") |> 
   pivot_wider(names_from = analyte, 
               values_from = value) |> 
-  pivot_longer(cols = age:Adiponectin, 
+  pivot_longer(cols = age:LDL, 
                values_to = "value", 
                names_to = "analyte")  |> 
     mutate(.by = analyte, 
@@ -615,18 +617,19 @@ a <- draws.m1 |>
     
     A = as.character(A),
     
-    Outcome = case_when(
-    analyte == "age" ~ "Age (years)", 
-    analyte == "waist" ~ "Waist circumference (cm)", 
-    analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
-    analyte == "dias" ~ "Diastolic blood pressure (mmHg)", 
-    analyte == "sys" ~ "Systolic blood pressure (mmHg)", 
-    analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
-    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
-    analyte == "fat.rel" ~ "Relative fat mass (%)", 
-    analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
-    analyte == "HOMA2IR" ~ "Insulin resistance index (log)", 
-    analyte == "Adiponectin" ~ "Adiponectin (mg L<sup>-1</sup>)")) |> 
+ Outcome = case_when(
+    analyte == "age" ~ "Age<br>(years)", 
+    analyte == "waist" ~ "Waist circumference<br>(cm)", 
+    analyte == "glucose" ~ "Resting glucose<br>(mmol L<sup>-1</sup>)" ,
+    analyte == "dias" ~ "Diastolic blood<br>pressure (mmHg)", 
+    analyte == "sys" ~ "Systolic blood<br>pressure (mmHg)", 
+    analyte == "TG" ~ "Triglycerides<br>(log mmol L<sup>-1</sup>)", 
+    analyte == "HDL" ~ "HDL Cholesterol<br>(mmol L<sup>-1</sup>)", 
+    analyte == "LDL" ~ "LDL Cholesterol<br>(mmol L<sup>-1</sup>)", 
+    analyte == "fat.rel" ~ "Relative fat<br>mass (%)", 
+    analyte == "bmi" ~ "Body mass index<br>(kg m<sup>-2</sup>)",
+    analyte == "HOMA2IR" ~ "Insulin resistance<br>index (log)", 
+    analyte == "Adiponectin" ~ "Adiponectin<br>(mg L<sup>-1</sup>)")) |> 
   inner_join(
     baseline_cent
    )
@@ -679,17 +682,18 @@ b <- draws.m1 |>
     A = as.character(A),
     
     Outcome = case_when(
-    analyte == "age" ~ "Age (years)", 
-    analyte == "waist" ~ "Waist circumference (cm)", 
-    analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
-    analyte == "dias" ~ "Diastolic blood pressure (mmHg)", 
-    analyte == "sys" ~ "Systolic blood pressure (mmHg)", 
-    analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
-    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
-    analyte == "fat.rel" ~ "Relative fat mass (%)", 
-    analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
-    analyte == "HOMA2IR" ~ "Insulin resistance index (log)", 
-    analyte == "Adiponectin" ~ "Adiponectin (mg L<sup>-1</sup>)")) |> 
+    analyte == "age" ~ "Age<br>(years)", 
+    analyte == "waist" ~ "Waist circumference<br>(cm)", 
+    analyte == "glucose" ~ "Resting glucose<br>(mmol L<sup>-1</sup>)" ,
+    analyte == "dias" ~ "Diastolic blood<br>pressure (mmHg)", 
+    analyte == "sys" ~ "Systolic blood<br>pressure (mmHg)", 
+    analyte == "TG" ~ "Triglycerides<br>(log mmol L<sup>-1</sup>)", 
+    analyte == "HDL" ~ "HDL Cholesterol<br>(mmol L<sup>-1</sup>)", 
+    analyte == "LDL" ~ "LDL Cholesterol<br>(mmol L<sup>-1</sup>)", 
+    analyte == "fat.rel" ~ "Relative fat<br>mass (%)", 
+    analyte == "bmi" ~ "Body mass index<br>(kg m<sup>-2</sup>)",
+    analyte == "HOMA2IR" ~ "Insulin resistance<br>index (log)", 
+    analyte == "Adiponectin" ~ "Adiponectin<br>(mg L<sup>-1</sup>)")) |> 
   inner_join(
     baseline_cent
    )
@@ -712,6 +716,11 @@ b <- draws.m1 |>
 
 a | b
 
+```
+
+```{=typst}
+#[
+  #set text(size: 7pt)
 ```
 
 
@@ -765,6 +774,7 @@ draws.m1 |>
     analyte == "sys" ~ "Systolic blood pressure (mmHg)", 
     analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
     analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+    analyte == "LDL" ~ "LDL Cholesterol (mmol L<sup>-1</sup>)", 
     analyte == "fat.rel" ~ "Relative fat mass (%)", 
     analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
     analyte == "HOMA2IR" ~ "Insulin resistance index (log)", 
@@ -791,6 +801,11 @@ draws.m1 |>
     size = 10)
   
 ```
+
+```{=typst}
+]
+```
+
 
 In conclusion, age was negatively associated with probability of drop-out at T2 without robust difference between treatment groups (@fig-dropout-across A; @tbl-dropout). Resting glucose at baseline tended to predict drop-out to T4 with no strong difference between treatment groups (@fig-dropout-across B; @tbl-dropout). Together this suggest that baseline covariates did not robustly interact with treatment in predicting drop-out. However, baseline covariates (age and fasting glucose) were associated with higher drop-out rates.
 
@@ -839,6 +854,7 @@ draws.m1 |>
     analyte == "sys" ~ "Systolic blood pressure (mmHg)", 
     analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
     analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+    analyte == "LDL" ~ "LDL Cholesterol (mmol L<sup>-1</sup>)",
     analyte == "fat.rel" ~ "Relative fat mass (%)", 
     analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
     analyte == "HOMA2IR" ~ "Insulin resistance index (log)", 
@@ -902,7 +918,8 @@ draws.m1 |>
     analyte == "dias" ~ "Diastolic blood pressure (mmHg)", 
     analyte == "sys" ~ "Systolic blood pressure (mmHg)", 
     analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
-    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)", 
+    analyte == "HDL" ~ "HDL Cholesterol (mmol L<sup>-1</sup>)",
+    analyte == "LDL" ~ "LDL Cholesterol (mmol L<sup>-1</sup>)", 
     analyte == "fat.rel" ~ "Relative fat mass (%)", 
     analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
     analyte == "HOMA2IR" ~ "Insulin resistance index (log)", 
