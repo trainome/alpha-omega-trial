@@ -17,7 +17,7 @@ book:
     - 04-metsyn-models.qmd
     - 05-metsyn-simulations.qmd
     - 06-metsyn-postpred.qmd
-  #  - 07-metsyn-inference.qmd
+#  - 07-metsyn-inference.qmd
 
 bibliography: resources/bibliography.bib
 csl: vancouver

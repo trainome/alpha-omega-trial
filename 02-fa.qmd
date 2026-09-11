@@ -153,16 +153,19 @@ draws.m2 |>
    
   mutate(mu = alpha + beta * pre) |> 
   
-  summarise(.by = c(FA, TI, TX, pre), 
-            m = mean(mu), 
-            lwr = quantile(mu, 0.05), 
-            upr = quantile(mu, 0.95)) |> 
-  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
-             color = TX, 
-             fill = TX)) + 
+  filter(.iteration %in% sample(1:2000, 50)) |> 
+  
+  summarise(.by = c(.iteration, FA, TI, TX, pre), 
+            m = mean(mu)) |> 
+  ggplot(aes(pre, m,  color = TX, 
+          
+             group = paste(.iteration, TX))) + 
   geom_line() + 
-  geom_ribbon(alpha = 0.2, aes(color = NULL)) + 
-  facet_grid(FA ~ TI)
+  facet_grid(FA ~ TI) + 
+  alpha_theme()  + 
+  labs(x = "Pre-intervention score", 
+       y = "Prior predictive y") + 
+  scale_color_manual(values = colscale)
 
 
 ```
@@ -210,13 +213,15 @@ p1 <- sum.m2 |>
   
   geom_text_repel(aes(label = highlight, 
                 color = NULL, 
-                size = NULL)) +
+                size = NULL), 
+                show.legend = FALSE) +
   
   labs(x = "(Bulk) effective sample size", 
        y = "R-hat", 
        color = "Parameter type", 
        size = "(Tail) effective sample size") +
-  scale_color_manual(values = colscale)
+  scale_color_manual(values = colscale) + 
+  alpha_theme()
 
 
 
@@ -235,7 +240,8 @@ p2  <- draws.m2 |>
   scale_color_manual(values = colscale) + 
   labs(x = "Iteration", 
        color = "Chain", 
-       y = "Parameter value")
+       y = "Parameter value") + 
+  alpha_theme()
 
 
 
@@ -245,7 +251,7 @@ p1 / p2
 ```
 
 
-A first model uses only complete-cases. The prior predictive check confirms that the model expects eleven fatty acids, a positive relationship between pre-intervention values and post-treatment values, and no differences in treatments (@fig-m2-priorpred). Sampling from the posterior was non-problematic as R-hat values approached 1 and chains mixed and converged well (@fig-m2-modelperformance).
+The first model uses only complete-cases. The prior predictive check confirms that the model expects eleven fatty acids, a positive relationship between pre-intervention values and post-treatment values, and no differences in treatments (@fig-m2-priorpred). Sampling from the posterior was non-problematic as R-hat values approached 1 and chains mixed and converged well (@fig-m2-modelperformance).
 
 Posterior predictive checks showed satisfactory patterns between replicated data (y<sup>rep</sup>; thin lines, one per draw in @fig-m2-postpred) and observed data (thick lines in @fig-m2-postpred).
 
@@ -289,6 +295,7 @@ draws.m2 |>
   linewidth = 1.2) +
   
   facet_grid(fa ~ TI) +
+  alpha_theme() +
   
   scale_color_manual(values = colscale) +
   
@@ -733,23 +740,22 @@ draws.m3 |>
    
   mutate(mu = alpha + beta * pre) |> 
   
-  summarise(.by = c(FA, TI, TX, pre), 
-            m = mean(mu), 
-            lwr = quantile(mu, 0.05), 
-            upr = quantile(mu, 0.95)) |> 
-  ggplot(aes(pre, m, ymin = lwr, ymax = upr, 
+  filter(.iteration %in% sample(1:2000, 50)) |> 
+  
+  summarise(.by = c(FA, TI, TX, pre, .iteration), 
+            m = mean(mu)) |> 
+  ggplot(aes(pre, m, 
              color = TX, 
-             fill = TX)) + 
-  geom_line() + 
-  geom_ribbon(alpha = 0.2, aes(color = NULL)) + 
+             group = paste(.iteration, TX))) + 
+  geom_line(alpha = 0.4) + 
   facet_grid(FA ~ TI) + 
   labs(x = "Pre-inteverntion values", 
        y = "Prior predictive distribution of post-intervention values (std.)", 
-       fill = "Treatment", 
        color = "Treatment") + 
   
   scale_color_manual(values = colscale) + 
-  scale_fill_manual(values = colscale) 
+  
+  alpha_theme()
 
 
 
@@ -816,7 +822,8 @@ p1 <- sum.m3 |>
        color = "Parameter type", 
        size = "(Tail) effective sample size") +
   scale_color_manual(values = colscale) +
-  labs(title = "A")
+  labs(title = "A") + 
+  alpha_theme()
 
 
 
@@ -836,7 +843,8 @@ p2  <- draws.m3 |>
   labs(x = "Iteration", 
        color = "Chain", 
        y = "Parameter value") +
-  labs(title = "B")
+  labs(title = "B") + 
+  alpha_theme()
 
 
 
@@ -1404,6 +1412,7 @@ Model `m3` does not enable treatment- and time-wise heterogeneous variation. In 
 #| label: fig-m4-priorpred
 #| message: false
 #| warning: false
+#| include: false
 #| eval: false
 
 
@@ -1592,7 +1601,7 @@ p1 + plot_annotation(title = "Model m4") | p2 + plot_annotation(title = "Model m
 ```
 
 
-Comparing the models in posterior predictive simulations of condition-specific (time, treatment and fatty-acid) SD across models indicated that no model displayed extreme deviations in replicated values compared to observed variation in the data (@tbl-postpred-m4-m6). This comparison agreed with the out of sample predictive performance where models `m3` to `m5` where comparable. Model `m6`, the most heavily parameterized model showed four unreliable Pareto k values but was also slightly worse in in out of sample predictions (@tbl-loo). Together this suggest that model `m4`is the preferred model with model `m6` being the worst model. 
+Comparing the models in posterior predictive simulations of condition-specific (time, treatment and fatty-acid) SD across models indicated that no model displayed extreme deviations in replicated values compared to observed variation in the data (@tbl-postpred-m4-m6). This comparison agreed with the out of sample predictive performance where models `m3` to `m5` where comparable. Model `m6`, the most heavily parameterized model showed four unreliable Pareto k values but was also slightly worse in in out of sample predictions (@tbl-loo). Together this suggest that model `m4` is the preferred model with model `m6` being the worst model. 
 
 
 ```{r}
@@ -1727,6 +1736,9 @@ loo_compare(list("m3" = loo3,
 We draw inference from model `m4` regarding the effect of treatment on whole blood fatty acid profiles. 
 
 ```{r}
+#| label: m4-labels-infer
+
+
 
 # Labels 
 fa_labels <- data.frame(
@@ -2120,11 +2132,6 @@ contr_text <- draws|>
 
 
 
-
-
-
-
-
 ## For supplementary table 
 # Descriptive data 
 
@@ -2444,7 +2451,7 @@ obs_mean |>
     n3 = md("n-3"), 
     Mu_Placebo = "Placebo", 
     Mu_n3 = "n-3", 
-    pred_Placebo = "Placebo", 
+    contrast = "n-3 vs. placebo"
   ) |> 
   tab_spanner(
     label = md("Observed $\\bar{x}\\text{ }(\\text{SD})$"), 

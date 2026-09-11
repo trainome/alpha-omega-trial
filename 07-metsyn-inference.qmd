@@ -158,8 +158,6 @@ s11 <- cmdstan_model(stan_file = "models/s11.stan",
                       exe_file = "models/s11.exe")
 s12 <- cmdstan_model(stan_file = "models/s12.stan", 
                       exe_file = "models/s12.exe")
-s13 <- cmdstan_model(stan_file = "models/s13.stan", 
-                      exe_file = "models/s13.exe")
 
 
 # Fit model (get posterior distributions)
@@ -169,7 +167,7 @@ fit_wrap(s9, DATA = d, fit = "fit.s9.post")
 fit_wrap(s10, DATA = d, fit = "fit.s10.post")
 fit_wrap(s11, DATA = d, fit = "fit.s11.post")
 fit_wrap(s12, DATA = d, fit = "fit.s12.post")
-fit_wrap(s13, DATA = d, fit = "fit.s13.post")
+
 
 ```
 
@@ -183,7 +181,7 @@ draws.s9 <- fit.s9.post$draws("alpha", format = "df")
 draws.s10 <- fit.s10.post$draws("alpha", format = "df")
 draws.s11 <- fit.s11.post$draws("alpha", format = "df")
 draws.s12 <- fit.s12.post$draws("alpha", format = "df")
-draws.s13 <- fit.s13.post$draws("alpha", format = "df")
+
 
 
 draws <- draws.s12
@@ -193,8 +191,7 @@ ls <- list(s7 = draws.s7,
            s9 = draws.s9,
            s10 = draws.s10, 
            s11 = draws.s11,
-           s12 = draws.s12,
-           s13 = draws.s13)
+           s12 = draws.s12)
 
 infer_treat <- function(draws_list) {
   
@@ -232,10 +229,14 @@ infer_treat <- function(draws_list) {
 infer <- infer_treat(ls)
 
 
-infer$contrasts |> 
+est_mod <- infer$contrasts |> 
    inner_join(labels |> 
                 mutate(type = as.character(type))) |> 
   mutate(model = factor(model, levels = paste0("s", 7:13))) |> 
+  
+  filter(model %in% c("s10", "s12")) |> 
+  
+  
    ggplot(aes(contrast, color = model )) +
   geom_line(stat = "density") + 
    
@@ -252,6 +253,13 @@ infer$contrasts |>
     colscale[2])) 
   
 
+ggsave(
+  filename = "figures/preliminary-figures/subscores.pdf",
+  est_mod, 
+  width = 20, 
+  height = 15, 
+  units = "cm"
+       )
 
   
 
@@ -323,14 +331,21 @@ infer_ncrit <- function(draws, dobs, ndraws = 100) {
           axis.line.x = element_blank(), 
           legend.position = "bottom")
   
+  p
+  
+  
 }
+
+
+p1 <- infer_ncrit(draws = draws, dobs = dobs, ndraws = 100)
+
 
 
 
 draws <- fit.s12.post$draws("diagnosed", format = "df")
 
 
-infer_diagnosed <- function(draws, dobs, ndraws = 500) {
+infer_diagnosed <- function(draws, dobs, ndraws = 1000) {
   
   draws |> 
     filter(.draw %in% sample(1:8000, ndraws)) |> 
@@ -349,6 +364,8 @@ infer_diagnosed <- function(draws, dobs, ndraws = 500) {
         labs(y = "Relative frequency (%)", 
          fill = "Number of \ndiagnostic criteria") +
     
+    alpha_theme() + 
+    
     theme(axis.text.x = element_blank(), 
           axis.ticks.x = element_blank(), 
           axis.title.x = element_blank(), 
@@ -357,6 +374,8 @@ infer_diagnosed <- function(draws, dobs, ndraws = 500) {
   
 }
   
+
+p2 <- infer_diagnosed(draws, dobs, ndraws = 1000)
 
 
 # Using seqwrap to infer diagnosed fraction differences 
@@ -377,7 +396,21 @@ draws <- fit.s12.post$draws("diagnosed", format = "df")
 
 
 
-infer_seqwrap <- function(draws, dobs, ndraws = 1000) {
+infer_seqwrap <- function(draws, dobs, ndraws = 500) {
+  
+  
+  # The variance co-variance eval function
+  # Use this if creating a "joint test" 
+  # We are skipping thuis now
+   vcov_eval <- function(m) {
+    V  <- vcov(m)$cond
+    nm <- rownames(V)
+    data.frame(row   = rep(nm, times = length(nm)),
+               col   = rep(nm, each  = length(nm)),
+               value = as.vector(V))
+  }
+  
+  
   
   # Create meta-data 
   metadata <- dobs |> 
@@ -386,6 +419,7 @@ infer_seqwrap <- function(draws, dobs, ndraws = 1000) {
          time = paste0("time", time)) 
   # Data set 
   dat <- draws |> 
+    slice_sample(n = ndraws) |> 
     # Re-name seq_sample_id
   select(.draw, starts_with("diagnosed")) |> 
   pivot_longer(cols = starts_with("diag")) |> 
@@ -396,43 +430,129 @@ infer_seqwrap <- function(draws, dobs, ndraws = 1000) {
   # Prepare and run seqwrap
   model <- seqwrap_compose(
     modelfun = glmmTMB::glmmTMB, 
-    arguments = list(
+    arguments = alist(
       formula = y ~ time * treat + (1|P), 
-      family = stats::binomial
+      family = stats::binomial, 
+      # This adds weak priors on fixed effects parameters
+      # in each run.
+      priors = data.frame(prior = rep("normal(0,3)", 5), 
+                                   class = rep("fixef", 5), 
+                                   coef = c("timetime2", "timetime3", 
+                                            "treattreat2", 
+                                            "timetime2:treattreat2", 
+                                            "timetime3:treattreat2")
+        )
       ), 
     data = dat, 
+    # eval_fun = vcov_eval,
     samplename = "seq_sample_id",
     metadata = metadata)
   
   results <- seqwrap(model, 
-                       subset = 1:ndraws, 
                        cores = 12)
   
+  # Should return errors also
   sw_sums <- seqwrap_summarise(results)
   
-  return(sums)
+  return(sw_sums)
   
 }
 
 
-s12 <- infer_seqwrap(draws, dobs = dobs, 
+
+
+sw_results12 <- infer_seqwrap(draws, dobs = dobs, 
                      ndraws = 500)
 
 
 
+# Rubin's Rule Pooling 
+# see here for light introduction https://metricgate.com/docs/rubins-rules-pooling/
+# We want to pool variances from each imputed data set - this will give uncertainties
+# that reflect both imputation and sampling uncertainty.
+
+pool_rubin <- function(sums, pattern = "^time\\d+:treat") {
+    sums |>
+      filter(term %in% c("timetime2:treattreat2", 
+                         "timetime3:treattreat2")) |>
+      summarise(.by = term,
+                m    = n(),
+                qbar = mean(estimate),    # This is the pooled estimate
+                ubar = mean(std.error^2), # Within-impute variance
+                b    = var(estimate)) |>  # between-impute variance
+      mutate(
+        # Total variance
+        t = ubar + (1 + 1/m) * b,
+        # "fraction of missing information"
+        lambda = (1 + 1/m) * b / t,
+       # Between impute var relative to within
+        riv  = (1 + 1/m) * b / ubar,
+         # DF calculation
+        df = (m - 1) / lambda^2,
+        se = sqrt(t), # Pooled SE
+       # Confidence intervals (95%) and p-values
+        lwr = qbar - qt(0.975, df) * se,
+        upr = qbar + qt(0.975, df) * se,
+        p = 2 * pt(-abs(qbar / se), df),
+        or = exp(qbar), 
+       or_lwr = exp(lwr), 
+       or_upr = exp(upr))
+  }
 
 
+sums <- sw_results12$summaries
 
 
-sw_sums$summaries |> 
-  filter(grepl("timetime\\d+:", term)) |> 
-  ggplot(aes(estimate)) + geom_line(stat = "density") + 
-  facet_wrap(~ term)
+est <- pool_rubin(sw_results12$summaries)
 
-
+p3 <- est |> 
+  mutate(term = if_else(term == "timetime2:treattreat2", "N-3 - Control, T2", 
+                        "N-3 - Control, T3"), 
+         term = factor(term, levels = c(
+           "N-3 - Control, T3", 
+           "N-3 - Control, T2"))) |> 
+  
+  ggplot(aes(term, qbar)) + 
+  geom_errorbar(aes(ymin = lwr, 
+                    ymax = upr), 
+                width = 0) +
+  geom_point(size = 3) +
+  alpha_theme() + 
+  
+  labs(x = "", 
+       y = "Log-odds differences in diagnostic criteria (&pm; 95% CI)") +
+  
+  geom_hline(yintercept = 0, lty = 2, color = "gray50") +
+  coord_flip() + 
+  theme(axis.title.x = ggtext::element_markdown())
+  
 
 
 
 ```
+
+
+
+
+```{r}
+
+pfull <- cowplot::plot_grid(p1, p2, p3, ncol = 1)
+
+
+
+ggsave(
+  filename = "figures/preliminary-figures/diag-crit.pdf",
+  pfull, 
+  width = 15, 
+  height = 30, 
+  units = "cm"
+       )
+
+
+```
+
+
+
+
 
 

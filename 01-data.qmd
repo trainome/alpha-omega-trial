@@ -10,14 +10,14 @@ editor_options:
 
 ## Data analysis
 
-Descriptive data are presented as mean and standard deviation (SD). For inferential statistics, Bayesian models were constructed using the Stan probabilistic programming language [@stanpaper] and fitted using the `cmdstanr` interface [@cmdstanr] in R [@R]. All sampling from 
-prior and posterior distributions were done using the Hamiltonian Monte Carlo (HMC) no-U-turn sampler ([Stan Reference Manual: MCMC sampling](https://mc-stan.org/docs/reference-manual/mcmc.html)). Performance of the HMC algorithm was assessed through chain convergence statistics (R-hat) and visually inspecting convergence and stationary sampling across multiple HMC chains. A general workflow was adopted where models were incrementally built and tested for validity through simulations. First, implications of prior distributions were evaluated using prior-predictive simulations. Priors were selected to constrain model predictions and parameter values to *a priori* plausible ranges. This approach encourages the use of weakly informative priors on model parameters, which regularize models and shrink estimates and predictions without distorting the data's influence on inference [@lemoine2019;@mcelreath2020;@gelman2014]. In relevant cases, synthetic data were used to confirm that model inferences were not biased by model misspecification. Samples from the joint posterior distribution were used to create posterior predictive checks, in which model implications are simulated and compared with characteristics of the observed data [@gelman2014, pp. 141]. Selected models were also assessed for inferential capabilities using synthetic data simulations where parameter values are known. The sensitivity of model specifications to inference was assessed by comparing predictions across different models.
+Descriptive data are presented as mean and standard deviation (SD). For inferential statistics, Bayesian models were constructed using the Stan probabilistic programming language [@stanpaper] and fitted using the `cmdstanr` interface [@cmdstanr] in R [@R]. All sampling from prior and posterior distributions were done using the Hamiltonian Monte Carlo (HMC) no-U-turn sampler ([Stan Reference Manual: MCMC sampling](https://mc-stan.org/docs/reference-manual/mcmc.html)). Performance of the HMC algorithm was assessed through chain convergence statistics (R-hat) and visually inspecting converging and stationary sampling across multiple HMC chains. A general workflow was adopted where models were incrementally built and tested for validity through simulations. First, implications of prior distributions were evaluated using prior-predictive simulations. Priors were selected to constrain model predictions and parameter values to *a priori* plausible ranges. This approach encourages the use of weakly informative priors on model parameters, which regularize models and shrink estimates and predictions without distorting the data's influence on inference [@lemoine2019;@mcelreath2020;@gelman2014]. In relevant cases, synthetic data were used to confirm that model inferences were not biased by model misspecification. Samples from the joint posterior distribution were used to create posterior predictive checks, in which model implications are simulated and compared with characteristics of the observed data [@gelman2014, pp. 141]. Selected models were also assessed for inferential capabilities using synthetic data simulations where parameter values are known. The sensitivity of model specifications to inference was assessed by comparing predictions across different models.
  
 
 ## Description of the data set and participants
 
 The overall objective of the present analysis is to determine the effect of N-3 supplementation in combination with resistance training on glucose metabolism and indicators of metabolic health. Outcome variables in the analysis are:
 
+- Whole blood fatty acid composition
 - Blood glucose in response to a oral glucose tolerance-test
 - Metabolic syndrome (derived from sub-scores)
    * Triglycerides
@@ -29,7 +29,7 @@ The overall objective of the present analysis is to determine the effect of N-3 
 - Relative fat mass
 - HOMA2-IR
 - Adiponectin
-- Whole blood fatty acid composition
+- LDL Cholesterol
 
 
 ```{r}
@@ -49,8 +49,6 @@ refit.models <- FALSE
 
 ```{r}
 #| label: data-prep-participants
-
-
 
 
 part <- AOData::idkeys  
@@ -174,7 +172,9 @@ baseline_dat |>
 ```
 
 
+<!--
 
+Exclude the flowchart for now
 
 ```{r}
 #| fig-height: 8
@@ -244,6 +244,6 @@ flowchart(
 
 ```
 
-
+-->
 
 

@@ -23,7 +23,7 @@ library(ggh4x)
 
 # Extract relevant model posterior
 fit_wrap(s10, DATA = d, fit = "fit.s10.post", refit = FALSE)
-draws <- fit.s12.post$draws("alpha", format = "df")
+draws <- fit.s10.post$draws("alpha", format = "df")
 
 
 # Create labels and extract standardizers

@@ -7,15 +7,13 @@ This document includes supplementary data and computational details related to t
 
 This notebook is built from source code available at the github repository [trainome/alpha-omega-trial](https://github.com/trainome/alpha-omega-trial/).  
 
-### Chapters
-
-Each chapter contains model definitions and checks for analyses in the project. 
-
 ### R scripts
 
 - `R/fig-opt-fun.R` - Helper functions and settings for data visualisations.
 - `R/helpers.R` - Helper functions for modelling.
 - `R/packages.R` - Loading required packages.
+- `R/data-prep.R` - Prepares data for the Metabolic syndrome analysis.
+- `R/sim-fun.R` - Functions related to simulation studies. 
 
 
 ### Stan models

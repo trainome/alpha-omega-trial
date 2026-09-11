@@ -23,10 +23,11 @@ refit.models <- FALSE # Should fit_wrap refit models.
 ```
 
 
-
 ## Effects of N-3 supplementation on indicies of metabolic syndrome 
 
-Here we aim to model the sub-scores for the metabolic syndrome diagnostic criteria, along with related body composition outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting criteria thresholds for having at least 3 of 5 diagnostic criteria for metabolic syndrome in each treatment group while accounting for uncertainty associated with missing observations. @fig-descriptive-data shows distributions of the variables selected for joint modeling, including variables used to define metabolic syndrome. 
+Here we aim to model the sub-scores for the metabolic syndrome diagnostic criteria, along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting criteria thresholds for metabolic syndrome in each group while accounting for uncertainty associated with missing observations. The metabolic syndrome definition requires a minimum waist circumference and two more threshold values among the set of criteria markers [@alberti2006].
+
+@fig-descriptive-data shows distributions of the variables selected for joint modeling, including variables used to define metabolic syndrome (waist circumference, raised triglycerisdes, reduced HDL-cholesterol, raised blood pressure, raised fasting glucose). 
 
 ```{r}
 #| label: fig-descriptive-data
