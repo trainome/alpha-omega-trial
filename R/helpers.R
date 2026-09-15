@@ -271,10 +271,11 @@ comp_fun <- function(d, s7, s8) {
 # Output structure matches comp_fun (coverage, error_comp, est_error_dist,
 # average_hmc_metrics) so downstream plotting code works unchanged.
 comp_fun2 <- function(d, mods) {
+  K <- ncol(d$true_effects)
   # True treatment differences per time x type
   true_effects <- data.frame(
-    time = as.character(c(rep(1, 8), rep(2, 8))),
-    type = as.character(rep(1:8, 2)),
+    time = as.character(c(rep(1, K), rep(2, K))),
+    type = as.character(rep(1:K, 2)),
     true = c(d$true_effects[1, ], d$true_effects[2, ])
   )
 

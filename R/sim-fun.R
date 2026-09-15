@@ -727,7 +727,7 @@ struct_sim <- function(d, verbose = TRUE) {
     filter(if_all(everything(), complete.cases)) |>
 
     mutate(.by = participant, rows = n()) |>
-    filter(rows == 8) |>
+    filter(rows == length(unique(wide_complete$type))) |>
     mutate(participant = dense_rank(participant))
 
   dl_compl_single <- list(
@@ -756,7 +756,11 @@ struct_sim <- function(d, verbose = TRUE) {
       # Adding placeholders
       y = if_else(is.na(y), -999, y),
       pre = if_else(is.na(T1), -999, T1)
-    )
+    ) |>
+    # Complete-case indicator (same definition as data-prep.R): 1 if the
+    # participant has every outcome and every pre value observed.
+    mutate(.by = participant, n_y = sum(y_miss), n_pre = sum(pre_miss)) |>
+    mutate(cc = if_else(n_y == max(n_y) & n_pre == max(n_pre), 1L, 0L))
 
   dl_itt_single <- list(
     N = nrow(tmp),
@@ -770,6 +774,8 @@ struct_sim <- function(d, verbose = TRUE) {
     pre_obs = tmp$pre,
 
     sex = tmp$sex - 1.5,
+    sex_idx = as.integer(tmp$sex),
+    cc = tmp$cc,
 
     y_miss = tmp$y_miss,
     pre_miss = tmp$pre_miss,
@@ -792,7 +798,12 @@ struct_sim <- function(d, verbose = TRUE) {
       # Adding placeholders
       y = if_else(is.na(y), -999, y),
       pre = if_else(is.na(T1), -999, T1)
-    )
+    ) |>
+    # Complete-case indicator (same definition as data-prep.R): 1 if the
+    # participant has every outcome and every pre value observed. Required
+    # by the `cc` data variable in models s7-s10.
+    mutate(.by = participant, n_y = sum(y_miss), n_pre = sum(pre_miss)) |>
+    mutate(cc = if_else(n_y == max(n_y) & n_pre == max(n_pre), 1L, 0L))
 
   dl_itt <- list(
     N = nrow(tmp),
@@ -806,6 +817,9 @@ struct_sim <- function(d, verbose = TRUE) {
     pre_obs = tmp$pre,
 
     sex = tmp$sex - 1.5,
+    # Sex index (1/2) required by s7 and s9; sex is already dense-ranked.
+    sex_idx = as.integer(tmp$sex),
+    cc = tmp$cc,
 
     y_miss = tmp$y_miss,
     pre_miss = tmp$pre_miss,
@@ -842,10 +856,10 @@ struct_sim <- function(d, verbose = TRUE) {
 # K, number of
 #
 sim_wrap2 <- function(
-  group1 = c(0.4, 0.4, 0, 0, 0, 0, 0, 0),
-  group2 = c(0.4, 0.4, 0, 0, 0, 0, 0, 0),
+  group1 = c(0.4, 0.4, rep(0, K - 2)),
+  group2 = c(0.4, 0.4, rep(0, K - 2)),
   loadings_beta = matrix(c(2, 10, 1, 10, 1, 10), ncol = 2, byrow = TRUE),
-  c_corr = rbeta(8, 5, 10),
+  c_corr = rbeta(K, 5, 10),
   N = 148,
   K = 8
 ) {
@@ -867,8 +881,8 @@ sim_wrap2 <- function(
   # fmt: skip
   betas_pre <- matrix(
     c(rep(0, K), # intercepts
-      runif(8, -0.2, 0.2),  # age
-      runif(8, -0.2, 0.2)  # sex
+      runif(K, -0.2, 0.2),  # age
+      runif(K, -0.2, 0.2)  # sex
     ),
     nrow = 3,
     ncol = K,
@@ -881,14 +895,14 @@ sim_wrap2 <- function(
   # betas matrix are p * K
   # fmt: skip
 
-  beta_pre <- runif(8, 0.7, 0.95)
+  beta_pre <- runif(K, 0.7, 0.95)
 
   betas_t1 <- matrix(
     c(
       rep(0, K), # intercepts
       beta_pre, # pre_k effect
       group1, # group
-      rep(0, 8) # sex
+      rep(0, K) # sex
     ),
     nrow = 4,
     ncol = K,
@@ -900,7 +914,7 @@ sim_wrap2 <- function(
     c(rep(0, K), # intercepts
       beta_pre,  # pre_k effect 
       group2,  # group
-      rep(0, 8)   # sex
+      rep(0, K)   # sex
     ),
     nrow = 4,
     ncol = K,
@@ -918,7 +932,7 @@ sim_wrap2 <- function(
   # Assuming that
 
   Lambda1 <- matrix(
-    rbeta(16, loadings_beta[1, 1], loadings_beta[1, 2]),
+    rbeta(2 * K, loadings_beta[1, 1], loadings_beta[1, 2]),
     ncol = 2,
     byrow = TRUE
   )
@@ -934,13 +948,13 @@ sim_wrap2 <- function(
   S1 <- rep(1, K)
 
   Lambda2a <- matrix(
-    rbeta(32, loadings_beta[2, 1], loadings_beta[2, 2]),
+    rbeta(4 * K, loadings_beta[2, 1], loadings_beta[2, 2]),
     ncol = 4,
     byrow = TRUE
   )
 
   Lambda2b <- matrix(
-    rbeta(32, loadings_beta[3, 1], loadings_beta[3, 2]),
+    rbeta(4 * K, loadings_beta[3, 1], loadings_beta[3, 2]),
     ncol = 4,
     byrow = TRUE
   )
@@ -1015,7 +1029,7 @@ sim_wrap2 <- function(
   out <- list(
     full = d2_full,
     miss = d2_miss,
-    true_effects = matrix(c(group1, group2), ncol = 8, byrow = TRUE)
+    true_effects = matrix(c(group1, group2), ncol = K, byrow = TRUE)
   )
 
   return(out)
@@ -1299,12 +1313,12 @@ sim_type3 <- function(
 # The cross-time correlation C_cross and pre-intervention structure are
 # handled as in sim_wrap2.
 sim_wrap3 <- function(
-  group1 = c(0.4, 0.4, 0, 0, 0, 0, 0, 0),
-  group2 = c(0.4, 0.4, 0, 0, 0, 0, 0, 0),
+  group1 = c(0.4, 0.4, rep(0, K - 2)),
+  group2 = c(0.4, 0.4, rep(0, K - 2)),
   loadings_beta = matrix(c(2, 10, 1, 10, 1, 10), ncol = 2, byrow = TRUE),
-  c_corr = rbeta(8, 5, 10),
-  sigma_base = rep(1, 8),
-  sigma_ratio = c(1.5, 0.6, 1.0, 1.0, 1.3, 0.8, 1.0, 1.0),
+  c_corr = rbeta(K, 5, 10),
+  sigma_base = rep(1, K),
+  sigma_ratio = rep(c(1.5, 0.6, 1.0, 1.0, 1.3, 0.8, 1.0, 1.0), length.out = K),
   N = 148,
   K = 8,
   prop_noise = 0.025,
@@ -1318,23 +1332,23 @@ sim_wrap3 <- function(
   form_pre <- ~ 1 + age + sex
 
   betas_pre <- matrix(
-    c(rep(0, K), runif(8, -0.2, 0.2), runif(8, -0.2, 0.2)),
+    c(rep(0, K), runif(K, -0.2, 0.2), runif(K, -0.2, 0.2)),
     nrow = 3,
     ncol = K,
     byrow = TRUE
   )
 
   form_main <- ~ pre + group + sex
-  beta_pre <- runif(8, 0.7, 0.95)
+  beta_pre <- runif(K, 0.7, 0.95)
 
   betas_t1 <- matrix(
-    c(rep(0, K), beta_pre, group1, rep(0, 8)),
+    c(rep(0, K), beta_pre, group1, rep(0, K)),
     nrow = 4,
     ncol = K,
     byrow = TRUE
   )
   betas_t2 <- matrix(
-    c(rep(0, K), beta_pre, group2, rep(0, 8)),
+    c(rep(0, K), beta_pre, group2, rep(0, K)),
     nrow = 4,
     ncol = K,
     byrow = TRUE
@@ -1348,7 +1362,7 @@ sim_wrap3 <- function(
 
   # Pre-intervention loading structure (identical to sim_wrap2)
   Lambda1 <- matrix(
-    rbeta(16, loadings_beta[1, 1], loadings_beta[1, 2]),
+    rbeta(2 * K, loadings_beta[1, 1], loadings_beta[1, 2]),
     ncol = 2,
     byrow = TRUE
   )
@@ -1358,12 +1372,12 @@ sim_wrap3 <- function(
   S1 <- rep(1, K)
 
   Lambda2a <- matrix(
-    rbeta(32, loadings_beta[2, 1], loadings_beta[2, 2]),
+    rbeta(4 * K, loadings_beta[2, 1], loadings_beta[2, 2]),
     ncol = 4,
     byrow = TRUE
   )
   Lambda2b <- matrix(
-    rbeta(32, loadings_beta[3, 1], loadings_beta[3, 2]),
+    rbeta(4 * K, loadings_beta[3, 1], loadings_beta[3, 2]),
     ncol = 4,
     byrow = TRUE
   )
@@ -1424,7 +1438,7 @@ sim_wrap3 <- function(
   out <- list(
     full = d3_full,
     miss = d3_miss,
-    true_effects = matrix(c(group1, group2), ncol = 8, byrow = TRUE),
+    true_effects = matrix(c(group1, group2), ncol = K, byrow = TRUE),
     true_sigma = S2 # K x 2 matrices per time, for recovery checks
   )
 

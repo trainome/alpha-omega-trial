@@ -20,7 +20,7 @@ source("./R/sim-fun.R")
 
 ```
 
-To compare the multivariate normal model (S8 and S10) to non-pooled alternative (S7 and S9) we will use a more realistic simulation inducing correlations between variables. As an example, we will assume that at baseline, variables 1-3 are mostly influenced by a latent variable capturing aspects of body composition. Variables 4-6 are influenced mostly by a latent variable capturing metabolic health and variables 7 and 8 are mostly unrelated to these two latent variables. Variable 1 is negatively associated with the other variables. Implicated correlations are calculated in code below. 
+To compare the multivariate normal model (S8 and S10) to non-pooled alternative (S7 and S9) we will use a more realistic simulation inducing correlations between variables and a larger data set (k = 11). As an example, we will assume that at baseline, variables 1-3 are mostly influenced by a latent variable capturing aspects of body composition. Variables 4-6 are influenced mostly by a latent variable capturing metabolic health and variables 7 and 8 are mostly unrelated to these two latent variables. Variable 1 is negatively associated with the other variables. Implicated correlations are calculated in code below. 
 
 
 ```{r}
@@ -37,7 +37,10 @@ Lambda <- matrix(
     0.02, 0.35,
     0.03, 0.3, 
     0.01, 0.02, 
-    0.001,0.002 
+    0.001,0.002, 
+    0.01, 0.26, 
+    0.43, 0.01, 
+    0.1, 0.001 
 
     ), 
                  ncol = 2,
@@ -53,7 +56,7 @@ Lambda <- sqrt(Lambda)
 Lambda[1,] <- -Lambda[1,]
 
 
-S <- rep(1, 8)
+S <- rep(1, 11)
 
 Sigma <- build_sigma_factor(Lambda, psi, S)
 
@@ -66,8 +69,8 @@ Sigma <- build_sigma_factor(Lambda, psi, S)
 ```{r}
 #| label: tbl-sigma-sim2
 #| tbl-cap: "Correlations used to simulate data for 8 variable types."
-colnames(Sigma) <-  paste0("k", 1:8)
-rownames(Sigma) <-  paste0("k", 1:8)
+colnames(Sigma) <-  paste0("k", 1:11)
+rownames(Sigma) <-  paste0("k", 1:11)
 
 data.frame(Sigma) |> 
   gt(rownames_to_stub = TRUE) |> 
@@ -90,7 +93,10 @@ Lambda <- matrix(
     0.8,   0.02,  0.01, 0.01,
     0.02,  0.3,   0.01, 0.01,
     0.01,  0.02,  0.3,  0.01,
-    0.001, 0.002, 0.01, 0.02
+    0.05, 0.002, 0.07, 0.067, 
+    0.02, 0.002, 0.06, 0.022,
+    0.008, 0.02, 0.02, 0.04,
+    0.009, 0.001, 0.06, 0.05
 
     ), 
                  ncol = 4,
@@ -106,7 +112,7 @@ Lambda <- sqrt(Lambda)
 Lambda[c(1,4),] <- -Lambda[c(1,4),]
 
 
-S <- rep(1, 8)
+S <- rep(1, 11)
 
 Sigma <- build_sigma_factor(Lambda, psi, S)
 
@@ -116,8 +122,8 @@ Sigma <- build_sigma_factor(Lambda, psi, S)
 ```{r}
 #| label: tbl-sigma-sim2-resid
 #| tbl-cap: "Residual correlations in follow-up used to simulate data for 8 variable types."
-colnames(Sigma) <-  paste0("k", 1:8)
-rownames(Sigma) <-  paste0("k", 1:8)
+colnames(Sigma) <-  paste0("k", 1:11)
+rownames(Sigma) <-  paste0("k", 1:11)
 
 data.frame(Sigma) |> 
   gt(rownames_to_stub = TRUE) |> 
@@ -134,7 +140,7 @@ Simulating the full data set leads to synthetic data patterns presented in @fig-
 set.seed(1)
 
   N <- 148 # Number of participants
-  K <- 8 # number of measurement types
+  K <- 11 # number of measurement types
 
   # The formula for the pre-intervention variables
   form_pre <- ~ 1 +  age + sex
@@ -144,8 +150,8 @@ set.seed(1)
   # fmt: skip
   betas_pre <- matrix(
   c(rep(0, K), # intercepts
-    runif(8, -0.15, 0.15),  # age
-    0, 0, 0, 0.2, 0, -0.2, 0.15, 0.15  # sex
+    runif(11, -0.15, 0.15),  # age
+    0, 0, 0, 0.2, 0, -0.2, 0.15, 0.15, 0, 0, 0.3  # sex
   ),
   nrow = 3,
   ncol = K,
@@ -158,13 +164,13 @@ set.seed(1)
   # betas matrix are p * K
   # fmt: skip
   
-  beta_pre <- runif(8, 0.7, 0.95)
+  beta_pre <- runif(11, 0.7, 0.95)
   
   betas_t1 <- matrix(
   c(rep(0, K), # intercepts
     beta_pre, # pre_k effect 
-    c(0.4, 0, 0, 0, 0.4, 0, 0, 0), # group
-    rep(0, 8)   # sex
+    c(0.4, 0, 0, 0, 0.4, 0, 0, 0, 0, 0.2, 0.6), # group
+    rep(0, 11)   # sex
   ),
   nrow = 4,
   ncol = K,
@@ -175,8 +181,8 @@ set.seed(1)
   betas_t2 <-  matrix(
   c(rep(0, K), # intercepts
     beta_pre,  # pre_k effect 
-    c(0.2, 0.4, 0, 0, 0.4, 0.2, 0, 0),  # group
-    rep(0, 8)   # sex
+    c(0.2, 0.4, 0, 0, 0.4, 0.2, 0, 0, 0, 0.3, 0.7),  # group
+    rep(0, 11)   # sex
   ),
   nrow = 4,
   ncol = K,
@@ -195,7 +201,6 @@ set.seed(1)
   
  
   # Loadings for pre-intervention loading matrix
-  # Assuming that 
   
   Lambda1 <- matrix(
   c(0.7,  0.02,
@@ -205,7 +210,10 @@ set.seed(1)
     0.02, 0.35,
     0.03, 0.3, 
     0.01, 0.02, 
-    0.001,0.002 
+    0.001,0.002 , 
+    0.61, 0.03,
+    0.02, 0.55, 
+    0.001, 0.002
     ), 
                  ncol = 2,
                  byrow = TRUE)
@@ -231,7 +239,10 @@ set.seed(1)
     0.8,   0.02,  0.01, 0.01,
     0.02,  0.3,   0.01, 0.01,
     0.01,  0.02,  0.3,  0.01,
-    0.001, 0.002, 0.01, 0.02
+    0.001, 0.002, 0.01, 0.02, 
+    0.023,  0.5,   0.01, 0.01,
+    0.01,  0.02,  0.23,  0.026,
+    0.009, 0.02, 0.02, 0.07
     ), 
                  ncol = 4,
                  byrow = TRUE)
@@ -244,7 +255,10 @@ set.seed(1)
     0.75,   0.02,  0.01, 0.01,
     0.02,  0.3,   0.01, 0.01,
     0.01,  0.02,  0.34,  0.01,
-    0.001, 0.002, 0.01, 0.02
+    0.001, 0.002, 0.01, 0.02,
+    0.023,  0.78,   0.01, 0.01,
+    0.01,  0.06,  0.34,  0.01,
+    0.004, 0.0021, 0.05, 0.043
     ), 
                  ncol = 4,
                  byrow = TRUE)
@@ -274,7 +288,7 @@ set.seed(1)
   
   
   # Between time-point (residual) correlations within each type (length K)
-  c_cross <- c(0.35, 0.4, 0.3, 0.35, 0.3, 0.35, 0.35, 0.4)
+  c_cross <- c(0.35, 0.4, 0.3, 0.35, 0.3, 0.35, 0.35, 0.4, 0.3, 0.2, 0.1)
 
   # missing_form_t2,  formula specifying the predictor for missing values at t2
   miss_t2 <- ~ 1 + age

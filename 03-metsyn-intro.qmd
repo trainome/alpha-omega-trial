@@ -25,7 +25,7 @@ refit.models <- FALSE # Should fit_wrap refit models.
 
 ## Effects of N-3 supplementation on indicies of metabolic syndrome 
 
-Here we aim to model the sub-scores for the metabolic syndrome diagnostic criteria, along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting criteria thresholds for metabolic syndrome in each group while accounting for uncertainty associated with missing observations. The metabolic syndrome definition requires a minimum waist circumference and two more threshold values among the set of criteria markers [@alberti2006].
+Here we aim to model the sub-scores for the metabolic syndrome diagnostic criteria, along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting criteria thresholds for metabolic syndrome in each group while accounting for uncertainty associated with missing observations. The metabolic syndrome definition requires a minimum waist circumference (central obesity) and two more threshold values among the set of criteria markers [@alberti2006].
 
 @fig-descriptive-data shows distributions of the variables selected for joint modeling, including variables used to define metabolic syndrome (waist circumference, raised triglycerisdes, reduced HDL-cholesterol, raised blood pressure, raised fasting glucose). 
 
@@ -36,8 +36,15 @@ Here we aim to model the sub-scores for the metabolic syndrome diagnostic criter
 #| fig-cap: "Observed data distributions of main outcomes."
 
 d_full <- criteria_dat |> 
-  
-  select(participant, time, treat, sex, age, analyte, value) |> 
+  # The criteria we are using is a two step algorithm. First a participant must 
+  # have central obesity (waist circumference >  threshold) plus at least 2
+  # of the other criteria 
+  # First determine central obesity
+  mutate(.by = c(participant, time),
+         central_obesity = if_else(analyte == "waist" & threshold, 1, 0), 
+         central_obesity = max(central_obesity)) |> 
+
+  select(participant, time, treat, sex, age, analyte, value, central_obesity) |> 
 
   # Add missing values for all missing obs. 
   pivot_wider(names_from = time, 
@@ -53,8 +60,7 @@ d_full <- criteria_dat |>
     pivot_longer(cols = HDL:LDL, 
                values_to = "value",
                names_to = "analyte" ) |> 
-  
-  
+ 
   mutate(value_std = if_else(analyte == "TG", log(value), value)) |> 
   
   mutate(.by = analyte, 
@@ -65,7 +71,6 @@ d_full <- criteria_dat |>
   mutate(participant = paste0("p", participant)) 
 
   
-
 
 ## Descriptive plots
 
@@ -126,14 +131,22 @@ d <- criteria_dat |>
   filter(!(analyte %in% c("sys", "dias"))) |> 
   filter(participant %in% participant_complete_T4) |> 
   bind_rows(bp) |> 
+  # The criteria we are using is a two step algorithm. First a participant must 
+  # have central obesity (waist circumference >  threshold) plus at least 2
+  # of the other criteria 
+  # First determine central obesity
+  mutate(.by = c(participant, time),
+         central_obesity = if_else(analyte == "waist" & threshold, 1, 0), 
+         central_obesity = max(central_obesity)) |> 
+  filter(analyte != "waist") |> 
   
   
   
-  summarise(.by = c(participant, time, treat, sex, age), 
+  summarise(.by = c(participant, time, treat, sex, age, central_obesity), 
             n = n(),
             n_threshold = sum(threshold, na.rm = TRUE) ) |> 
-  
-  mutate(met_syn = if_else(n_threshold >= 3, 1, 0), 
+
+  mutate(met_syn = if_else(central_obesity == 1 & n_threshold >= 2, 1, 0), 
          age = (age - mean(age)) / sd(age)) 
 
 
@@ -199,7 +212,7 @@ d |>
 d |> 
   filter(participant %in% participant_complete_T4) |> 
   
-  filter(n >= 5) |> 
+ # filter(n >= 5) |> 
   
   summarise(.by = c(time, treat), 
             n = n(), 
@@ -243,7 +256,9 @@ d |>
 #| label: tbl-metsyn-scores
 #| tbl-cap: "Components of the metabolic syndrome diagnostic criteria and related measurements used in modelling."
 
-
+  # The criteria we are using is a two step algorithm. First a participant must 
+  # have central obesity (waist circumference >  threshold) plus at least 2
+  # of the other criteria 
 
   # HDL Cholesterol: <40 mg/dL for men, <50 mg/dL for women, or taking medication for it.
   # Fasting Glucose: 100 mg/dL or higher, or taking medication for it.
@@ -253,27 +268,32 @@ d |>
 
 
 data.frame(
-  Subscore = c("HDL Cholesterol", 
+  Subscore = c(
+     "Waist circumference*", 
+    "HDL Cholesterol", 
                "Fasting glucose", 
                "Triglycerides", 
-               "Waist circumference", 
+              
                "Blood pressure", 
                "Relative fat mass", 
                "Body mass index", 
                "Insulin resistance index", 
                "Adiponectin", 
                "LDL Cholesterol"), 
-  Threshold = c("< 40 mg/dL for men, < 50 mg/dL for women", 
+  Threshold = c(
+     "> 102 cm for men, > 88 cm for women", 
+    "< 40 mg/dL for men, < 50 mg/dL for women", 
                 "100 mg/dL or higher (or taking medication)",
                 "150 mg/dL or higher (or taking medication)", 
-                "> 102 cm for men, > 88 cm for women", 
+               
                 "130/85 mm Hg or higher (or taking medication)", 
                 "NA", 
                 "NA", 
                 "NA", 
                 "NA", 
                 "NA")) |> 
-  gt()
+  gt() |> 
+  gt::tab_footnote(footnote = "*, required for metabolic syndrome diagnosis")
 
 
 
@@ -530,7 +550,7 @@ fit_wrap(m1,fit = "fit.m1", DATA = d)
 
 ```
 
-In addition to measurements included in the metabolic syndrome diagnostic criteria (Fasting glucose, waist circumference, HDL, triglycerides, blood pressure), we also included relative fat mass, body mass index, age and insulin resistance index (HOMA2IR) and adiponectin. Prior predictive checks (@fig-dropout-priorpredictive) confirmed that the model expects eleven measurement types in two treatment groups and that the combined priors weakly regularize away from all/non drop-out.
+In addition to measurements included in the metabolic syndrome diagnostic criteria (Fasting glucose, waist circumference, HDL, triglycerides, blood pressure), we also included relative fat mass, body mass index, age and insulin resistance index (HOMA2IR), LDL, and adiponectin. Prior predictive checks (@fig-dropout-priorpredictive) confirmed that the model expects eleven measurement types in two treatment groups and that the combined priors weakly regularize away from all/non drop-out.
 
 
 ```{r}
@@ -556,7 +576,8 @@ draws.m1 |>
   
   mutate(log_odds = alpha2 + beta2_x * x + beta2_tx * TX + beta2_xtx * TX * x, 
          prob = plogis(log_odds)) |> 
-  mutate(Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+  mutate(Treatment = if_else(TX == -0.5, "Placebo", "N-3"), 
+         A = factor(A, levels = seq(1:12))) |> 
   ggplot(aes(prob, color = Treatment)) + 
   geom_line(stat = "density") +
   facet_grid( A ~ x ) +
@@ -1090,6 +1111,7 @@ colnames(out) <- paste0("k", 1:5)
 ```{r}
 #| label: tbl-sigma-out
 #| tbl-cap: "Correlations used to simulate data built using a factor approach."
+
 colnames(Sigma) <-  paste0("k", 1:5)
 rownames(Sigma) <-  paste0("k", 1:5)
 

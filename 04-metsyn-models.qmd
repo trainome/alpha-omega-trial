@@ -19,7 +19,7 @@ source("./R/helpers.R")
 source("./R/sim-fun.R")
 
 # Settings
-refit.models <- FALSE # Should fit_wrap refit models.
+refit.models <- TRUE # Should fit_wrap refit models.
 ```
 
 ```{r}
@@ -242,8 +242,7 @@ refit.models <- FALSE # Should fit_wrap refit models.
 
 ```
 
-
-Models are incrementally developed by incorporating and testing features using prior predictive and posterior predictive checks, using both synthetic and observed data. Model performance (e.g., chain convergence and divergent transitions) is evaluated at relevant steps. The following chapter describes incremental model expansions.
+Models are incrementally developed by incorporating and testing features using prior predictive and posterior predictive checks, using both synthetic and observed data. Model performance (e.g., chain convergence and divergent transitions) is evaluated at relevant steps. The following chapter describes incremental model expansions towards a set of models that will be used to draw inference about the effect of n-3 supplementation on metabolic health.
 
 The first model (model s1, `models/s1.stan`) is an ANCOVA-type model with pre-intervention values as covariates for estimating the post-intervention treatment- and measurement-type-specific means. The model is defined as:
 
@@ -346,11 +345,11 @@ Model S4 (`models/s4.stan`) adds sex as a covariate with the intention to improv
 $$
 \begin{align}
 \mu_{p,\text{type}} &= \alpha_{\text{type,TX}} + \beta_{\text{type}} \times \text{pre}_{p,\text{type}} + \beta_{\text{sex}} \times \text{sex}_p \\
-\beta_{\text{sex}} &\sim \operatorname{Normal}(0, 0.5) \\
+\beta_{\text{type,sex}} &\sim \operatorname{Normal}(0, 0.5) \\
 \end{align}
 $$
 
-The $\text{sex}_p$ variable is created as $\text{male} = -0.5$ and $\text{female} = 0.5$ which gives that the prior for $\beta_{\text{sex}}$ expects that most of the difference between males and females in post-intervention scores is within &pm; 1 SD. 
+The $\text{sex}_p$ variable is created as $\text{male} = -0.5$ and $\text{female} = 0.5$ which gives that the prior for $\beta_{\text{type,sex}}$ expects that most of the difference between males and females in post-intervention scores is within &pm; 1 SD. 
 
 Model S5 (`models/s5.stan`) and S6 (`models/s6.stan`) further extends previous models by including both post-intervention time-points. In model S5 residuals are not correlated between time-points. Instead, separate covariance matrices are built for each time-point. The covariance matrices are therefore
 

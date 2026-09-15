@@ -1,8 +1,9 @@
 # Comparing model performance between simulated data sets (heteroskedastic DGP)
 #
 # Companion to model-comp.R. Fits the same four models (s7, s8, s9, s10)
-# but generates data with sim_wrap3, which uses treatment-specific residual
-# SDs (shared correlation structure). Under this DGP:
+# but generates data with sigma_ratio != 1 in some cells, giving treatment-specific residual
+# SDs (shared correlation structure). Both scripts use sim_wrap3 with the same
+# added observation noise; only sigma_ratio differs. Under this DGP:
 #   - s7, s8 are mis-specified (forced to estimate a shared sigma across
 #     treatments that genuinely differ); coverage of treatment contrasts
 #     should drop below nominal, especially in cells with sigma_ratio != 1.
@@ -18,8 +19,18 @@ source("./R/data-prep.R")
 source("./R/helpers.R")
 source("./R/sim-fun.R")
 
+# Pre-compile once outside future_walk so parallel workers do not race.
+for (m in c("s7", "s8", "s9", "s10")) {
+  cmdstanr::cmdstan_model(
+    stan_file = paste0("models/", m, ".stan"),
+    exe_file = paste0("models/", m, ".exe"),
+    force_recompile = FALSE
+  )
+}
+
 
 sim_comp_wrap2 <- function(i) {
+  k <- 11 # number of measurement types (analytes)
   # Get models
   s7 <- cmdstanr::cmdstan_model(
     exe_file = "models/s7.exe",
@@ -46,15 +57,15 @@ sim_comp_wrap2 <- function(i) {
   for (attempt in seq_len(max_tries)) {
     d <- tryCatch(
       sim_wrap3(
-        group1 = ifelse(runif(8) < 0.3, 0, runif(8, -0.4, 0.4)),
-        group2 = ifelse(runif(8) < 0.3, 0, runif(8, -0.4, 0.4)),
+        group1 = ifelse(runif(k) < 0.3, 0, runif(k, -0.4, 0.4)),
+        group2 = ifelse(runif(k) < 0.3, 0, runif(k, -0.4, 0.4)),
         loadings_beta = matrix(c(2, 10, 1, 10, 1, 10), ncol = 2, byrow = TRUE),
-        c_corr = rbeta(8, 5, 10),
+        c_corr = rbeta(k, 5, 10),
         # Mix of homoskedastic (ratio = 1) and heteroskedastic (ratio != 1)
         # cells so recovery can be tested for both regimes within one sim.
-        sigma_ratio = c(1.5, 0.6, 1.0, 1.0, 1.3, 0.8, 1.0, 1.0),
+        sigma_ratio = c(1.5, 0.6, 1.0, 1.0, 1.3, 0.8, 1.0, 1.0, 1.2, 0.7, 1.0),
         N = 148,
-        K = 8,
+        K = k,
         prop_noise = 0.025,
         sd_noise = 1.5
       ),

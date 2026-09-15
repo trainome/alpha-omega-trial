@@ -1,15 +1,17 @@
-# Comparing model performance between simulated data sets (homoskedastic)
+# Comparing model performance between simulated data sets (homoskedastic DGP)
 #
 # Models s7, s8, s9, s10 are compared against simulated data sets to assess
-# precision, bias, and coverage of treatment contrasts. The DGP here is
-# sim_wrap2, which generates data with a residual SD that is shared across
-# treatment arms within each (type, time) cell. Under this DGP:
+# precision, bias, and coverage of treatment contrasts. Data are generated
+# with sim_wrap3 and sigma_ratio = 1 in every cell, so the residual SD is
+# shared across treatment arms within each (type, time) cell. Under this DGP:
 #   - s7, s8 are correctly specified.
 #   - s9, s10 are over-specified (extra sigma cells that collapse under the
 #     exponential(1) prior).
 #
 # The companion script model-comp2.R tests recovery under a
-# heteroskedastic DGP (sim_wrap3) with the same four models.
+# heteroskedastic DGP (sim_wrap3 with sigma_ratio != 1) with the same four
+# models. Both scripts use the same simulation function and the same added
+# observation noise; only sigma_ratio differs.
 #
 # Output is written to data-sim/. The earlier s7-vs-s8 output has been
 # moved to data-sim-legacy/.
@@ -31,6 +33,7 @@ for (m in c("s7", "s8", "s9", "s10")) {
 
 
 sim_comp_wrap <- function(i) {
+  k <- 11 # number of measurement types (analytes)
   # Get models (compiled executables assumed to exist; pre-compile once
   # outside future_walk to avoid parallel workers racing).
   s7 <- cmdstanr::cmdstan_model(
@@ -52,20 +55,24 @@ sim_comp_wrap <- function(i) {
 
   mods <- list(s7 = s7, s8 = s8, s9 = s9, s10 = s10)
 
-  # Simulate data sets. Attempt up to max_tries; stop if none succeed.
+  # Simulate data sets. Homoskedastic: sigma_ratio = 1 for all types.
+  # Attempt up to max_tries; stop if none succeed.
   max_tries <- 20
   d <- NULL
   for (attempt in seq_len(max_tries)) {
     d <- tryCatch(
-      sim_wrap2(
+      sim_wrap3(
         # Symmetric around 0 with a null spike so coverage is tested
         # for zero, negative, and positive effects.
-        group1 = ifelse(runif(8) < 0.3, 0, runif(8, -0.4, 0.4)),
-        group2 = ifelse(runif(8) < 0.3, 0, runif(8, -0.4, 0.4)),
+        group1 = ifelse(runif(k) < 0.3, 0, runif(k, -0.4, 0.4)),
+        group2 = ifelse(runif(k) < 0.3, 0, runif(k, -0.4, 0.4)),
         loadings_beta = matrix(c(2, 10, 1, 10, 1, 10), ncol = 2, byrow = TRUE),
-        c_corr = rbeta(8, 5, 10),
+        c_corr = rbeta(k, 5, 10),
+        sigma_ratio = rep(1, k),
         N = 148,
-        K = 8
+        K = k,
+        prop_noise = 0.025,
+        sd_noise = 1.5
       ),
       error = function(e) {
         message(sprintf(
