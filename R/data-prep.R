@@ -278,8 +278,31 @@ data_load_s7s10 <- function() {
 
     mutate(
       value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value)
-    ) |>
+    )
 
+  # Scale parameters used for standardisation (and for back-transforming
+  # posteriors to the natural scale). Pooled over all time-points, treatments
+  # and participants (na.rm). TG and HOMA2IR are standardised on the log scale:
+  #   value_std = (f(value) - mean) / sd,  f = log for TG/HOMA2IR, otherwise
+  # identity.
+  # Back-transform: f(value) = mean + sd * value_std; value = exp(.) if log.
+  # A treatment difference on the std scale, delta_std, is sd * delta_std on
+  # the natural (or log) scale; exp(sd * delta_std) is the ratio for TG/HOMA2IR.
+  # type matches the type index used in the Stan data (dense_rank(analyte)).
+  scale_pars <- d_full |>
+    summarise(
+      .by = analyte,
+      mean = mean(value_std, na.rm = TRUE),
+      sd = sd(value_std, na.rm = TRUE)
+    ) |>
+    mutate(
+      type = dense_rank(analyte),
+      transform = if_else(analyte %in% c("TG", "HOMA2IR"), "log", "identity")
+    ) |>
+    select(type, analyte, transform, mean, sd) |>
+    arrange(type)
+
+  d_full <- d_full |>
     mutate(
       .by = analyte,
       value_std = (value_std - mean(value_std, na.rm = TRUE)) /
@@ -358,5 +381,13 @@ data_load_s7s10 <- function() {
     cc = dat$cc
   )
 
-  return(list(d = d, dat = dat))
+  # Treatment index lookup (treat_seq = dense_rank(treat)) for interpretation
+  treat_lookup <- d_full |>
+    distinct(treat) |>
+    mutate(treat_idx = dense_rank(treat)) |>
+    arrange(treat_idx)
+
+  # d: Stan data list; dat: long data; scale: per-type mean/sd for
+  # back-transformation to the natural scale; treat: treatment index lookup.
+  return(list(d = d, dat = dat, scale = scale_pars, treat = treat_lookup))
 }

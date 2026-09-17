@@ -737,14 +737,14 @@ loo_compare(list("s7" = loo.s7,
 
 ### Model expansion: Robust likelihood
 
-As our initial models might suggest that they are "surprised" by specific data point we will consider a heavy-tailed likelihood to allow for inference robust to extreme data. The Student's t-distribution is available both as a uni-variate and the multivariate definitions. Models s11 and s12 are updated from s9 and s10 to the Student-t versions of these model specifications. In model s11, the relevant change is in the definition of the likelihood ($y_i \sim \operatorname{Student-t}(\mu_i, \sigma_i, \nu)$. The $\nu$ parameter is set to 4. In model s12 the likelihood is updated to a multivariate Student's t-distribution $y_i \sim \operatorname{MVT}(\mu_i, \Sigma, \nu)$, also with $\nu$ set to 4.
+As our initial models might suggest that they are "surprised" by specific data point we will consider a heavy-tailed likelihood to allow for inference robust to extreme observations. The Student's t-distribution is available both as a uni-variate and the multivariate definitions. Models s11 and s12 are updated from s9 and s10 to the Student-t versions of these model specifications. In model s11, the relevant change is in the definition of the likelihood ($y_i \sim \operatorname{Student-t}(\mu_i, \sigma_i, \nu)$. The $\nu$ parameter is set to 4. In model s12 the likelihood is updated to a multivariate Student's t-distribution $y_i \sim \operatorname{MVT}(\mu_i, \Sigma, \nu)$, also with $\nu$ set to 4.
 
 
 ```{r}
 
 # Compile and run models if not in cache
-if (!file.exists("fits/paper1/fit.s11.post.RDS")) source("model-scripts/model-s11.R")
-if (!file.exists("fits/paper1/fit.s12.post.RDS")) source("model-scripts/model-s12.R")
+if (!file.exists("fits/paper1/fit.s11.post.RDS")) source("models-scripts/model-s11.R")
+if (!file.exists("fits/paper1/fit.s12.post.RDS")) source("models-scripts/model-s12.R")
 
 fit.s11.post <- readRDS("fits/paper1/fit.s11.post.RDS")
 fit.s12.post <- readRDS("fits/paper1/fit.s12.post.RDS")
@@ -942,6 +942,7 @@ loo.s12 <- readRDS("fits/paper1/loo_s12.RDS")
 
 
 bind_rows(
+  
   loo.s11$pointwise |> 
   data.frame() |> 
   rownames_to_column(var = "id") |> 
@@ -961,13 +962,11 @@ bind_rows(
   geom_point(size = 3, shape = 17) + 
   alpha_theme() +
   scale_color_manual(values = c(colscale[1], colscale[2], colscale[2], colscale[2])) + 
-  scale_shape_manual(values = c(16)) + 
   scale_alpha_manual(values = c(1, 0.3), guide = "none") + 
   geom_hline(yintercept = 0.7, lty = 2) + 
   theme(axis.text.x = element_blank(), 
         axis.ticks.x = element_blank()) + 
   labs(color = "Model",
-       shape = "Model",
        x = "Participant (complete cases)", 
        y = "Pareto k influence")
 ```
@@ -975,21 +974,488 @@ bind_rows(
 
 
 ```{r}
-#| label: tbl-paretok-s11s12
+#| label: tbl-paretok-s8s12
 #| tbl-cap: "Pareto K statistics comparing model s11 and model s12."
 
 
-loo_compare(list("s11" = loo.s11, 
+# Model structures
+
+model_struct <- data.frame(
+  model = c("s8", "s10", "s11", "s12"), 
+  likelihood = c("MVN, full correlation matrix", 
+                 "MVN, full correlation matrix",
+                 "Univariate t-distribution", 
+                 "MVT, full correlation matrix"), 
+  sigma = c("time &times; type", 
+            "time &times; type &times; treat", 
+            "time &times; type &times; treat", 
+            "time &times; type &times; treat"))
+
+
+
+
+
+
+pareto_k_stats <- bind_rows(
+  
+    loo.s8$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s8"),
+  
+    loo.s10$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s10"),
+  
+  
+  loo.s11$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s11"), 
+
+    loo.s12$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s12")
+  )  |> 
+  mutate(pk0.7 = if_else(influence_pareto_k > 0.7, 1, 0), 
+         pk1  = if_else(influence_pareto_k > 1, 1, 0)) |> 
+  summarise(.by = model, 
+            max_pareto_k = max(influence_pareto_k), 
+            n_pk0.7 = sum(pk0.7), 
+            n_pk1 = sum(pk1)) 
+
+
+
+
+loo_compare(list("s8" = loo.s8, 
+                 "s10" = loo.s10,
+                 "s11" = loo.s11, 
                  "s12" = loo.s12)) |> 
     data.frame() |> 
-  rownames_to_column(var = "Model") |> 
-  dplyr::select(Model, elpd_diff, se_diff) |> 
+  rownames_to_column(var = "model") |> 
+  
+  inner_join(pareto_k_stats) |> 
+  inner_join(model_struct) |> 
+  
+  dplyr::select(model, likelihood, sigma, elpd_diff, se_diff, n_pk0.7, n_pk1, max_pareto_k) |> 
   gt() |> 
   cols_label(elpd_diff = 'ELPD diff', 
-             se_diff = "SE") |> 
+             se_diff = "SE", 
+             n_pk0.7 = "Pareto k > 0.7", 
+             n_pk1 = "Pareto k > 1", 
+             max_pareto_k = "Max Pareto K", 
+             likelihood = "Likelihood", 
+             sigma = md("&sigma; structure")) |>
+  fmt_markdown(columns = sigma) |> 
   fmt_auto()
 
 ```
+
+
+As the simple version of the multivariate normal model (s8) performed better than the more heavily parameterized s10, we will add a simplification of the s12 model. s13 uses the multivariate t-distribution but restricts the structure of $\sigma$ to time &times; type. To isolate the contribution of the correlation structure under the t-distributed likelihood, model s18 is the univariate counterpart of s13: a univariate Student-t likelihood with $\nu = 4$ and the same time &times; type structure of $\sigma$, but no correlation among measurement types. s18 thus relates to s13 as s7 relates to s8, and to s11 as s7 relates to s9.
+
+
+```{r}
+#| label: fig-dist-check-s13
+#| fig-cap: "Posterior predictive check model s13"
+#| eval: true
+#| fig-height: 6
+#| fig-width: 6
+
+# Compile and run models if not in cache
+if (!file.exists("fits/paper1/fit.s13.post.RDS")) source("models-scripts/model-s13.R")
+
+fit.s13.post <- readRDS("fits/paper1/fit.s13.post.RDS")
+
+yrep.s13 <- fit.s13.post$draws("y_rep", format = "df")
+
+
+ppcheck_dist(yrep.s13, dobs) + labs(subtitle = "Model s13") + 
+  coord_cartesian(xlim = c(-5,5))
+
+
+```
+
+
+```{r}
+
+stat_check_s13 <- ppcheck_stat(yrep.s13, dobs,
+                              group = c("type", "time", "treat"),
+                         fill_color = "treat",
+                         stat = sd)
+
+
+stat_check_s13$plot_contrast + coord_cartesian(xlim = c(-0.5, 1))
+
+
+```
+
+
+
+```{r}
+#| label: fig-loo-influential-s13
+#| fig-cap: "Posterior predictive check model s13"
+#| eval: true
+#| fig-height: 6
+#| fig-width: 6
+
+loo.s13 <- readRDS("fits/paper1/loo_s13.RDS")
+
+bind_rows(
+  
+  loo.s13$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s13")) |> 
+  
+  mutate(id = gsub("log_lik_part\\[", "", id), 
+         id = gsub("\\]", "", id), 
+         flag = if_else(influence_pareto_k > 0.7, "flag", "noflag")) |> 
+  
+  ggplot(aes(id, influence_pareto_k, color = model,  alpha = flag)) + 
+  geom_point(size = 3, shape = 17) + 
+  alpha_theme() +
+  scale_color_manual(values = c(colscale[1], colscale[2], colscale[2], colscale[2])) + 
+  scale_alpha_manual(values = c(1, 0.3), guide = "none") + 
+  geom_hline(yintercept = 0.7, lty = 2) + 
+  theme(axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank()) + 
+  labs(color = "Model",
+       x = "Participant (complete cases)", 
+       y = "Pareto k influence")
+
+
+```
+
+
+Adding s13 to the model comparison table 
+
+
+```{r}
+#| label: tbl-paretok-s8s13
+#| tbl-cap: "Model structires, Pareto K statistics and ELPD for models s8-s13 ."
+
+
+# Model structures
+
+model_struct <- data.frame(
+  model = c("s8", "s10", "s11", "s12", "s13"), 
+  likelihood = c("MVN, full correlation matrix", 
+                 "MVN, full correlation matrix",
+                 "Univariate t-distribution", 
+                 "MVT, full correlation matrix", 
+                  "MVT, full correlation matrix"), 
+  sigma = c("time &times; type", 
+            "time &times; type &times; treat", 
+            "time &times; type &times; treat", 
+            "time &times; type &times; treat", 
+            "time &times; type"))
+
+
+
+
+
+
+pareto_k_stats <- bind_rows(
+  
+    loo.s8$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s8"),
+  
+    loo.s10$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s10"),
+  
+  
+  loo.s11$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s11"), 
+
+    loo.s12$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s12"), 
+  
+    loo.s13$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s13")
+  
+  
+  )  |> 
+  mutate(pk0.7 = if_else(influence_pareto_k > 0.7, 1, 0), 
+         pk1  = if_else(influence_pareto_k > 1, 1, 0)) |> 
+  summarise(.by = model, 
+            max_pareto_k = max(influence_pareto_k), 
+            n_pk0.7 = sum(pk0.7), 
+            n_pk1 = sum(pk1)) 
+
+
+
+
+loo_compare(list("s8" = loo.s8, 
+                 "s10" = loo.s10,
+                 "s11" = loo.s11, 
+                 "s12" = loo.s12, 
+                 "s13" = loo.s13)) |> 
+    data.frame() |> 
+  rownames_to_column(var = "model") |> 
+  
+  inner_join(pareto_k_stats) |> 
+  inner_join(model_struct) |> 
+  
+  dplyr::select(model, likelihood, sigma, elpd_diff, se_diff, n_pk0.7, n_pk1, max_pareto_k) |> 
+  gt() |> 
+  cols_label(elpd_diff = 'ELPD diff', 
+             se_diff = "SE", 
+             n_pk0.7 = "Pareto k > 0.7", 
+             n_pk1 = "Pareto k > 1", 
+             max_pareto_k = "Max Pareto K", 
+             likelihood = "Likelihood", 
+             sigma = md("&sigma; structure")) |>
+  fmt_markdown(columns = sigma) |> 
+  fmt_auto()
+
+```
+
+
+### Simplification of the correlation structure 
+
+A new set of models simplifies the correlation structure. Instead of estimating the full $M \times M$ correlation matrix with an LKJ prior (as in models s8-s13, where $M = 2K$ is the number of measurement types stacked over the two post-intervention time points), this set of models relates each outcome to a small number of latent variables, following the factor approach used in the simulations (@sec-synth-data). Each measurement type at each time point is given a loading onto $D$ latent factors, collected in a $M \times D$ loading matrix $\Lambda$, together with a vector $\psi$ of length $M$ containing residual (idiosyncratic) standard deviations. Rows $1$ to $K$ of $\Lambda$ hold the loadings for the first post-intervention time point and rows $K+1$ to $M$ the loadings for the second. Because the two blocks of rows are estimated separately, the within-time correlation structures are free to differ between time points, whereas the between-time correlations are restricted to the rank-$D$ product of the two blocks. The implied correlation matrix is obtained by normalising the factor covariance to unit diagonal, and the covariance matrix is then built from the Cholesky factor of this correlation matrix and the residual scales $\sigma$:
+
+$$
+\begin{align}
+\Sigma_\text{raw} &= \Lambda \Lambda^T + \operatorname{diag}(\psi^2) \\
+R &= \operatorname{diag}(\Sigma_\text{raw})^{-1/2} \, \Sigma_\text{raw} \, \operatorname{diag}(\Sigma_\text{raw})^{-1/2} \\
+L_R &= \operatorname{chol}(R) \\
+L_\Sigma &= \operatorname{diag}(\sigma) L_R \\
+\Sigma &= L_\Sigma L_\Sigma^T
+\end{align}
+$$
+
+Since $R$ has unit diagonal, $\sigma$ keeps its interpretation as the marginal residual standard deviation for each time $\times$ type (s16 and s17) or time $\times$ type $\times$ treatment (s14 and s15) combination, exactly as in the models with a full correlation matrix. Only the correlation part is constrained to a low-rank structure. The factor model is not identified with respect to rotations of $\Lambda$, as any orthogonal rotation of the factors leaves $\Lambda \Lambda^T$ unchanged. Following @geweke1996 [p. 565], we therefore fix the upper triangle of $\Lambda$ to zero and constrain its diagonal to be positive, which enables identification of the loading parameters. With $D = 4$ latent factors and $K = 11$ measurement types this gives $DM - D(D+1)/2 = 78$ free lower-triangular loadings, $D = 4$ diagonal loadings and $M = 22$ residual standard deviations, compared to $M(M-1)/2 = 231$ free correlation coefficients in the full correlation matrix. Loadings were given standard normal priors and $\psi$ a log-normal prior centred at 0.6 to keep the residual standard deviations positive and away from zero. The models are otherwise identical to s8 (s16, multivariate normal), s10 (s14, multivariate normal), and their multivariate t-distribution counterparts (s17 and s15, respectively).
+
+```{r}
+#| echo: false
+#| eval: false
+
+# This calculates the number of free parameters in the factor loadings models
+D <- 6
+K <- 11
+M <- 2 * K
+
+D * M - D* (D+1) / 2
+```
+
+Increasing the number of loadings to $D = 6$ gives $DM - D(D+1)/2 = 111$ free parameter and potentially more flexibility. Models s14 to s17 has been run also with $D = 6$ to assess the effect of a larger set of loadings. We include this run in the full comparison table below. Additionaly, for comparison, a univariate t-distribution model is added with the time &times; type structure for the residual variance. Together the full comparison suggest that model s13 (MVT with time &times; type variance structure) has the best predictive accuracy. A small number of participants have Pareto k values larger than 0.7, but none larger than 1 (@tbl-full-model-comp). The multivariate models have better estimated predictive accuracy compared to the univariate counterparts and the robust versions (*t*-distributions) perform better than the normal likelihoods. Finally, the simplified variance structure generally performs better than the more complex structure. Together this suggest that the candidate model s13 is preffered for inference. We will use it together with the univariate version in subseqent steps.   
+
+
+```{r}
+#| label: tbl-full-model-comp
+#| tbl-cap: "Model definitions, variance structures, ELPD and Pareto K estimates from models s8-s18"
+
+if (!file.exists("fits/paper1/fit.s14.post.RDS")) source("models-scripts/model-s14.R")
+if (!file.exists("fits/paper1/fit.s15.post.RDS")) source("models-scripts/model-s15.R")
+if (!file.exists("fits/paper1/fit.s16.post.RDS")) source("models-scripts/model-s16.R")
+if (!file.exists("fits/paper1/fit.s17.post.RDS")) source("models-scripts/model-s17.R")
+if (!file.exists("fits/paper1/fit.s18.post.RDS")) source("models-scripts/model-s18.R")
+
+
+
+loo.s9 <- readRDS("fits/paper1/loo_s9.RDS")
+loo.s18 <- readRDS("fits/paper1/loo_s18.RDS")
+
+loo.s14 <- readRDS("fits/paper1/loo_s14.RDS")
+loo.s15 <- readRDS("fits/paper1/loo_s15.RDS")
+loo.s16 <- readRDS("fits/paper1/loo_s16.RDS")
+loo.s17 <- readRDS("fits/paper1/loo_s17.RDS")
+
+
+loo.s14d6 <- readRDS("fits/paper1/loo_s14_D6.RDS")
+loo.s15d6 <- readRDS("fits/paper1/loo_s15_D6.RDS")
+loo.s16d6 <- readRDS("fits/paper1/loo_s16_D6.RDS")
+loo.s17d6 <- readRDS("fits/paper1/loo_s17_D6.RDS")
+
+
+
+# Model structures
+
+model_struct <- data.frame(
+  model = c("s8", "s9", "s10", "s11", "s12", "s13", "s18", "s14", "s15", "s16", "s17", "s14-D6", "s15-D6", "s16-D6", "s17-D6"), 
+  likelihood = c("MVN, full correlation matrix", 
+                 "Univariate normal", 
+                 "MVN, full correlation matrix",
+                 "Univariate t-distribution", 
+                 "MVT, full correlation matrix", 
+                 "MVT, full correlation matrix", 
+                 "Univariate t-distribution", 
+                 "MVN, 4 latent factors", 
+                 "MVT, 4 latent factors", 
+                 "MVN, 4 latent factors",
+                 "MVT, 4 latent factors", 
+                 "MVN, 6 latent factors", 
+                 "MVT, 6 latent factors", 
+                 "MVN, 6 latent factors",
+                 "MVT, 6 latent factors"), 
+  sigma = c("time &times; type", 
+            "time &times; type &times; treat",
+            "time &times; type &times; treat", 
+            "time &times; type &times; treat", 
+            "time &times; type &times; treat", 
+            "time &times; type", 
+            "time &times; type", 
+            "time &times; type &times; treat",
+            "time &times; type &times; treat",
+            "time &times; type", 
+            "time &times; type",
+            "time &times; type &times; treat",
+            "time &times; type &times; treat",
+            "time &times; type", 
+            "time &times; type"))
+
+
+
+
+
+
+pareto_k_stats <- bind_rows(
+  
+    loo.s8$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s8"),
+  
+      loo.s9$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s9"),
+
+  
+      loo.s18$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s18"),
+  
+    loo.s10$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s10"),
+  
+  
+  loo.s11$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s11"), 
+
+    loo.s12$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s12"), 
+  
+    loo.s13$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s13"), 
+  
+      loo.s14$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s14"),
+  
+      loo.s15$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s15"),
+  
+      loo.s16$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s16"), 
+  
+      loo.s17$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s17"), 
+  
+        loo.s14d6$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s14-D6"),
+  
+      loo.s15d6$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s15-D6"),
+  
+      loo.s16d6$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s16-D6"), 
+  
+      loo.s17d6$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s17-D6")
+  
+  
+  
+  )  |> 
+  mutate(pk0.7 = if_else(influence_pareto_k > 0.7, 1, 0), 
+         pk1  = if_else(influence_pareto_k > 1, 1, 0)) |> 
+  summarise(.by = model, 
+            max_pareto_k = max(influence_pareto_k), 
+            n_pk0.7 = sum(pk0.7), 
+            n_pk1 = sum(pk1)) 
+
+
+
+
+loo_compare(list("s8" = loo.s8, 
+                 "s9" = loo.s9,
+                 "s10" = loo.s10,
+                 "s11" = loo.s11, 
+                 "s12" = loo.s12, 
+                 "s13" = loo.s13, 
+                 "s18" = loo.s18, 
+                 "s14" = loo.s14, 
+                 "s15" = loo.s15, 
+                 "s16" = loo.s16, 
+                 "s17" = loo.s17,
+                 "s14-D6" = loo.s14d6, 
+                 "s15-D6" = loo.s15d6, 
+                 "s16-D6" = loo.s16d6, 
+                 "s17-D6" = loo.s17d6)) |> 
+    data.frame() |> 
+  rownames_to_column(var = "model") |> 
+  
+  inner_join(pareto_k_stats) |> 
+  inner_join(model_struct) |> 
+  
+  dplyr::select(model, likelihood, sigma, elpd_diff, se_diff, n_pk0.7, n_pk1, max_pareto_k) |> 
+  gt() |> 
+  cols_label(elpd_diff = 'ELPD diff', 
+             se_diff = "SE", 
+             n_pk0.7 = "Pareto k > 0.7", 
+             n_pk1 = "Pareto k > 1", 
+             max_pareto_k = "Max Pareto K", 
+             likelihood = "Likelihood", 
+             sigma = md("&sigma; structure")) |>
+  fmt_markdown(columns = sigma) |> 
+  fmt_auto()
+
+
+```
+
+
+
+
+
+
 
 
 
@@ -1026,6 +1492,7 @@ nu.s13 <- fit.s13.post$draws("nu", format = "df")
 ```
 
 
+### Simplification of the correlation structure 
 
 
 
@@ -1054,163 +1521,6 @@ nu.s13 <- fit.s13.post$draws("nu", format = "df")
 
 
 
-### Archive
 
 
 
-```{r}
-#| eval: false
-#| label: fig-ppcheck-s8-sd
-#| fig-cap: "Posterior predictive check of model s8. The distributions of standard deviations calculated from y^rep^"
-#| fig-height: 8
-#| fig-width: 8
-
-# New number of draws
-ndraws <- 1000
-
-sumstat <- dobs |> 
-    summarise(.by = c(type, time, treat),
-            s = sd(y)) 
-
-# Statistics vs observed
-
-yrep.s8 |> 
-  filter(.iteration %in% 1:ndraws) |> 
-  pivot_longer(starts_with("y_rep")) |> 
-  mutate(
-    type = rep(d$type, ndraws * 4), 
-    sex = rep(d$sex, ndraws * 4),
-    treat = rep(d$treat, ndraws * 4),
-    time = rep(d$time, ndraws * 4)
-  ) |> 
-  summarise(.by = c(.iteration, type, time, treat),
-            s = sd(value)) |> 
-  ggplot(aes(s)) + geom_histogram() + 
-  facet_grid(type ~ time + treat, 
-             labeller = label_both) + 
-  alpha_theme(yaxis = FALSE) + 
-  
-  geom_vline(data = sumstat, 
-             aes(xintercept = s, color = as.factor(treat))) + 
-  scale_color_manual(values = colscale) + 
-  labs(x = "Standard deviation", 
-       color = "Treatment") + 
-  theme(axis.title.y = element_blank())
-
-
-```
-
-Similarly to posterior predictive checks of the standard deviations, comparing percentiles (5% and 95%) between y^rep^ and observed data indicate that the observed data overlap with posterior distributions in most cases. Again, however, some measurements types (e.g., type 7) indicate imabalønce between treatments. 
-
-
-```{r}
-#| eval: false
-#| label: fig-ppcheck-s7-quantiles
-#| fig-cap: "Posterior predictive check of model s7. The distributions of percentiles (5 and 95%) calculated from y^rep^"
-#| fig-height: 8
-#| fig-width: 8
-
-# New number of draws
-ndraws <- 1000
-
-sumstat <- dobs |> 
-    summarise(.by = c(type, time, treat),
-            q5 = quantile(y, 0.05), 
-            q95 = quantile(y, 0.95))  |> 
-  pivot_longer(names_to = "stat", 
-               values_to = "value", 
-               cols = q5:q95) 
-
-# Statistics vs observed
-
-yrep.s7 |> 
-  filter(.iteration %in% 1:ndraws) |> 
-  pivot_longer(starts_with("y_rep")) |> 
-  mutate(
-    type = rep(d$type, ndraws * 4), 
-    sex = rep(d$sex, ndraws * 4),
-    treat = rep(d$treat, ndraws * 4),
-    time = rep(d$time, ndraws * 4)
-  ) |> 
-  summarise(.by = c(.iteration, type, time, treat),
-            q5 = quantile(value, 0.05), 
-            q95 = quantile(value, 0.95)) |> 
-    pivot_longer(names_to = "stat", 
-               values_to = "value", 
-               cols = q5:q95) |> 
-  
-  ggplot(aes(value, fill = stat)) + geom_histogram() + 
-  facet_grid(type ~ time + treat, 
-             labeller = label_both) + 
-  alpha_theme(yaxis = FALSE) + 
-  
-  geom_vline(data = sumstat, 
-             aes(xintercept = value, color = stat)) + 
-  scale_color_manual(values = colscale) + 
-  scale_fill_manual(values = colscale) + 
-  labs(x = "Quantiles (5% and 95%)", 
-       color = "", 
-       fill = "") + 
-  theme(axis.title.y = element_blank())
-
-
-```
-
-
-
-```{r}
-#| eval: false
-#| label: fig-ppcheck-s8-quantiles
-#| fig-cap: "Posterior predictive check of model s8. The distributions of percentiles (5 and 95%) calculated from y^rep^"
-#| fig-height: 8
-#| fig-width: 8
-
-# New number of draws
-ndraws <- 1000
-
-sumstat <- dobs |> 
-    summarise(.by = c(type, time, treat),
-            q5 = quantile(y, 0.05), 
-            q95 = quantile(y, 0.95))  |> 
-  pivot_longer(names_to = "stat", 
-               values_to = "value", 
-               cols = q5:q95) 
-
-# Statistics vs observed
-
-yrep.s8 |> 
-  filter(.iteration %in% 1:ndraws) |> 
-  pivot_longer(starts_with("y_rep")) |> 
-  mutate(
-    type = rep(d$type, ndraws * 4), 
-    sex = rep(d$sex, ndraws * 4),
-    treat = rep(d$treat, ndraws * 4),
-    time = rep(d$time, ndraws * 4)
-  ) |> 
-  summarise(.by = c(.iteration, type, time, treat),
-            q5 = quantile(value, 0.05), 
-            q95 = quantile(value, 0.95)) |> 
-    pivot_longer(names_to = "stat", 
-               values_to = "value", 
-               cols = q5:q95) |> 
-  
-  ggplot(aes(value, fill = stat)) + geom_histogram() + 
-  facet_grid(type ~ time + treat, 
-             labeller = label_both) + 
-  alpha_theme(yaxis = FALSE) + 
-  
-  geom_vline(data = sumstat, 
-             aes(xintercept = value, color = stat)) + 
-  scale_color_manual(values = colscale) + 
-  scale_fill_manual(values = colscale) + 
-  labs(x = "Quantiles (5% and 95%)", 
-       color = "", 
-       fill = "") + 
-  theme(axis.title.y = element_blank())
-
-
-```
-
-
-
-Together, the posterior predictive check indicate that, for some cases of measurement types, the model implied variation among replicated data do not overlap with the observed data. As both models S7 and S8 assumes equal variation between treatments a natural extension of both models is to add treatment-specific variation. Models S9 and S10 incorporates this addition. 

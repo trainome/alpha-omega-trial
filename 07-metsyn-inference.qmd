@@ -23,177 +23,220 @@ refit.models <- FALSE
 ```
 
 
-
-```{r}
-#| eval: true
-#| label: data-prep-obs-fit
+Here we proceed by drawing inference regarding the effect of n-3 supplementation on metabolic health markers. 
 
 
-d_full <- criteria_dat |> 
-  select(participant, time, treat, sex, age, analyte, value) |>
-  # Add missing values for all missing obs. 
-  pivot_wider(names_from = time, 
-              values_from = value) |> 
-
-  pivot_longer(cols = c(T1, T2, T4), 
-               values_to = "value",
-               names_to = "time" ) |> 
-  
-  pivot_wider(names_from = analyte, 
-              values_from = value) |> 
-
-    pivot_longer(cols = HDL:HOMA2IR, 
-               values_to = "value",
-               names_to = "analyte" ) |> 
-  
-  mutate(value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value)) |> 
-  
-
-  
-  mutate(.by = analyte, 
-         value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE)) |> 
-
-  mutate(participant = paste0("p", participant)) 
-
-
-
-```
 
 
 ```{r}
 
 
-# Create a data sets for labelling types
-labels <- d_full |> 
-  distinct(analyte) |> 
-  mutate(type = dense_rank(analyte), 
-         label = case_when(
+dat <- data_load_s7s10()
+
+
+# Create a data set for labelling types. Built from the scale slot returned
+# by data_load_s7s10() so that the type index matches the Stan data. Units
+# are taken from the AOData package documentation (?bloodvar, ?glucose,
+# ?waist_bp, ?bodycomp); BMI and relative fat mass are derived in
+# data-prep.R from DXA body mass (kg) and height (m).
+labels <- dat$scale |> 
+  select(type, analyte) |> 
+  mutate(label = case_when(
            analyte == "HDL" ~ "High density lipoprotein", 
+           analyte == "LDL" ~ "Low density lipoprotein", 
            analyte == "glucose" ~ "Fasting glucose", 
            analyte == "TG" ~ "Triglycerides", 
            analyte == "waist" ~ "Waist circumference", 
-           analyte == "bp" ~ "Mean arterial blood pressure", 
+           analyte == "sys" ~ "Systolic blood pressure", 
+           analyte == "dias" ~ "Diastolic blood pressure", 
            analyte == "fat.rel" ~ "Relative fat mass", 
-           analyte == "HOMA2IR" ~ "Insulin resistance index", 
+           analyte == "HOMA2IR" ~ "HOMA2-IR", 
            analyte == "bmi" ~ "Body mass index", 
+           analyte == "Adiponectin" ~ "Adiponectin",
            .default = analyte
-           
+         ), 
+         unit = case_when(
+           analyte %in% c("HDL", "LDL", "TG", "glucose") ~ "mmol/L", 
+           analyte %in% c("sys", "dias") ~ "mmHg", 
+           analyte == "waist" ~ "cm", 
+           analyte == "bmi" ~ "kg/m^2", 
+           analyte == "fat.rel" ~ "%", 
+           analyte == "Adiponectin" ~ "mg/L", 
+           analyte == "HOMA2IR" ~ "index (unitless)", 
+           .default = NA_character_
          )) |> 
   arrange(type)
 
 
-# Including all data
-dat <- d_full |> 
-  filter(time %in% c("T1", "T2","T4")) |> 
-  
+# For re-running the models
+d <- dat$d
 
-  mutate(type = dense_rank(analyte), 
-         participant = dense_rank(participant), 
-         treat_seq = dense_rank(treat), 
-         value_std = if_else(is.na(value_std), -999, value_std)) |> 
-
-    select(-value) |> 
-  
-  pivot_wider(names_from = time, 
-              values_from = c(value_std)) |> 
-  
-  pivot_longer(cols = T2:T4, 
-               names_to = "time",
-               values_to = "y_obs") |> 
-  rename(pre_obs = T1) |> 
-  
-
-  
-  mutate(time = if_else(time == "T2", 1, 2), 
-         sex = if_else(sex == "m", -0.5, 0.5), 
-         y_miss = if_else(y_obs == -999, 0, 1), 
-         pre_miss= if_else(pre_obs == -999, 0, 1)) |> 
-
-  select(y_obs, 
-         pre_obs, 
-         y_miss, 
-         pre_miss, 
-         P = participant, 
-         sex,
-         type,
-         type,
-         time,
-         treat = treat_seq) |> 
-
-  arrange(P, time, type) 
-
-
-# Prepare a data list for models s7-s10
-d <- list(
-  N = nrow(dat), 
-  N_P = length(unique(dat$P)),
-  N_TX = length(unique(dat$treat)),
-  K = length(unique(dat$type)),
-  y_obs = dat$y_obs, 
-  pre_obs = dat$pre_obs, 
-  y_miss = dat$y_miss,
-  pre_miss = dat$pre_miss, 
-  type = dat$type, 
-  treat = dat$treat, 
-  P = dat$P, 
-  prior_only = 0,
-  # Adding sex and time to data structure
-  time = dat$time,
-  sex = dat$sex,
-  sex_idx = if_else(dat$sex < 0, 1L, 2L),
-  # Adding nu as a fixed parameter for model s12
-  nu = 4
-)
 
 # Compile relevant models
-s7 <- cmdstan_model(stan_file = "models/s7.stan", 
-                      exe_file = "models/s7.exe")
-s8 <- cmdstan_model(stan_file = "models/s8.stan", 
-                      exe_file = "models/s8.exe")
-s9 <- cmdstan_model(stan_file = "models/s9.stan", 
-                      exe_file = "models/s9.exe")
-s10 <- cmdstan_model(stan_file = "models/s10.stan", 
-                      exe_file = "models/s10.exe")
-s11 <- cmdstan_model(stan_file = "models/s11.stan", 
-                      exe_file = "models/s11.exe")
-s12 <- cmdstan_model(stan_file = "models/s12.stan", 
-                      exe_file = "models/s12.exe")
+s18 <- cmdstan_model(stan_file = "models/s18.stan", 
+                      exe_file = "models/s18.exe")
+
+s13 <- cmdstan_model(stan_file = "models/s13.stan", 
+                      exe_file = "models/s13.exe")
 
 
-# Fit model (get posterior distributions)
-fit_wrap(s7, DATA = d, fit = "fit.s7.post")
-fit_wrap(s8, DATA = d, fit = "fit.s8.post")
-fit_wrap(s9, DATA = d, fit = "fit.s9.post")
-fit_wrap(s10, DATA = d, fit = "fit.s10.post")
-fit_wrap(s11, DATA = d, fit = "fit.s11.post")
-fit_wrap(s12, DATA = d, fit = "fit.s12.post")
+# Fit model (get posterior distributions) 
+fit_wrap(s18, DATA = d, fit = "fit.s18.post")
+fit_wrap(s13, DATA = d, fit = "fit.s13.post")
 
 
 ```
 
-
 ```{r}
+#| label: fig-metsyn-predictions
+#| fig-cap: "Observed group means (open symbols, all available observations; geometric means for triglycerides and HOMA2-IR) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CI) for each outcome on its natural scale. Adjusted means at T2 and T4 are predicted from model s13 (multivariate t) conditional on the overall mean pre-intervention value and averaged over sex. T1, pre-supplementation; T2, pre-training; T4, post-training."
+#| fig-width: 8
+#| fig-height: 9
+
+# Observed data on the natural scale (all available observations)
+obs_dat <- criteria_dat |>
+  select(participant, time, treat, sex, analyte, value) |>
+  filter(!is.na(value)) |>
+  inner_join(labels, by = "analyte") |>
+  inner_join(dat$scale |> select(type, transform), by = "type") |>
+  mutate(treat = factor(treat, levels = c("ctrl", "omega"),
+                        labels = c("Placebo", "N-3")))
+
+# Observed group means. Geometric means for the log-transformed outcomes
+# (TG, HOMA2IR) so that they are comparable with the back-transformed model
+# estimates, arithmetic means otherwise.
+obs_means <- obs_dat |>
+  summarise(.by = c(type, analyte, label, unit, time, treat),
+            Mu = if_else(first(transform) == "log", exp(mean(log(value))), mean(value)),
+            n = n())   |> 
+  mutate(
+     unit = case_when(
+           analyte %in% c("HDL", "LDL", "TG", "glucose") ~ "mmol&times;L<sup>-1</sup>", 
+           analyte %in% c("sys", "dias") ~ "mmHg", 
+           analyte == "waist" ~ "cm", 
+           analyte == "bmi" ~ "kg&times;m<sup>-2</sup>", 
+           analyte == "fat.rel" ~ "%", 
+           analyte == "Adiponectin" ~ "mg&times;L<sup>-1</sup>", 
+           analyte == "HOMA2IR" ~ "index", 
+           .default = NA_character_
+         )) 
+
+# Covariate values for adjusted means
+# Pre-intervention covariate: overall mean of the standardised baseline value
+# per type (the same value for both groups gives adjusted group means). Sex is
+# coded -0.5/0.5, so sex = 0 gives the average over sexes and the beta_sex
+# term (s13) drops out of the linear predictor.
+pre_means <- dat$dat |>
+  filter(pre_miss == 1) |>
+  distinct(P, type, pre_obs) |>
+  summarise(.by = type, pre = mean(pre_obs))
+
+# Model-based adjusted means, back-transformed to the natural scale
+# alpha[time, type, treat] are time-specific intercepts, beta[type, time] the
+# pre-value slopes; mu = alpha + beta * pre on the standardised scale.
+predict_means <- function(fit, model) {
+
+  alpha <- fit$draws("alpha", format = "df") |>
+    select(.draw, starts_with("alpha")) |>
+    pivot_longer(cols = -.draw, values_to = "alpha") |>
+    mutate(name = gsub("alpha\\[|\\]", "", name)) |>
+    separate(name, into = c("time", "type", "treat"), sep = ",", convert = TRUE)
+
+  beta <- fit$draws("beta", format = "df") |>
+    select(.draw, starts_with("beta")) |>
+    pivot_longer(cols = -.draw, values_to = "beta") |>
+    mutate(name = gsub("beta\\[|\\]", "", name)) |>
+    separate(name, into = c("type", "time"), sep = ",", convert = TRUE)
+
+  alpha |>
+    inner_join(beta, by = c(".draw", "time", "type")) |>
+    inner_join(pre_means, by = "type") |>
+    mutate(mu = alpha + beta * pre) |>
+    summarise(.by = c(time, type, treat),
+              Mu = median(mu),
+              lwr95 = quantile(mu, 0.025),
+              upr95 = quantile(mu, 0.975),
+              lwr50 = quantile(mu, 0.25),
+              upr50 = quantile(mu, 0.75)) |>
+    # Back-transform (monotone, so quantiles map directly)
+    inner_join(dat$scale, by = "type") |>
+    mutate(across(c(Mu, lwr95, upr95, lwr50, upr50),
+                  ~ if_else(transform == "log", exp(mean + sd * .x), mean + sd * .x))) |>
+    mutate(time = if_else(time == 1, "T2", "T4"),
+           treat = factor(treat, levels = c(1, 2), labels = c("Placebo", "N-3")),
+           model = model) |>
+    select(model, time, type, analyte, treat, Mu, lwr95, upr95, lwr50, upr50)
+}
+
+pred_means <- bind_rows(
+  predict_means(fit.s13.post, "s13")
+) |>
+  inner_join(labels, by = c("type", "analyte")) 
+
+#  Plot 
+strip_lab <- function(label, unit) paste0(label, " (", unit, ")")
+
+pd <- position_dodge(width = 0.2)
+
+pred_plot_1 <- pred_means |>
+  
+   mutate(
+     unit = case_when(
+           analyte %in% c("HDL", "LDL", "TG", "glucose") ~ "mmol&times;L<sup>-1</sup>", 
+           analyte %in% c("sys", "dias") ~ "mmHg", 
+           analyte == "waist" ~ "cm", 
+           analyte == "bmi" ~ "kg&times;m<sup>-2</sup>", 
+           analyte == "fat.rel" ~ "%", 
+           analyte == "Adiponectin" ~ "mg&times;L<sup>-1</sup>", 
+           analyte == "HOMA2IR" ~ "index", 
+           .default = NA_character_
+         )) |> 
+  
+  
+  
+  mutate(panel = strip_lab(label, unit)) |>
+  ggplot(aes(time, Mu, color = treat, group = interaction(treat, model))) +
+
+  # Observed means at all time-points (descriptive)
+  geom_point(data = obs_means |> mutate(panel = strip_lab(label, unit)),
+             aes(time, Mu, color = treat, group = treat),
+             shape = 1, size = 2.5,
+             position = position_dodge(width = 0.5)) +
+  geom_line(data = obs_means |> mutate(panel = strip_lab(label, unit)),
+            aes(time, Mu, color = treat, group = treat),
+            linetype = "dotted",
+            position = position_dodge(width = 0.5)) +
+
+  # Model-based adjusted means at T2 and T4
+  geom_errorbar(aes(ymin = lwr95, ymax = upr95), width = 0, linewidth = 0.4, position = pd) +
+  geom_errorbar(aes(ymin = lwr50, ymax = upr50), width = 0, linewidth = 1.1, position = pd) +
+  geom_point(aes(fill = treat), size = 2.5, color = "black", position = pd, shape = 21) +
+
+  facet_wrap(~ panel, scales = "free_y", ncol = 1) +
+  scale_color_manual(values = colscale[c(4, 2)]) +
+  scale_fill_manual(values = colscale[c(4, 2)]) +
+  scale_shape_manual(values = c(s18 = 24, s13 = 21)) +
+  alpha_theme() +
+  theme(legend.position = "bottom") +
+  
+  theme(strip.text = ggtext::element_markdown()) +
+  
+  labs(x = "Time-point",
+       y = "Outcome (natural scale)",
+       color = "Treatment", fill = "Treatment")
 
 
-draws.s7 <- fit.s7.post$draws("alpha", format = "df")
-draws.s8 <- fit.s8.post$draws("alpha", format = "df")
-draws.s9 <- fit.s9.post$draws("alpha", format = "df")
-draws.s10 <- fit.s10.post$draws("alpha", format = "df")
-draws.s11 <- fit.s11.post$draws("alpha", format = "df")
-draws.s12 <- fit.s12.post$draws("alpha", format = "df")
+
+## Add the contrats plot 
+draws.s18 <- fit.s18.post$draws("alpha", format = "df")
+draws.s13 <- fit.s13.post$draws("alpha", format = "df")
 
 
 
-draws <- draws.s12
+ls <- list(s18 = draws.s18, 
+           s13 = draws.s13)
 
-ls <- list(s7 = draws.s7, 
-           s8 = draws.s8,
-           s9 = draws.s9,
-           s10 = draws.s10, 
-           s11 = draws.s11,
-           s12 = draws.s12)
-
-infer_treat <- function(draws_list) {
+infer_treat <- function(draws_list, scale = dat$scale) {
   
   models <- names(draws_list)
   
@@ -210,10 +253,23 @@ infer_treat <- function(draws_list) {
     mutate(model = models[i])
   
   
+  # Contrast on the standardised scale (alpha is the intercept at pre = 0 and
+  # sex = 0, and there is no treatment x pre interaction, so omega - ctrl is
+  # the adjusted mean difference at any pre value). Back-transformation uses
+  # the per-type sd from data_load_s7s10()$scale:
+  #   contrast_nat = sd * contrast  -> difference in natural units, or on the
+  #                                   log scale for TG and HOMA2IR
+  #   ratio        = exp(sd * contrast) -> N-3 / placebo ratio (log outcomes
+  #                                   only; NA otherwise)
   contrasts[[i]] <- estimates[[i]] |> 
     pivot_wider(names_from = treat, 
                 values_from = value) |> 
     mutate(contrast = omega - ctrl) |> 
+    mutate(type = as.integer(type)) |> 
+    inner_join(scale |> select(type, analyte, transform, sd), by = "type") |> 
+    mutate(contrast_nat = sd * contrast, 
+           ratio = if_else(transform == "log", exp(contrast_nat), NA_real_)) |> 
+    select(-sd) |> 
     mutate(model = models[i])
     
   }
@@ -225,33 +281,65 @@ infer_treat <- function(draws_list) {
               contrasts = contrasts))
 }
 
-
+# Run the infear routine
 infer <- infer_treat(ls)
 
 
-est_mod <- infer$contrasts |> 
-   inner_join(labels |> 
-                mutate(type = as.character(type))) |> 
-  mutate(model = factor(model, levels = paste0("s", 7:13))) |> 
+contrast_plot <- infer$contrasts |> 
+   inner_join(labels, by = c("type", "analyte")) |> 
+  filter(model == "s13")   |> 
+  mutate(
+     unit = case_when(
+           analyte %in% c("HDL", "LDL", "TG", "glucose") ~ "mmol&times;L<sup>-1</sup>", 
+           analyte %in% c("sys", "dias") ~ "mmHg", 
+           analyte == "waist" ~ "cm", 
+           analyte == "bmi" ~ "kg&times;m<sup>-2</sup>", 
+           analyte == "fat.rel" ~ "%", 
+           analyte == "Adiponectin" ~ "mg&times;L<sup>-1</sup>", 
+           analyte == "HOMA2IR" ~ "index", 
+           .default = NA_character_
+         )) |>
+  mutate(strip.lab = strip_lab(label, unit)) |> 
   
-  filter(model %in% c("s10", "s12")) |> 
-  
-  
-   ggplot(aes(contrast, color = model )) +
+
+   ggplot(aes(contrast_nat, color = time )) +
   geom_line(stat = "density") + 
    
-   facet_wrap(time ~ label, scales = "free") + 
+   facet_wrap( ~ strip.lab, scales = "free", 
+               ncol = 1) + 
   alpha_theme(yaxis = FALSE) +
+  theme(strip.text = ggtext::element_markdown()) +
+  labs(x = "Contrast (N-3 - Placebo)") +
+  
+  
   geom_vline(xintercept = 0) + 
   scale_color_manual(values = c(
-    colscale[2], 
-    colscale[4], 
-    colscale[2], 
-    colscale[4],
-    colscale[4], 
-    colscale[4], 
-    colscale[2])) 
+    colscale[3], 
+    colscale[6])) 
   
+
+
+# Combine plot 
+
+cowplot::plot_grid(pred_plot, contrast_plot, align = "vh")
+
+
+ggsave(
+  filename = "figures/preliminary-figures/subscores-predictions.pdf",
+  pred_plot,
+  width = 20,
+  height = 22,
+  units = "cm"
+)
+
+```
+
+
+```{r}
+
+
+
+
 
 ggsave(
   filename = "figures/preliminary-figures/subscores.pdf",
@@ -273,18 +361,7 @@ ggsave(
 
 ## Extract diagnostic critera
 
-
-draws.s7 <- fit.s7.post$draws("alpha", format = "df")
-draws.s8 <- fit.s8.post$draws("alpha", format = "df")
-draws.s9 <- fit.s9.post$draws("alpha", format = "df")
-draws.s10 <- fit.s10.post$draws("alpha", format = "df")
-draws.s11 <- fit.s11.post$draws("alpha", format = "df")
-draws.s12 <- fit.s12.post$draws("alpha", format = "df")
-
-
-
-
-draws <- fit.s12.post$draws("n_criteria", format = "df")
+draws <- fit.s13.post$draws("n_criteria", format = "df")
 
 
 # Create a data sets with treatment allocations
@@ -342,7 +419,7 @@ p1 <- infer_ncrit(draws = draws, dobs = dobs, ndraws = 100)
 
 
 
-draws <- fit.s12.post$draws("diagnosed", format = "df")
+draws <- fit.s13.post$draws("diagnosed", format = "df")
 
 
 infer_diagnosed <- function(draws, dobs, ndraws = 1000) {
@@ -383,7 +460,11 @@ p2 <- infer_diagnosed(draws, dobs, ndraws = 1000)
 
 library(seqwrap)
 
-draws <- fit.s12.post$draws("diagnosed", format = "df")
+
+draws.s13 <- fit.s13.post$draws("diagnosed", format = "df")
+draws.s18 <- fit.s18.post$draws("diagnosed", format = "df")
+
+
 
 # Create a data sets with treatment allocations
   dobs <- d_full |> 
@@ -461,9 +542,10 @@ infer_seqwrap <- function(draws, dobs, ndraws = 500) {
 
 
 
-sw_results12 <- infer_seqwrap(draws, dobs = dobs, 
+sw_results13 <- infer_seqwrap(draws.s13, dobs = dobs, 
                      ndraws = 500)
-
+sw_results18 <- infer_seqwrap(draws.s18, dobs = dobs, 
+                     ndraws = 500)
 
 
 # Rubin's Rule Pooling 
@@ -471,7 +553,7 @@ sw_results12 <- infer_seqwrap(draws, dobs = dobs,
 # We want to pool variances from each imputed data set - this will give uncertainties
 # that reflect both imputation and sampling uncertainty.
 
-pool_rubin <- function(sums, pattern = "^time\\d+:treat") {
+pool_rubin <- function(sums) {
     sums |>
       filter(term %in% c("timetime2:treattreat2", 
                          "timetime3:treattreat2")) |>
@@ -500,12 +582,14 @@ pool_rubin <- function(sums, pattern = "^time\\d+:treat") {
   }
 
 
-sums <- sw_results12$summaries
+sums13 <- sw_results13$summaries
+sums18 <- sw_results18$summaries
 
 
-est <- pool_rubin(sw_results12$summaries)
+est_13 <- pool_rubin(sw_results13$summaries)
+est_18 <- pool_rubin(sw_results18$summaries)
 
-p3 <- est |> 
+p3 <- est_13 |> 
   mutate(term = if_else(term == "timetime2:treattreat2", "N-3 - Control, T2", 
                         "N-3 - Control, T3"), 
          term = factor(term, levels = c(
@@ -552,7 +636,67 @@ ggsave(
 ```
 
 
+## Model expansion
 
+To assess whether the effect of n-3 supplementation depends on the participants' baseline status, two expansions of model s13 are considered. Both keep the full s13 structure (joint imputation of missing pre- and post-intervention values, the multivariate Student's t-likelihood with $\nu = 4$, the time &times; type residual scales and the LKJ correlation matrix) and change only the linear predictor for the expected post-intervention value. In s13, the expected value for participant $p$, measurement type $k$ and post-intervention time-point $t$ is
 
+$$
+\begin{align}
+\mu_{p,k,t} &= \alpha_{k,t,\text{tx}[p]} + \beta_{k,t}\, x_{p,k} + \beta^{\text{sex}}_{k,t}\, s_p
+\end{align}
+$$
 
+where $x_{p,k}$ is the standardised pre-intervention value (observed or imputed), $s_p \in \{-0.5, 0.5\}$ codes sex, and $\text{tx}[p] \in \{1, 2\}$ indexes placebo and n-3, respectively. The treatment effect is the difference between intercepts, $\alpha_{k,t,2} - \alpha_{k,t,1}$, and does not depend on the baseline value. Let $\omega_p = 1$ for participants in the n-3 group and $\omega_p = 0$ for placebo.
 
+**Model s19: treatment &times; own-baseline interaction.** The pre-intervention slope is allowed to differ between treatment groups,
+
+$$
+\begin{align}
+\mu_{p,k,t} &= \alpha_{k,t,\text{tx}[p]} + \beta_{k,t}\, x_{p,k} + \delta_{k,t}\, \omega_p\, x_{p,k} + \beta^{\text{sex}}_{k,t}\, s_p \\
+\delta_{k,t} &= \tau_\delta\, z_{k,t} \\
+z_{k,t} &\sim \operatorname{Normal}(0, 1) \\
+\tau_\delta &\sim \operatorname{Half-Normal}(0, 0.25)
+\end{align}
+$$
+
+so that the treatment effect for a participant with standardised baseline value $x$ is
+
+$$
+\Delta_{k,t}(x) = \alpha_{k,t,2} - \alpha_{k,t,1} + \delta_{k,t}\, x.
+$$
+
+Since the outcomes are standardised, the baseline mean is close to zero and the intercept difference keeps its interpretation from s13 as the effect at an average baseline value, while $\delta_{k,t}$ is the change in the treatment effect per SD of the baseline value. The $2K = 22$ interaction terms share a common scale $\tau_\delta$ (non-centred parameterisation), which shrinks individual interactions towards zero unless they are jointly supported by the data. A prior scale of 0.25 places most prior mass on interactions smaller than half an SD of the outcome per SD of baseline.
+
+**Model s20: treatment &times; baseline metabolic burden.** Rather than each outcome's own baseline, s20 uses a single moderator shared across outcomes: a continuous baseline metabolic burden score defined as the mean of the sign-aligned standardised baseline values of the five diagnostic criteria,
+
+$$
+\begin{align}
+b_p &= \tfrac{1}{5}\left( -x_{p,\text{HDL}} + x_{p,\text{TG}} + \tfrac{1}{2}\left(x_{p,\text{dias}} + x_{p,\text{sys}}\right) + x_{p,\text{glucose}} + x_{p,\text{waist}} \right) \\
+\tilde{b}_p &= b_p - \tfrac{1}{N_P} \textstyle\sum_{p'} b_{p'}
+\end{align}
+$$
+
+where HDL enters with a negative sign so that higher values of $b_p$ indicate worse metabolic health, and blood pressure contributes as the mean of the diastolic and systolic values. The score is computed inside the model from the partly imputed baseline matrix, so it remains a continuous and differentiable function of the imputed values (in contrast to the number of criteria met, or the baseline diagnosis, which are step functions). The linear predictor becomes
+
+$$
+\begin{align}
+\mu_{p,k,t} &= \alpha_{k,t,\text{tx}[p]} + \beta_{k,t}\, x_{p,k} + \gamma_{k,t}\, \omega_p\, \tilde{b}_p + \beta^{\text{sex}}_{k,t}\, s_p \\
+\gamma_{k,t} &= \tau_\gamma\, z_{k,t} \\
+z_{k,t} &\sim \operatorname{Normal}(0, 1) \\
+\tau_\gamma &\sim \operatorname{Half-Normal}(0, 0.25)
+\end{align}
+$$
+
+with treatment effect $\Delta_{k,t}(\tilde{b}) = \alpha_{k,t,2} - \alpha_{k,t,1} + \gamma_{k,t}\, \tilde{b}$. Centring the burden score on its sample mean keeps the intercept difference interpretable as the effect at average baseline burden.
+
+**Subgroup-averaged treatment effects.** In both models, subgroup contrasts are obtained by marginalising the conditional effect over participants rather than by fitting a dichotomised model. With $D_{p}$ denoting the baseline metabolic syndrome diagnosis derived from the (partly imputed) baseline values using the two-step rule (central obesity and at least two further criteria), the average treatment effects are
+
+$$
+\begin{align}
+\text{ATE}_{k,t} &= \tfrac{1}{N_P} \textstyle\sum_{p} \Delta_{k,t}(m_p) \\
+\text{ATE}^{\text{MetS}}_{k,t} &= \tfrac{1}{\sum_p D_p} \textstyle\sum_{p : D_p = 1} \Delta_{k,t}(m_p) \\
+\text{ATE}^{\text{no MetS}}_{k,t} &= \tfrac{1}{\sum_p (1 - D_p)} \textstyle\sum_{p : D_p = 0} \Delta_{k,t}(m_p)
+\end{align}
+$$
+
+where $m_p$ is the moderator ($x_{p,k}$ in s19 and $\tilde{b}_p$ in s20). These are computed per posterior draw, so uncertainty from imputation, from the baseline diagnosis and from the interaction parameters propagates into the subgroup estimates. All effects are on the standardised scale; multiplying by the pooled SD of type $k$ gives the difference in natural units, or the log-ratio for the log-transformed outcomes (triglycerides and HOMA2-IR).

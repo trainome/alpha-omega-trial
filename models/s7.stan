@@ -165,7 +165,8 @@ model {
 generated quantities {
   vector[N] y_rep;
 
-  // Per-participant, per-time diagnosis: 1 if >= 3 of 5 criteria met
+  // Per-participant, per-time diagnosis: 1 if central obesity (waist)
+  // AND >= 2 of the 4 remaining criteria (HDL, TG, BP, glucose)
   matrix[N_P, 3] diagnosed;
   // Per-participant, per-time count of criteria met (0-5)
   matrix[N_P, 3] n_criteria;
@@ -201,12 +202,13 @@ generated quantities {
       if (sex_p_idx[p] == 1) thresh = threshold_male;
       else                   thresh = threshold_female;
 
-      // diag_idx order: {HDL=2, TG=4, dias=6, glucose=8, sys=9, waist=10}
+      // diag_idx order (d): {HDL=2, TG=5, dias=7, glucose=9, sys=10, waist=11}
       // BP (dias d=3 OR sys d=5) collapses into a single criterion,
       // so the maximum count is 5 (HDL, TG, BP, glucose, waist).
       for (t in 1:3) {
         int count = 0;
         int bp_pass = 0;
+        int waist_pass = 0;
         for (d in 1:6) {
           int k = diag_idx[d];
           real val;
@@ -220,13 +222,17 @@ generated quantities {
 
           if (d == 3 || d == 5) {
             if (pass == 1) bp_pass = 1;
+          } else if (d == 6) {
+            waist_pass = pass;
           } else {
             count += pass;
           }
         }
         count += bp_pass;
-        n_criteria[p, t] = count;
-        diagnosed[p, t] = (count >= 3) ? 1.0 : 0.0;
+        // n_criteria keeps the total count (0-5) incl. waist for reference
+        n_criteria[p, t] = count + waist_pass;
+        // Two-step rule: central obesity required, plus >= 2 of the other 4
+        diagnosed[p, t] = (waist_pass == 1 && count >= 2) ? 1.0 : 0.0;
       }
     }
   }
