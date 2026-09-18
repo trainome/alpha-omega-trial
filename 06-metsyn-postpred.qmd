@@ -339,7 +339,8 @@ ppcheck_dist <- function(yreps, obsdata, label = FALSE) {
             aes(color = sex, group = paste(.draw, sex)),
             alpha = 0.2) + 
   facet_grid(time + treat ~ type, 
-             labeller = label_both) +
+             labeller = label_both, 
+             scales = "free") +
   
   geom_line(data = obsdata, 
             aes(y, group = NULL, color = sex), 
