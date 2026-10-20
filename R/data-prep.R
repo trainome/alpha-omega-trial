@@ -15,6 +15,7 @@
 #   * OGTT
 #   * HOMA2-IR
 #   * Adipondektin
+#   * HbA1c
 #
 # - participant_complete_T2: Vector of participants completed T2
 # - participant_complete_T4: Vector of participants completed T4
@@ -93,6 +94,20 @@ glucose_dat <- AOData::glucose |>
     values_to = "value"
   ) |>
   mutate(threshold = NA)
+
+
+### HbA1c data 
+hba1c_dat <- AOData::bloodvar |>
+  inner_join(
+    AOData::idkeys |>
+      select(participant, sex)
+  ) |>
+  filter(analyte == "HbA1c") |>
+  mutate(threshold = NA) |>
+  select(participant, time, sex, analyte, value, threshold)
+
+
+
 
 
 # Combine all data from metabolic syndrome criteria variables
@@ -194,6 +209,8 @@ criteria_dat <- bind_rows(
   body_comp,
   # Add homa2IR and adipondectin
   glucose_dat,
+  # Add HbA1c
+  hba1c_dat,
   # Add LDL (no threshold)
   AOData::bloodvar |>
     inner_join(
@@ -277,13 +294,13 @@ data_load_s7s10 <- function() {
     pivot_longer(cols = HDL:LDL, values_to = "value", names_to = "analyte") |>
 
     mutate(
-      value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value)
+      value_std = if_else(analyte %in% c("TG", "HOMA2IR", "HbA1c"), log(value), value)
     )
 
   # Scale parameters used for standardisation (and for back-transforming
   # posteriors to the natural scale). Pooled over all time-points, treatments
   # and participants (na.rm). TG and HOMA2IR are standardised on the log scale:
-  #   value_std = (f(value) - mean) / sd,  f = log for TG/HOMA2IR, otherwise
+  #   value_std = (f(value) - mean) / sd,  f = log for TG/HOMA2IR/HbA1c, otherwise
   # identity.
   # Back-transform: f(value) = mean + sd * value_std; value = exp(.) if log.
   # A treatment difference on the std scale, delta_std, is sd * delta_std on
@@ -297,7 +314,7 @@ data_load_s7s10 <- function() {
     ) |>
     mutate(
       type = dense_rank(analyte),
-      transform = if_else(analyte %in% c("TG", "HOMA2IR"), "log", "identity")
+      transform = if_else(analyte %in% c("TG", "HOMA2IR", "HbA1c"), "log", "identity")
     ) |>
     select(type, analyte, transform, mean, sd) |>
     arrange(type)

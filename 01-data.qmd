@@ -10,26 +10,33 @@ editor_options:
 
 ## Data analysis
 
-Descriptive data are presented as mean and standard deviation (SD). For inferential statistics, Bayesian models were constructed using the Stan probabilistic programming language [@stanpaper] and fitted using the `cmdstanr` interface [@cmdstanr] in R [@R]. All sampling from prior and posterior distributions were done using the Hamiltonian Monte Carlo (HMC) no-U-turn sampler ([Stan Reference Manual: MCMC sampling](https://mc-stan.org/docs/reference-manual/mcmc.html)). Performance of the HMC algorithm was assessed through chain convergence statistics (R-hat) and visually inspecting converging and stationary sampling across multiple HMC chains. A general workflow was adopted where models were incrementally built and tested for validity through simulations. First, implications of prior distributions were evaluated using prior-predictive simulations. Priors were selected to constrain model predictions and parameter values to *a priori* plausible ranges. This approach encourages the use of weakly informative priors on model parameters, which regularize models and shrink estimates and predictions without distorting the data's influence on inference [@lemoine2019;@mcelreath2020;@gelman2014]. In relevant cases, synthetic data were used to confirm that model inferences were not biased by model misspecification. Samples from the joint posterior distribution were used to create posterior predictive checks, in which model implications are simulated and compared with characteristics of the observed data [@gelman2014, pp. 141]. Selected models were also assessed for inferential capabilities using synthetic data simulations where parameter values are known. The sensitivity of model specifications to inference was assessed by comparing predictions across different models.
+For inferential statistics, Bayesian models were constructed using the Stan probabilistic programming language [@stanpaper] and fitted using the `cmdstanr` interface [@cmdstanr] in R [@R]. The choice of a Bayesian modeling framework allow us to naturally handle missing data in a wide class of models. This was important as it enabled us to model data from the project as *intention-to-treat* with the uncertainty associated with missing values incorporated into the posterior estimates.
+
+A general workflow was adopted where models were incrementally built and tested for validity through simulations [@gelman2026]. First, implications of prior distributions were evaluated using prior-predictive simulations. Priors were selected to constrain model predictions and parameter values to *a priori* plausible ranges. This approach encourages the use of weakly informative priors on model parameters, which regularize models and shrink estimates and predictions without distorting the influence of the data on inference [@lemoine2019;@mcelreath2020;@gelman2014]. In relevant cases, synthetic data were used to confirm that model inferences were not biased by model misspecification. Samples from the joint posterior distribution were used to create posterior predictive checks, in which model implications are simulated and compared with characteristics of the observed data [@gelman2014, p. 141]. Selected models were also assessed for inferential capabilities using synthetic data simulations where parameter values are known. The sensitivity of model specifications to inference was assessed by comparing predictions across different models.
+
+All sampling from prior and posterior distributions were done using the Hamiltonian Monte Carlo (HMC) no-U-turn sampler ([Stan Reference Manual: MCMC sampling](https://mc-stan.org/docs/reference-manual/mcmc.html)). Performance of the HMC algorithm was assessed through chain convergence statistics (R-hat) and visually inspecting converging and stationary sampling across multiple HMC chains.
+
+Descriptive data are presented as mean and standard deviation (SD). Inferential statistics are presented as full posterior densities, and percentile intervals (PI), or probability statements derived from full posterior distributions. 
  
 
 ## Description of the data set and participants
 
-The overall objective of the present analysis is to determine the effect of N-3 supplementation in combination with resistance training on glucose metabolism and indicators of metabolic health. Outcome variables in the analysis are:
+The overall objective of the present analysis is to determine the effect of krill oil (sometimes referred to as N-3) supplementation in combination with resistance training on glucose metabolism and indicators of metabolic health. Outcome variables in the analysis are:
 
-- Whole blood fatty acid composition
+- Whole blood fatty acid composition, including omega-3 and omega-6 fatty acids and the omega-3 index
 - Blood glucose in response to a oral glucose tolerance-test
 - Metabolic syndrome (derived from sub-scores)
    * Triglycerides
    * Waist circumference
    * Blood pressure 
    * HDL Cholesterol
-   * Resting glucose
+   * Fasting glucose
 - Body mass index
 - Relative fat mass
 - HOMA2-IR
 - Adiponectin
 - LDL Cholesterol
+- HbA1c
 
 
 ```{r}
@@ -101,15 +108,27 @@ n_total <- baseline_dat |>
   summarise(.by = c(treat, sex), 
             n = n()) 
 
-n_male_omega <- n_total[1,3][[1]]
-n_female_omega <- n_total[3,3][[1]]
-n_male_ctrl <-  n_total[2,3][[1]]
-n_female_ctrl <-  n_total[4,3][[1]]
+n_groups_sex <- n_total |> 
+  with(setNames(n,paste0(treat,sex)))
 
 N <- sum(n_total$n)
 ```
 
-A total of `r N` participants are included in the data analysis. Participants were randomized into two groups, an active treatment-group (N-3 fatty acids, 1 mg day^-1^) and a placebo control group (Placebo; @tbl-participants).
+At enrollment, participants were randomized into two groups, an active treatment-group (krill-oil fatty acids, 1 mg day^-1^) and a placebo control group (Placebo; @fig-figure1, @tbl-participants).
+
+```{r}
+#| fig-cap: "Flow of participants through the trial, presented according to the CONSORT 2025 statement. All randomized participants were included in the analysis of outcomes, with missing follow-up data imputed."
+#| label: fig-figure1
+#| fig-width: !expr 180/25.4
+#| fig-height: !expr 140/25.4
+
+
+figure_01 <- readRDS("figures/figure-01.RDS")
+
+figure_01
+
+
+```
 
 
 
@@ -158,92 +177,37 @@ baseline_dat |>
   fmt_markdown() |> 
   
   cols_label(omega = md(paste0("N-3<br>(&male; n = ", 
-                               n_male_omega, 
+                               n_groups_sex["omegam"], 
                                "; &female; n = ", 
-                               n_female_omega, ")")),
+                               n_groups_sex["omegaf"], ")")),
              ctrl = md(paste0("Placebo<br>(&male; n = ", 
-                              n_male_ctrl, 
+                              n_groups_sex["ctrlm"], 
                               "; &female; n = ",
-                              n_female_ctrl, ")")), 
+                              n_groups_sex["ctrlf"], ")")), 
              sex = "", 
              name = "") |> 
   tab_footnote(footnote = "Data are presnted as Mean (SD) [Min-Max]")
 
 ```
 
-
-<!--
-
-Exclude the flowchart for now
+Participants were given krill oil or placebo in a supplementation-only period followed by a lead-in and combined period (supplementation and resistance training; @fig-figure2)
 
 ```{r}
-#| fig-height: 8
-#| fig-width: 6
-#| fig-cap: "Participant recruitment, allocation and drop-out."
+#| fig-cap: "Study design. After baseline testing (week 0), participants received krill oil (N-3) or placebo for 7 weeks, followed by 13 weeks of supervised resistance training, comprising a 3-week familiarization period (weeks 8–10) and 10 weeks of progressive resistance training (weeks 11–20), with supplementation continued throughout. The measurements listed were taken at each of the three time points: baseline (week 0), after supplementation alone (end of week 7) and after the combined period (end of week 20). The lower panel shows the change in training volume across the 20 training sessions, relative to session 1 and summed across all upper- and lower-body exercises. Line and shaded area show the smoothed trend  with 95% confidence interval. BMI, body mass index; DXA, dual-energy X-ray absorptiometry; HDL, high-density lipoprotein cholesterol; HOMA2-IR, updated homeostasis model assessment of insulin resistance; LDL, low-density lipoprotein cholesterol; N-3, n-3 polyunsaturated fatty acids (krill oil); OGTT, oral glucose tolerance test; TG, triglycerides. "
+#| label: fig-figure2
+#| fig-width: !expr 180/25.4
+#| fig-height: !expr 95/25.4
 
 
-# Shared styling
-main_box_gp <- grid::gpar(fill = adjustcolor(colscale[4], alpha = 0.2), col = colscale[4], lwd = 1.5)
-group_box_gp <- grid::gpar(fill = "white", col = colscale[1], lwd = 1.5)
-excl_box_gp  <- grid::gpar(fill = "white", col = colscale[3], lwd = 1.2)
-drop_box_gp  <- grid::gpar(fill = "white", col = colscale[3], lwd = 1.2)
-main_con_gp  <- grid::gpar(col = colscale[4], lwd = 1.5, fill = colscale[4])
-excl_con_gp  <- grid::gpar(col = colscale[3], lwd = 1.2, fill = colscale[3])
+figure_02 <- readRDS("figures/figure-02.RDS")
 
-grid::grid.newpage()
-flowchart(
-  source = boxGrob(glue::glue("Population Lillehammer municipaly \nn = {pop}", pop = txtInt(16896)),
-                   box_gp = main_box_gp),
-  eligible = boxGrob(glue::glue("Eligible\nn = {pop}", pop = txtInt(10032)),
-                     box_gp = main_box_gp),
-  included = boxGrob(glue::glue("Randomized\nn = {incl}", incl = txtInt(147)),
-                     box_gp = main_box_gp),
-  dropout = boxGrob(glue::glue("Drop-out\nn = {incl}", incl = txtInt(52)),
-                     box_gp = main_box_gp),
-  groups = list(
-    boxGrob(glue::glue("Treatment A\nn = {n}", n = txtInt(43)),        box_gp = group_box_gp),
-    boxGrob(glue::glue("Treatment B\nn = {n}", n = txtInt(122-43-30)), box_gp = group_box_gp)
-  )) |>
-  spread(axis = "y") |>
-  spread(subelement = "groups", axis = "x") |>
-  equalizeWidths(subelement = list("source", "eligible", "included", "dropout")) |>
-  equalizeWidths(subelement = "groups") |>
-  insert(list(excluded = boxHeaderGrob(
-                header = glue::glue("Excluded (n = {tot}):", tot = 30),
-                body   = glue::glue(" - not interested: {n1}\n - contra-indicated: {n2}",
-                              n1 = 12, n2 = 18),
-                bjust      = "left",
-                box_gp     = excl_box_gp,
-                header_gp  = grid::gpar(col = colscale[3], cex = 1))),
-         after = "eligible",
-         name  = "excluded") |>
-  
-    insert(list(dropout = boxHeaderGrob(
-                header = glue::glue("Drop-out (n = {tot}):", tot = 14),
-                body   = glue::glue(" - not interested: {n1}\n - contra-indicated: {n2}",
-                              n1 = 12, n2 = 18),
-                bjust      = "left",
-                box_gp     = drop_box_gp,
-                header_gp  = grid::gpar(col = colscale[3], cex = 1))),
-         after = "included",
-         name  = "dropout") |>
-  
-  
-  move(subelement = "excluded", x = .8) |>
-  move(subelement = "dropout", x = .8) |>
-  connect("eligible", "excluded", type = "L",    lty_gp = excl_con_gp, arrow_size = 3,
-          label = "Excluded") |>
-    connect("included", "dropout", type = "L",    lty_gp = excl_con_gp, arrow_size = 3,
-          label = "Drop-out") |>
-  connect("source",   "eligible", type = "vert", lty_gp = main_con_gp, arrow_size = 3,
-          smooth = TRUE) |>
-  connect("eligible", "included", type = "vert", lty_gp = main_con_gp, arrow_size = 3,
-          smooth = TRUE) |>
-  connect("included", "groups",   type = "N",    lty_gp = main_con_gp, arrow_size = 3,
-          smooth = TRUE)
+figure_02
+
 
 ```
 
--->
+
+
+
 
 

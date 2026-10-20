@@ -242,7 +242,7 @@ refit.models <- TRUE # Should fit_wrap refit models.
 
 ```
 
-Models are incrementally developed by incorporating and testing features using prior predictive and posterior predictive checks, using both synthetic and observed data. Model performance (e.g., chain convergence and divergent transitions) is evaluated at relevant steps. The following chapter describes incremental model expansions towards a set of models that will be used to draw inference about the effect of n-3 supplementation on metabolic health.
+Here models are incrementally developed by incorporating and testing features using prior predictive and posterior predictive checks, using both synthetic and observed data. Model performance (e.g., chain convergence and divergent transitions) is evaluated at relevant steps. The following chapter describes incremental model expansions towards a set of models that will be used to draw inference about the effect of krill oil supplementation on metabolic health.
 
 The first model (model s1, `models/s1.stan`) is an ANCOVA-type model with pre-intervention values as covariates for estimating the post-intervention treatment- and measurement-type-specific means. The model is defined as:
 
@@ -301,26 +301,22 @@ y_{\text{pre},\text{type},p}^{\text{miss}} & \text{if missing}
 y_{\text{pre},\text{type},p}^{\text{miss}} &\sim \operatorname{Normal}(0,2) \\
 \end{align}
 $$
-Where missing values are treated as parameters and given a vague prior (Normal(0,2)) under prior-only sampling to make sampling more efficient. 
+Where missing values are treated as parameters and given a vague prior (Normal(0,2)), this makes sampling under prior-only more efficient.
 
 The main model uses the $y_{\text{pre},p}^{\text{all}}$ as a covariate in the linear predictor. Again, missing values in the outcome are treated as parameters. The prior for missing observation is only included in prior predictive simulations.  
 
+
 $$
 \begin{align}
-\text{Likelihood} \\
 y_{p}^{\text{all}} &\sim \operatorname{MVNormal}(\mu_{p},\Sigma ) \\
-\text{Imputation} \\
 y_{p, \text{type}}^{\text{all}} &=
 \begin{cases} 
 y_{p, \text{type}}^{\text{obs}} & \text{if observed}  \\
 y_{p, \text{type}}^{\text{mis}} & \text{if missing}
 \end{cases} \\
 y_{\text{type},p}^{\text{miss}} &\sim \operatorname{Normal}(0,2) \\
-\text{Using imputed pre in the linear model} \\
 \text{pre}_{p,\text{type}} &= y_{\text{pre},p, \text{type}}^{\text{all}} \\
 \mu_{p,\text{type}} &= \alpha_{\text{type,TX}} + \beta_{\text{type}} \times \text{pre}_{p,\text{type}} \\
-
-\text{Priors and correlation structure} \\
 \alpha_{\text{type,TX}} &\sim \operatorname{Normal}(0,1) \\
 \beta_{\text{type}} &\sim \operatorname{Normal}(1, 0.5) \\
 \Sigma &= \text{S} \times \text{R} \times \text{S} \\
@@ -745,7 +741,7 @@ fits <- paste0("fit.s", 1:7)
 draws <- paste0("draws.s", 1:7)
 plots <- paste0("p", 1:7)
 
-rm(list = c(fits, draws, plots)); gc(verbose = FALSE)
+rm(list = c(fits, draws, plots)); invisible(gc())
 
 ```
 
@@ -1005,7 +1001,7 @@ s7 <- cmdstan_model(stan_file = "models/s7.stan",
 
 The prior predictive checks confirm working and comparable models. A further check of model performance is done using synthetic data. We assess if we can recover simulated effects in the model estimates, we also assess the models effects of the prior on "reversed" effects, i.e. effect of opposite direction in the two groups.
 
-Here, a simulated data set is constructed where we fix the relationship between pre- and post-intervention values ($\beta_{pre} = 0.95$), residual variation is set to 0.2 and effect sizes of treatment effects are set to -0.5 in type 1 and 7, 0.5 in type 2 and 8, and 0 in all other types. The model capture these effects and this preliminary check does not suggest preference for one treatment over the other (@fig-s1-synth).  
+Here, a simulated data set is constructed where we fix the relationship between pre- and post-intervention values ($\beta_{pre} = 0.95$), residual variation is set to 0.2 and effect sizes of treatment effects are set to -0.5 in type 1 and 7, 0.5 in type 2 and 8, and 0 in all other types. The model capture these effects and this preliminary check does not suggest preference for one treatment over the other (@fig-s1-4-postpred-synth).  
 
 
 ```{r}
@@ -1165,7 +1161,7 @@ draws <- paste0("draws.s", 1:7)
 plots <- paste0("p", 1:7)
 
 # Remove and do garbage collection...
-rm(list = c(fits, draws, plots)); gc(verbose = FALSE)
+rm(list = c(fits, draws, plots)); invisible(gc())
 
 
 ```

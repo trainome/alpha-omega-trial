@@ -24,9 +24,9 @@ refit.models <- FALSE
 
 
 
-Fatty acids, including including EPA (C205n3) and DHA (226n3) where measured in whole blood. We will assess the effect of n-3 supplementation on group level fatty acid profiles. As preliminary models indicated heteroscedasticity of residuals, log-transformed and standardized data was used in modelling. This allows for the same weakly regularizing priors for all fatty acids ($\text{FA}$). 
+Fatty acids, including including EPA (C205n3) and DHA (226n3) where measured in red blood cells. We will assess the effect of krill oil (N-3) supplementation on group level fatty acid profiles. As preliminary models indicated heteroscedasticity of residuals, log-transformed and standardized data was used in modelling. This allows for the same weakly regularizing priors for all fatty acids ($\text{FA}$). In addition to each fatty acid, the Omega 3 index [@harris2004] is included in these models as the EPA and DHA content relative to the total fatty acid content of red blood cells. The omega 3 index is included in models from model `m3` (see below).    
 
-The model was designed to estimate differences between treatments ($\text{TX}$) at post-treatment time-points (T2 and T4) using pre-treatment ($\text{Pre}_{i[\text{FA}]}$) values as a covariate. The intercept in the model ($\alpha_{\text{[FA, TI, TX]}}$) gives us mean estimates for fatty-acid $\text{FA}$, time-point $\text{TI}$, and treatment $\text{TX}$.
+The models were designed to estimate differences between treatments ($\text{TX}$) at post-treatment time-points (T2 and T4) using pre-treatment ($\text{Pre}_{i[\text{FA}]}$) values as a covariate. The intercept in the model ($\alpha_{\text{[FA, TI, TX]}}$) gives us mean estimates for fatty-acid $\text{FA}$, time-point $\text{TI}$, and treatment $\text{TX}$.
 
 
 $$
@@ -42,8 +42,8 @@ $$
 
 
 ```{r}
-#| fig-width: 8
-#| fig-height: 10
+#| fig-width: 5
+#| fig-height: 8
 #| fig-cap: "Prior predictive check for target-wise models of post-treatment fatty acid concentrations conditional on pre-treatment values. The model expects log-transformed standardized values and the priors suggest no difference between treatment groups and a proportional relationship between th pre-intervention values and post-intervention measurements."
 #| label: fig-m2-priorpred
 
@@ -161,10 +161,11 @@ draws.m2 |>
           
              group = paste(.iteration, TX))) + 
   geom_line() + 
-  facet_grid(FA ~ TI) + 
+  facet_grid(FA ~ TI, labeller = label_both) + 
   alpha_theme()  + 
-  labs(x = "Pre-intervention score", 
-       y = "Prior predictive y") + 
+  labs(x = "Pre-intervention values (standardized)", 
+       y = "Prior predictive distribution of post-intervention values (std.)", 
+       color = "Treatment") + 
   scale_color_manual(values = colscale)
 
 
@@ -581,9 +582,12 @@ fat_dat_compl <- AOData::omega3  |>
   filter(time %in% c("T1", "T2", "T4"), 
          participant %in% total_participants) |>
   
-  select(participant, time, treat, C16:C226n3) |>
+  # The omega-3 index is modelled as an additional "fatty acid" (FA = 12). FA
+  # parameters are independent in m3-m6, so this is equivalent to a separate
+  # model of the index.
+  select(participant, time, treat, C16:C226n3, omega3index) |>
 
-  pivot_longer(cols =  C16:C226n3, 
+  pivot_longer(cols =  c(C16:C226n3, omega3index), 
                names_to = "fa", 
                values_to = "value")  |> 
   
@@ -603,8 +607,9 @@ fat_dat_compl <- AOData::omega3  |>
          TX = dense_rank(treat)) 
   
   
-# Fatty acid summarise on complete data 
-fat_sum_compl <- fat_dat |> 
+# Fatty acid summarise on complete data (same data as used for 
+# standardisation in fat_dat_compl, includes the omega-3 index)
+fat_sum_compl <- fat_dat_compl |> 
     summarise(.by = c(FA,fa), 
               m = mean(log(value), na.rm = TRUE), 
               s = sd(log(value), na.rm = TRUE))
@@ -748,7 +753,7 @@ draws.m3 |>
              color = TX, 
              group = paste(.iteration, TX))) + 
   geom_line(alpha = 0.4) + 
-  facet_grid(FA ~ TI) + 
+  facet_grid(FA ~ TI, labeller = label_both) + 
   labs(x = "Pre-inteverntion values", 
        y = "Prior predictive distribution of post-intervention values (std.)", 
        color = "Treatment") + 
@@ -858,7 +863,7 @@ Posterior predictive checks indicated that the model capture general patterns in
 ```{r}
 #| fig-width: 6
 #| fig-height: 8
-#| fig-cap: "Posterior predictive check of Model 3."
+#| fig-cap: "Posterior predictive check of Model 3. Thin lines represent model simulations (n = 50), thick lines represent observed data."
 #| echo: false
 #| label: fig-m3-postpred
 #| message: false
@@ -888,14 +893,15 @@ draws.m3 |>
     FA = d$FA[d$y > -900], 
     TI = d$TI[d$y > -900], 
     TX = d$TX[d$y > -900]
-  ) |>  inner_join(fat_sum), 
+  ) |>  inner_join(fat_sum_compl), 
   aes(x = value, group = TX, color = as.factor(TX)), 
   stat = "density", 
   linewidth = 1.2) +
   
-  facet_grid(fa ~ TI) +
+  facet_grid(fa ~ TI, labeller = label_both) +
   
   scale_color_manual(values = colscale) +
+  alpha_theme(text_base_size = 8) +
   
   theme(axis.text.y = element_blank(), 
         axis.ticks.y = element_blank(), 
@@ -915,7 +921,7 @@ The imputation model generally agreed with the complete-case analysis on the eff
 ```{r}
 #| fig-width: 6
 #| fig-height: 7
-#| fig-cap: "Model predictions. Pre-intervention values are observed means, post-treatment (T2, T4) values are model predictions conditional pre-intervention value with 99% percentile intervals."
+#| fig-cap: "Model predictions. Pre-intervention values are observed means, post-treatment (T2, T4) values are model predictions conditional on pre-intervention value with 99% percentile intervals. The omega-3 index is EPA and DHA content of erythrocytes expressed as a percent of total identified fatty acids."
 #| echo: false
 #| label: fig-m3-predictions
 #| message: false
@@ -1025,8 +1031,8 @@ AOData::omega3  |>
   filter(participant %in% fat_dat_compl2$participant)  |> 
 
   filter(time %in% c("T1", "T2", "T4")) |>
-  select(participant, time, treat, C16:C226n3) |>
-  pivot_longer(cols =  C16:C226n3, 
+  select(participant, time, treat, C16:C226n3, omega3index) |>
+  pivot_longer(cols =  C16:omega3index, 
                names_to = "fa", 
                values_to = "value") |>
     mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
@@ -1071,11 +1077,11 @@ AOData::omega3  |>
        x = "Time point", 
        fill = "Treatment", 
        color = "Treatment") + 
-  theme_classic() +
+  alpha_theme() +
   theme(axis.title.y = element_markdown(), 
         strip.background = element_rect(color = "white"),   
         strip.text = element_text(hjust = 0, size = 12), 
-        legend.position = "inside", 
+        legend.position = "bottom", 
         legend.position.inside = c(0.85, 0.1))
 
 ```
@@ -1155,9 +1161,9 @@ draws.m3 |>
     labs(x = "Fold-difference (N-3 vs. Placebo)", 
          y = "Posterior density", 
          fill = "Time-point") +
-    theme_classic() + 
+    alpha_theme() + 
   
-  theme(legend.position = c(0.9, 0.2), 
+  theme(legend.position = "bottom", 
         strip.background = element_blank(), 
         strip.text = element_text(hjust = 0), 
         axis.text.y = element_blank(), 
@@ -1227,11 +1233,11 @@ m3_sum |>
        x = "Time point", 
        fill = "Treatment", 
        linetype = "Model") + 
-  theme_classic() +
+  alpha_theme() +
   theme(axis.title.y = element_markdown(), 
         strip.background = element_rect(color = "white"),   
         strip.text = element_text(hjust = 0, size = 12), 
-        legend.position = "inside", 
+        legend.position = "bottom", 
         legend.position.inside = c(0.85, 0.07), 
         legend.spacing.y = unit(0.1, "cm"))
 
@@ -1374,7 +1380,7 @@ bind_rows(
          y = "Posterior density", 
          color = "Model", 
          linetype = "Model") +
-    theme_classic() + 
+   alpha_theme() + 
   
   
   
@@ -1752,7 +1758,8 @@ fa_labels <- data.frame(
          "C204n6", 
          "C205n3", 
          "C225n3", 
-         "C226n3"), 
+         "C226n3", 
+         "omega3index"), 
   fa_lab = c("Palmitic Acid", 
              "Stearic Acid", 
               "Oleic Acid", 
@@ -1763,9 +1770,11 @@ fa_labels <- data.frame(
              "Arachidonic Acid (n-6)", 
               "Eicosapentaenoic Acid (EPA, n-3)", 
              "Docosapentaenoic Acid (n-3)", 
-             "Docosahexaenoic Acid (DHA, n-3)")) |> 
+             "Docosahexaenoic Acid (DHA, n-3)", 
+             "Omega-3 index (%)")) |> 
   mutate(fa_lab = factor(fa_lab, 
-                         levels = c("Docosahexaenoic Acid (DHA, n-3)", 
+                         levels = c("Omega-3 index (%)", 
+                                    "Docosahexaenoic Acid (DHA, n-3)", 
                                     "Eicosapentaenoic Acid (EPA, n-3)",
                                     "Docosapentaenoic Acid (n-3)", 
                                     "Alpha-linolenic Acid (n-3)",
@@ -1775,7 +1784,13 @@ fa_labels <- data.frame(
                                      "Linoleic Acid (n-6)", 
                                     "Oleic Acid", 
                                     "Stearic Acid", 
-                                    "Palmitic Acid")))
+                                    "Palmitic Acid")), 
+         # Facet labels with units (fatty acids in ug/ml, the index in %), 
+         # ordered as fa_lab
+         fa_lab_unit = if_else(fa == "omega3index", 
+                               as.character(fa_lab), 
+                               paste0(fa_lab, " (\u00b5g/ml)")),
+         fa_lab_unit = fct_reorder(fa_lab_unit, as.integer(fa_lab)))
 
 
 
@@ -1792,9 +1807,9 @@ fa_labels <- data.frame(
 ```{r}
 #| eval: true
 #| label: fig-fa-infer
-#| fig-cap: "Adjusted group means and treatment contrasts of fatty acids concentrations in whole blood. Error bars in treatment-group means represents 95% CrI, posterior contrasts are displayed as the full posterior distribution ratio between N-3 to Placebo estimates at time-point T2 and T4 (1 indicating equivalent concentrations)."
+#| fig-cap: "Adjusted group means and treatment contrasts of fatty acids concentrations and the omega-3 index in whole blood. Error bars in treatment-group means represents 95% CrI, posterior contrasts are displayed as the full posterior distribution ratio between N-3 to Placebo estimates at time-point T2 and T4 (1 indicating equivalent concentrations)."
 #| fig-width: 3.543
-#| fig-height: 9.448
+#| fig-height: 9
 
 
 
@@ -1933,9 +1948,9 @@ p1b <- sumdat |>
   scale_color_manual(values = colscale) +
   scale_fill_manual(values = colscale) +
   
-   facet_wrap(~ fa_lab, ncol = 1, scales = "free_y") +
+   facet_wrap(~ fa_lab_unit, ncol = 1, scales = "free_y") +
   
-  labs(subtitle = "Fatty acid concentration<br>(&mu;g ml<sup>-1</sup>)", 
+  labs(subtitle = "Fatty acid concentration<br>and omega-3 index", 
        x = "Time point", 
        fill = "Treatment", 
        color = "Treatment") + 
@@ -2013,7 +2028,7 @@ p2 <- draws|>
               stat = "density",
               linewidth = 1.1,
               aes(lty = time)) +
-    facet_wrap(~ fa_lab, scales = "free", ncol = 1) +
+    facet_wrap(~ fa_lab_unit, scales = "free", ncol = 1) +
     
   scale_linetype_manual(values = c(6, 1)) +
   
@@ -2277,7 +2292,7 @@ contr <- draws|>
 ```
 
 
-Fish-oil supplementation led to robust increases in Docosahexaenoic (DHA; time-point T2 N-3 vs. Placebo, `r contr_text[contr_text$fa == "C226n3" & contr_text$TI == 1, 7]`; T4, `r contr_text[contr_text$fa == "C226n3" & contr_text$TI == 2, 7]`), Eicosapentaenoic (EPA; T2, `r contr_text[contr_text$fa == "C205n3" & contr_text$TI == 1, 7]`; T4, `r contr_text[contr_text$fa == "C205n3" & contr_text$TI == 2, 7]`), and Docosapentaenoic acid (T2, `r contr_text[contr_text$fa == "C225n3" & contr_text$TI == 1, 7]`; T4, `r contr_text[contr_text$fa == "C225n3" & contr_text$TI == 2, 7]`; @fig-fa-infer, @tbl-infer-fa). At the same time, omega-6 fatty acids were reduced in the N-3 group compared to Placebo at both time-points (Alpha-linolenic acid T2, `r contr_text[contr_text$fa == "C183n6" & contr_text$TI == 1, 7]`; Alpha-linolenic acid T4, `r contr_text[contr_text$fa == "C183n6" & contr_text$TI == 2, 7]`; Arachidonic acid T2, `r contr_text[contr_text$fa == "C204n6" & contr_text$TI == 1, 7]`; Arachidonic acid T4, `r contr_text[contr_text$fa == "C204n6" & contr_text$TI == 2, 7]`; Dihomo-gamma-linolenic acid T2, `r contr_text[contr_text$fa == "C203n6" & contr_text$TI == 1, 7]`; Dihomo-gamma-linolenic acid T4, `r contr_text[contr_text$fa == "C203n6" & contr_text$TI == 2, 7]`; @fig-fa-infer, @tbl-infer-fa). While gamma-linolenic, linoleic, steraic and palmitic acids remained stable unchanged in N-3 compared to Placebo (@fig-fa-infer, @tbl-infer-fa), Oleic acid was reduced in N-3 compared to control at T2 (`r contr_text[contr_text$fa == "C181c9" & contr_text$TI == 1, 7]`) but not at T4 (`r contr_text[contr_text$fa == "C181c9" & contr_text$TI == 2, 7]`).  
+Fish-oil supplementation led to robust increases in Docosahexaenoic (DHA; time-point T2 N-3 vs. Placebo, `r contr_text$stat[contr_text$fa == "C226n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C226n3" & contr_text$TI == 2]`), Eicosapentaenoic (EPA; T2, `r contr_text$stat[contr_text$fa == "C205n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C205n3" & contr_text$TI == 2]`), and Docosapentaenoic acid (T2, `r contr_text$stat[contr_text$fa == "C225n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C225n3" & contr_text$TI == 2]`; @fig-fa-infer, @tbl-infer-fa). At the same time, omega-6 fatty acids were reduced in the N-3 group compared to Placebo at both time-points (Alpha-linolenic acid T2, `r contr_text$stat[contr_text$fa == "C183n6" & contr_text$TI == 1]`; Alpha-linolenic acid T4, `r contr_text$stat[contr_text$fa == "C183n6" & contr_text$TI == 2]`; Arachidonic acid T2, `r contr_text$stat[contr_text$fa == "C204n6" & contr_text$TI == 1]`; Arachidonic acid T4, `r contr_text$stat[contr_text$fa == "C204n6" & contr_text$TI == 2]`; Dihomo-gamma-linolenic acid T2, `r contr_text$stat[contr_text$fa == "C203n6" & contr_text$TI == 1]`; Dihomo-gamma-linolenic acid T4, `r contr_text$stat[contr_text$fa == "C203n6" & contr_text$TI == 2]`; @fig-fa-infer, @tbl-infer-fa). While gamma-linolenic, linoleic, steraic and palmitic acids remained stable unchanged in N-3 compared to Placebo (@fig-fa-infer, @tbl-infer-fa), Oleic acid was reduced in N-3 compared to control at T2 (`r contr_text$stat[contr_text$fa == "C181c9" & contr_text$TI == 1]`) but not at T4 (`r contr_text$stat[contr_text$fa == "C181c9" & contr_text$TI == 2]`).  
 
 
 ```{=typst}
@@ -2288,7 +2303,7 @@ Fish-oil supplementation led to robust increases in Docosahexaenoic (DHA; time-p
 
 ```{r}
 #| label: tbl-infer-fa
-#| tbl-cap: "Descriptive data, adjusted mean estimates, prediction intervals and treatment contrasts for fatty acids measured in whole blood before the intervention (time-point T1), after supplementation-only (T2), and after supplementation and resistance training (T4). All values are reported on the measurement scale (&mu;g ml<sup>-1</sup>)."
+#| tbl-cap: "Descriptive data, adjusted mean estimates, prediction intervals and treatment contrasts for fatty acids measured in whole blood before the intervention (time-point T1), after supplementation-only (T2), and after supplementation and resistance training (T4). All values are reported on the measurement scale (fatty acids, &mu;g ml<sup>-1</sup>; omega-3 index, %)."
 
 
 # Descriptive data 
@@ -2313,7 +2328,7 @@ obs_mean <- fat_dat_compl2 |>
             max = max(conc, na.rm = TRUE)) |> 
   
   mutate(.by = fa,
-         dec = max(0, 2 - floor(log10(max(m, na.rm = TRUE))))) |> 
+         dec = max(0, 1 - floor(log10(max(m, na.rm = TRUE))))) |> 
   rowwise() |> 
   mutate(m   = formatC(m,   digits = dec, format = "f"),
          s   = formatC(s,   digits = dec, format = "f"),
@@ -2344,7 +2359,7 @@ adj_mean <- sumdat |>
   filter(!is.na(TI)) |> 
   
   mutate(.by = fa_lab,
-         dec = max(0, 2 - floor(log10(max(Mu, na.rm = TRUE))))) |> 
+         dec = max(0, 1 - floor(log10(max(Mu, na.rm = TRUE))))) |> 
   rowwise() |> 
   mutate(Mu   = formatC(Mu,   digits = dec, format = "f"),
          lwr95   = formatC(lwr95,   digits = dec, format = "f"),
@@ -2419,7 +2434,7 @@ contr <- draws|>
             upr = quantile(contrast, 0.975)) |> 
     inner_join(fa_labels) |> 
 
-  mutate(dec = 2) |> 
+  mutate(dec = 1) |> 
   rowwise() |> 
   mutate(m   = formatC(m,   digits = dec, format = "f"),
          lwr   = formatC(lwr,   digits = dec, format = "f"),

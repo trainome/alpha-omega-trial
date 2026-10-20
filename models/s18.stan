@@ -49,16 +49,16 @@ transformed data {
   int n_miss_pre = N - sum(pre_miss);
 
   // Diagnostic criteria data
-  array[6] int diag_idx = {2, 5, 7, 9, 10, 11};
+  array[6] int diag_idx = {2, 6, 8, 10, 11, 12};
 // set the right index for subscores
 //
 // analyte  type std_threshold_male std_threshold_female
 // HDL         2            -1.10                -0.233
-// TG          5             0.947                0.947
-// dias        7            -0.0200              -0.0200
-// glucose     9             1.88                 1.88
-// sys         10             0.0638               0.0638
-// waist       11            -0.432               -1.48
+// TG          6             0.947                0.947
+// dias        8            -0.0200              -0.0200
+// glucose     10             1.88                 1.88
+// sys         11             0.0638               0.0638
+// waist       12            -0.432               -1.48
 
   vector[6] threshold_male   = [-1.1,   0.947, -0.02, 1.88, 0.0638, -0.432]';
   vector[6] threshold_female = [-0.233, 0.947, -0.02, 1.88, 0.0638, -1.48]';
@@ -217,7 +217,7 @@ generated quantities {
       if (sex_p_idx[p] == 1) thresh = threshold_male;
       else                   thresh = threshold_female;
 
-      // diag_idx order (d): {HDL=2, TG=5, dias=7, glucose=9, sys=10, waist=11}
+      // diag_idx order (d): {HDL=2, TG=6, dias=8, glucose=10, sys=11, waist=12}
       // BP (dias d=3 OR sys d=5) collapses into a single criterion,
       // so the maximum count is 5 (HDL, TG, BP, glucose, waist).
       for (t in 1:3) {

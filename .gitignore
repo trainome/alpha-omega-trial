@@ -19,6 +19,7 @@
 # Quarto render artifacts
 *_cache/
 *_files/
+_freeze/
 
 # Local Claude Code state
 .claude/
@@ -28,3 +29,5 @@
 /data-sim2/
 /data-sim-legacy/
 .positai
+
+/data-derived/

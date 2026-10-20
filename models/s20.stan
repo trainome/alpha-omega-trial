@@ -80,16 +80,16 @@ transformed data {
   int M = 2 * K;
 
   // Diagnostic criteria data
-  array[6] int diag_idx = {2, 5, 7, 9, 10, 11};
+  array[6] int diag_idx = {2, 6, 8, 10, 11, 12};
 // set the right index for subscores
 //
 // analyte  type std_threshold_male std_threshold_female
 // HDL         2            -1.10                -0.233
-// TG          5             0.947                0.947
-// dias        7            -0.0200              -0.0200
-// glucose     9             1.88                 1.88
-// sys         10             0.0638               0.0638
-// waist       11            -0.432               -1.48
+// TG          6             0.947                0.947
+// dias        8            -0.0200              -0.0200
+// glucose     10             1.88                 1.88
+// sys         11             0.0638               0.0638
+// waist       12            -0.432               -1.48
 
   vector[6] threshold_male   = [-1.1,   0.947, -0.02, 1.88, 0.0638, -0.432]';
   vector[6] threshold_female = [-0.233, 0.947, -0.02, 1.88, 0.0638, -1.48]';
@@ -261,13 +261,14 @@ transformed parameters {
 
   // Baseline metabolic burden: mean of sign-aligned standardised baseline
   // values of the five criteria (HDL negated; BP = mean of dias and sys).
-  // Type indices: HDL=2, TG=5, dias=7, glucose=9, sys=10, waist=11.
+  // Type indices from diag_idx: HDL=2, TG=6, dias=8, glucose=10, sys=11,
+  // waist=12.
   {
     vector[N_P] burden;
     for (p in 1:N_P)
-      burden[p] = (-pre_wide[p, 2] + pre_wide[p, 5] +
-                   0.5 * (pre_wide[p, 7] + pre_wide[p, 10]) +
-                   pre_wide[p, 9] + pre_wide[p, 11]) / 5.0;
+      burden[p] = (-pre_wide[p, diag_idx[1]] + pre_wide[p, diag_idx[2]] +
+                   0.5 * (pre_wide[p, diag_idx[3]] + pre_wide[p, diag_idx[5]]) +
+                   pre_wide[p, diag_idx[4]] + pre_wide[p, diag_idx[6]]) / 5.0;
     burden_c = burden - mean(burden);
   }
 
@@ -417,7 +418,7 @@ generated quantities {
       log_lik[cc_pos[p]] = log_lik_part[p];
 
   // Compute diagnosis from continuous biomarker values
-  // diag_idx order (d): {HDL=2, TG=5, dias=7, glucose=9, sys=10, waist=11}
+  // diag_idx order (d): {HDL=2, TG=6, dias=8, glucose=10, sys=11, waist=12}
   // BP (dias d=3 OR sys d=5) collapses into a single criterion,
   // so the maximum count is 5 (HDL, TG, BP, glucose, waist).
   for (p in 1:N_P) {

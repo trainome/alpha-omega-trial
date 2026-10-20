@@ -1,243 +1,270 @@
-# Effect of N-3 supplementation on Metabolic Syndrom and related measures.
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
+### Study design figure ###################################################
 
-# Load packages and functions
-source("./R/fig-opt-fun.R")
-source("./R/packages.R")
-source("./R/data-prep.R")
-source("./R/helpers.R")
-source("./R/sim-fun.R")
+# Training data analysis
 
-# Extra packages
-library(ggh4x)
+traindat <- AOData::training |>
 
-
-# Extract relevant model posterior
-fit_wrap(s10, DATA = d, fit = "fit.s10.post", refit = FALSE)
-draws <- fit.s10.post$draws("alpha", format = "df")
-
-
-# Create labels and extract standardizers
-labels <- d_full |>
-  distinct(analyte) |>
-  mutate(
-    type = as.character(dense_rank(analyte)),
-    label = case_when(
-      analyte == "HDL" ~ "High density lipoprotein<br>(mmol L<sup>-1</sup>)",
-      analyte == "glucose" ~ "Fasting glucose<br>(mmol L<sup>-1</sup>)",
-      analyte == "TG" ~ "Triglycerides<br>(%)",
-      analyte == "waist" ~ "Waist circumference<br>(cm)",
-      analyte == "dias" ~ "Diastolic blood pressure<br>(mmHg)",
-      analyte == "sys" ~ "Systolic blood pressure<br>(mmHg)",
-      analyte == "fat.rel" ~ "Relative fat mass<br>(%-points)",
-      analyte == "HOMA2IR" ~ "Insulin resistance index<br>(AU)",
-      analyte == "bmi" ~ "Body mass index<br>(kg m<sup>-2</sup>)",
-      analyte == "Adiponectin" ~ "Adiponectin<br>(&mu;g L<sup>-1</sup>)",
-      .default = analyte
-    )
-  ) |>
-  arrange(type) |>
-
-  mutate(
-    label = factor(
-      label,
-      levels = c(
-        "High density lipoprotein<br>(mmol L<sup>-1</sup>)",
-        "Fasting glucose<br>(mmol L<sup>-1</sup>)",
-        "Triglycerides<br>(%)",
-        "Waist circumference<br>(cm)",
-        "Diastolic blood pressure<br>(mmHg)",
-        "Systolic blood pressure<br>(mmHg)",
-        "Relative fat mass<br>(%-points)",
-        "Body mass index<br>(kg m<sup>-2</sup>)",
-        "Insulin resistance index<br>(AU)",
-        "Adiponectin<br>(&mu;g L<sup>-1</sup>)"
-      )
-    )
-  )
-
-
-# Double check thresholds and type index
-
-#   Subscore = c("HDL Cholesterol",
-#                "Fasting glucose",
-#                "Triglycerides",
-#                "Waist circumference",
-#                "Blood pressure",),
-#   Threshold = c("< 40 mg/dL for men, < 50 mg/dL for women",
-#                 "100 mg/dL or higher (or taking medication)",
-#                 "150 mg/dL or higher (or taking medication)",
-#                 "> 102 cm for men, > 88 cm for women",
-#                 "130/85 mm Hg or higher (or taking medication)")) |>
-#
-
-# This collects the thresholds values for validation
-crit_thresholds <- d_full |>
-
-  # TG is on the log-scale
-  mutate(value = if_else(analyte == "TG", log(value), value)) |>
+  filter(!(participant %in% c(593, 613))) |>
 
   summarise(
-    .by = c(analyte),
-    m = mean(value, na.rm = TRUE),
-    sd = sd(value, na.rm = TRUE)
+    .by = c(participant, session),
+    volume = sum(volume, na.rm = TRUE)
   ) |>
-  mutate(
-    threshold_male = c(1.03, 5.6, log(1.7), 94, 130, 85, NA, NA, NA, NA),
-    threshold_female = c(1.29, 5.6, log(1.7), 80, 130, 85, NA, NA, NA, NA),
-    std_threshold_male = (threshold_male - m) / sd,
-    std_threshold_female = (threshold_female - m) / sd,
-    type = as.character(dense_rank(analyte))
+  inner_join(AOData::idkeys) |>
+
+  filter(session != 21) |>
+  mutate(baseline = if_else(session == 1, volume, NA)) |>
+  mutate(.by = participant, baseline = sum(baseline, na.rm = TRUE)) |>
+  mutate(rel_training = 100 * ((volume / baseline) - 1))
+
+
+training_volume_fig <- traindat |>
+  summarise(
+    .by = c(session, treat),
+    m = mean(rel_training),
+    s = sd(rel_training)
   ) |>
-  select(analyte, type, m, sd, std_threshold_male, std_threshold_female) |>
-  inner_join(labels) |>
-
-  mutate(
-    label = factor(
-      label,
-      levels = c(
-        "High density lipoprotein<br>(mmol L<sup>-1</sup>)",
-        "Fasting glucose<br>(mmol L<sup>-1</sup>)",
-        "Triglycerides<br>(%)",
-        "Waist circumference<br>(cm)",
-        "Diastolic blood pressure<br>(mmHg)",
-        "Systolic blood pressure<br>(mmHg)",
-        "Relative fat mass<br>(%-points)",
-        "Body mass index<br>(kg m<sup>-2</sup>)",
-        "Insulin resistance index<br>(AU)",
-        "Adiponectin<br>(&mu;g L<sup>-1</sup>)"
-      )
-    )
-  ) |>
-  arrange(labels)
+  ggplot(aes(session, m)) +
+  geom_smooth(color = colscale[1]) +
+  alpha_theme() +
+  labs(x = "Session", y = "Change in training volume<br>(% from session 1)") +
+  scale_y_continuous(limits = c(-5, 50), expand = c(0, 0)) +
+  scale_x_continuous(limits = c(1, 20), expand = c(0, 0)) +
+  theme(axis.title.y = element_markdown(angle = 0))
 
 
-# Plot 1: Effects of treatment on sub-scores and related scores
-#
-#
-# This plot gives the sub-score contrast estimates as densities and
-# probabilities N-3 > Placebo.
-#
-#
-fig02_p1 <- function(draws) {
-  # Save estimates
-  estimates <- draws |>
-    pivot_longer(cols = starts_with("alpha")) |>
-    mutate(name = gsub("alpha\\[|\\]", "", name)) |>
+# Map study week to x position (week 0 at 0.14, week 20 at 0.9)
+wk <- function(w) 0.14 + 0.76 * w / 20
 
-    separate(name, into = c("time", "type", "treat")) |>
-    mutate(treat = if_else(treat == 1, "ctrl", "omega"))
+# Left edge of the enrollment and allocation box (right edge at week 0)
+x_enrol <- 0.02
 
-  # Restructure to get contrasts
-  contrasts <- estimates |>
-    pivot_wider(names_from = treat, values_from = value) |>
-    mutate(contrast = omega - ctrl) |>
-    # Multiply by sd to convert to org scale
-    inner_join(crit_thresholds) |>
-    mutate(
-      contrast_org = if_else(
-        analyte %in% c("HOMA2IR", "TG"),
-        1 - exp(contrast * sd),
-        contrast * sd
-      )
-    )
+# Top of the canvas (y units)
+y_max <- 1.19
 
-  # Summarise the posterior
-  sums <- contrasts |>
+# Height of the horizontal dashed line connecting the measurement box to the
+# measurement time-points
+y_bend <- 0.86
 
-    summarise(
-      .by = c(time, type),
-      med = median(contrast),
-      q05 = quantile(contrast, 0.05),
-      q25 = quantile(contrast, 0.25),
-      q75 = quantile(contrast, 0.75),
-      q95 = quantile(contrast, 0.95),
-      p = sum(contrast > 0) / n()
-    ) |>
-    # Add probability label
-    mutate(prob_label = paste0("Prob(N-3 - Placebo > 0)=", round(p, 2))) |>
-    inner_join(crit_thresholds)
+# Study periods: enrollment and allocation, supplementation, lead-in and
+# combined period. Each box ends at the week given in `end`.
+periods <- tibble(
+  xmin = c(x_enrol, wk(c(0, 7, 10))),
+  xmax = wk(c(0, 7, 10, 20)),
+  fill = c("white", "#E6E6E6", "#BAE3D8", "#4EBC9E"),
+  label = c(
+    "Enrollment and\nallocation",
+    "Supplementation period,\nKrill oil vs. Placebo\n(7 weeks)",
+    "Lead-in\n(3 weeks)",
+    "Combined period,\nSupplementation (Krill oil vs. Placebo)\nand Resistance training (10 weeks)"
+  ),
+  end = c("Week 0", "Week 7", "Week 10", "Week 20")
+)
 
-  # Compute symmetric limits per facet
-  x_limits <- contrasts |>
-    group_by(label) |>
-    summarise(lim = max(abs(contrast_org)), .groups = "drop")
+# Measurement time-points (weeks)
+meas_wk <- c(0, 7, 20)
 
-  # Build a named list of scale overrides
-  x_scales <- x_limits |>
-    mutate(scale = map(lim, ~ scale_x_continuous(limits = c(-.x, .x)))) |>
-    pull(scale)
+# Measurement box, aligned with the period boxes
+x_meas <- c(x_enrol, wk(20))
 
-  contrasts |>
-    ggplot(aes(contrast_org, fill = time)) +
-    geom_density(alpha = 0.5) +
-    facet_wrap(~label, scale = "free", ncol = 1) +
-    alpha_theme(yaxis = FALSE) +
+# Measurements grouped by collection method, placed in one row inside the
+# measurement box (x: left edge of each column relative to the box, y: top of
+# each group). The x positions give ~6 mm between columns at 7 pt text and
+# fig_w = 180 mm.
+measurements <- tribble(
+  ~x,
+  ~y,
+  ~method,
+  ~outcomes,
+  0.024,
+  1.14,
+  "Blood samples (fasting)",
+  "Lipids (TG, HDL, LDL),\nOmega-3 index, fatty acid profile\nAdiponectin",
+  0.258,
+  1.14,
+  "OGTT (0-120 min)",
+  "Glucose, C-peptide (0, 60 min)\nHOMA2-IR",
+  0.483,
+  1.14,
+  "DXA",
+  "Relative Fat mass",
+  0.626,
+  1.14,
+  "Anthropometry and blood pressure",
+  "Body mass, BMI\nWaist circumference\nSystolic and diastolic blood pressure",
+  0.483,
+  1.06,
+  "Diet",
+  "Food frequency\nquestionaire"
+) |>
+  mutate(x = x_meas[1] + x)
 
-    geom_text(
-      data = filter(sums, time == 1),
-      mapping = aes(x = -Inf, y = -Inf, label = prob_label),
-      hjust = -0.1, # Adjust horizontal justification
-      vjust = -3, # Adjust vertical justification
-      size = 3,
-      color = colscale[1]
-    ) +
+study_design <- data.frame(x = c(0, 1), y = c(0, 1)) |>
 
-    geom_text(
-      data = filter(sums, time == 2),
-      mapping = aes(x = -Inf, y = -Inf, label = prob_label),
-      hjust = -0.1, # Adjust horizontal justification
-      vjust = -1.5, # Adjust vertical justification
-      size = 3,
-      color = colscale[2]
-    ) +
+  ggplot(aes(x, y)) +
 
-    geom_vline(xintercept = 0) +
-    scale_fill_manual(values = colscale) +
-    labs(fill = "Time") +
-    theme(strip.text = element_markdown(), axis.title.y = element_blank()) +
-    facetted_pos_scales(x = x_scales)
+  theme_void() +
+  theme(plot.margin = margin(0, 0, 0, 0)) +
+
+  # No expansion, data coordinates match the cowplot canvas (0-1, y scaled
+  # by y_max)
+  scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, y_max), expand = c(0, 0)) +
+
+  # Enrollment and allocation, study periods
+  annotate(
+    "rect",
+    xmin = periods$xmin,
+    xmax = periods$xmax,
+    ymin = 0.53,
+    ymax = 0.7,
+    fill = periods$fill,
+    alpha = 0.2,
+    color = "black",
+    linewidth = 0.3
+  ) +
+  annotate(
+    "text",
+    x = (periods$xmin + periods$xmax) / 2,
+    y = 0.615,
+    label = periods$label,
+    size = 7 / .pt
+  ) +
+
+  # Week at the end of each period box
+  annotate(
+    "text",
+    x = periods$xmax,
+    y = 0.505,
+    label = periods$end,
+    size = 7 / .pt
+  ) +
+
+  # Measurements
+  annotate(
+    "rect",
+    xmin = x_meas[1],
+    xmax = x_meas[2],
+    ymin = 0.95,
+    ymax = 1.16,
+    fill = "gray99",
+    color = "black",
+    linewidth = 0.3
+  ) +
+  annotate(
+    "text",
+    x = measurements$x,
+    y = measurements$y,
+    label = measurements$method,
+    fontface = "bold",
+    hjust = 0,
+    vjust = 1,
+    size = 7 / .pt
+  ) +
+  annotate(
+    "text",
+    x = measurements$x,
+    y = measurements$y - 0.04,
+    label = measurements$outcomes,
+    hjust = 0,
+    vjust = 1,
+    lineheight = 1,
+    size = 7 / .pt
+  ) +
+
+  # Measurement time-points, short names as in other figures. A dashed
+  # vertical line from the centre of the measurement box down to y_bend, a
+  # horizontal line spanning the time-points, then vertical arrows down to
+  # just above the period boxes.
+  annotate(
+    "segment",
+    x = mean(x_meas),
+    xend = mean(x_meas),
+    y = 0.95,
+    yend = y_bend,
+    linewidth = 0.3,
+    linetype = "dashed"
+  ) +
+  annotate(
+    "segment",
+    x = wk(min(meas_wk)),
+    xend = wk(max(meas_wk)),
+    y = y_bend,
+    yend = y_bend,
+    linewidth = 0.3,
+    linetype = "dashed"
+  ) +
+  annotate(
+    "segment",
+    x = wk(meas_wk),
+    xend = wk(meas_wk),
+    y = y_bend,
+    yend = 0.73,
+    linewidth = 0.3,
+    linetype = "dashed",
+    arrow = arrow(length = unit(1.5, "mm"), type = "closed")
+  ) +
+  annotate(
+    "text",
+    x = wk(meas_wk) + 0.01,
+    y = (y_bend + 0.73) / 2,
+    label = c("Baseline", "Supplementation", "Combined"),
+    hjust = 0,
+    size = 7 / .pt
+  )
+
+# Insert training volume figure under the combined period. The inset is
+# widened by the space taken up left (y-axis) and right of its panel so that
+# session 1 aligns with week 10 and session 20 with week 20. `fig_w` must match
+# the width (mm) of the saved figure.
+fig_w <- 180
+train_grob <- ggplotGrob(training_volume_fig)
+panel_col <- unique(train_grob$layout$l[train_grob$layout$name == "panel"])
+panel_side_w <- function(cols) {
+  sum(grid::convertWidth(train_grob$widths[cols], "mm", valueOnly = TRUE)) /
+    fig_w
 }
+left_w <- panel_side_w(seq_len(panel_col - 1))
+right_w <- panel_side_w((panel_col + 1):length(train_grob$widths))
+
+study_design_fig <- cowplot::ggdraw(study_design) +
+  cowplot::draw_plot(
+    training_volume_fig,
+    x = wk(10) - left_w,
+    y = 0.04 / y_max,
+    width = wk(20) - wk(10) + left_w + right_w,
+    height = 0.42 / y_max
+  )
+
+# Missing data figure
+# At each time-point a percentage of the complete data set is missing.
+# This is a reason for using Bayesian imputation. We could add the percentage of
+# observed data in the figure here...
+
+# Combined figure: CONSORT (A) above study design (B). Panel heights (mm)
+# keep 1.6 mm per canvas unit in the CONSORT and 80 mm per y unit in the
+# study design.
+
+design_h <- 95
+
+figure_02 <- study_design_fig
 
 
-p1 <- fig02_p1(draws = draws)
+ggsave(
+  figure_02,
+  filename = "figures/figure-2.pdf",
+  width = fig_w,
+  height = design_h,
+  unit = "mm"
+)
+
+ggsave(
+  figure_02,
+  filename = "figures/figure-2.svg",
+  width = fig_w,
+  height = design_h,
+  unit = "mm"
+)
 
 
-draws <- fit.s12.post$draws("alpha", format = "df")
-draws_sigma <- fit.s12.post$draws("sigma", format = "df")
-
-fig02_p2 <- function(draws, draws_sigma) {
-  # Save estimates
-  estimates <- draws |>
-    pivot_longer(cols = starts_with("alpha")) |>
-    mutate(name = gsub("alpha\\[|\\]", "", name)) |>
-
-    separate(name, into = c("time", "type", "treat")) |>
-    mutate(treat = if_else(treat == 1, "ctrl", "omega"))
-
-  sigmas <- draws_sigma |>
-    pivot_longer(cols = starts_with("sigma")) |>
-    mutate(name = gsub("sigma\\[|\\]", "", name)) |>
-
-    separate(name, into = c("time", "type", "treat")) |>
-    mutate(treat = if_else(treat == 1, "ctrl", "omega")) |>
-    rename(sigma = value)
-
-  comb_estimate <- estimates |>
-    filter(.draw %in% 1:100) |>
-    inner_join(sigmas) |>
-    rowwise() |>
-    mutate(preds = rnorm(1, value, sigma)) |>
-    ggplot(aes())
-}
-
-#
+saveRDS(figure_02, "figures/figure-02.RDS")

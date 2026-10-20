@@ -1,0 +1,1979 @@
+---
+title: "Oral glucose-tolerance test"
+editor: source
+editor_options: 
+  chunk_output_type: console
+---
+
+## Introduction
+
+Here we model the oral glucose-tolerance test data. Blood glucose was measured every fifteen minute after a standard 75 g glucose drink over the course of a 2 hour period. The test was performed before the intervention period (T1), after the supplementation-only period (T2), and after the full intervention (combined period, supplementation and resistance training vs. placebo and resistance training). The goal is to evaluate the effect of the intervention (supplementation of N-3) on the glucose tolerance curve.
+
+We aim to build a model that captures the glucose time-course after ingesting the drink. We will accomplish this by fitting a spline model to participant-level data with treatment-groups and time-points as population-level effects. 
+
+## Data preparations
+
+```{r}
+
+# Libraries
+source("./R/fig-opt-fun.R")
+source("./R/packages.R")
+source("./R/helpers.R")
+source("./R/data-prep.R")
+
+# The spline package is needed for basis spline construction
+library(splines)
+library(ggdist)
+
+# Settings
+refit.models <- FALSE
+
+# Get the full index of participants
+part_full <- criteria_dat |> 
+  distinct(participant) |> 
+  pull(participant)
+
+
+# Glucose data 
+glucose_dat <- AOData::glucose |>
+  select(participant:glucose)  |>
+  # Treatment
+  inner_join(
+    AOData::idkeys |>
+  select(participant, treat))
+
+
+
+
+```
+
+## Preliminary models
+
+### Baseline model with group-level effects (participants)
+
+
+```{r}
+#| label: baseline-dat-prep
+
+# Use a complete data set (no missing data) at time 1 to set up models
+pre_dat <- glucose_dat |>
+  filter(time == "T1") |>
+  filter(!(is.na(glucose))) |>
+  mutate(stglucose = (glucose - mean(glucose)) / sd(glucose), 
+         participant = as.factor(participant)) |>
+  # To avoid problems, dropping participants with less than 7 
+  # measurements
+  mutate(.by = participant, 
+         n = n()) |>
+  filter(n == 7)
+ 
+
+npart <- pre_dat |> 
+  distinct(participant) |> 
+  nrow()
+ 
+
+```
+
+In a preliminary model we fit complete data (seven measurements per participant) from the pre-intervention data (n = `r npart`). The basis splines are visualized in @fig-basis-model1.
+
+
+```{r}
+#| fig-cap: "Basis splines across the glucose tolerance test."
+#| label: fig-basis-model1
+#| fig-height: 4
+#| fig-width: 5
+
+# Spline basis: bs(min, df = 4) WITHOUT an intercept column, so the random
+# intercept is not confounded with the spline weights. This is similar to 
+# what brms do, see archive/ogtt-analysis.qmd for a preliminary analysis
+# using brms.
+
+B <- bs(pre_dat$min, 
+        df = 5)
+
+# Do a "prediction" using the Basis splines. This will show the smooth not only 
+# at break-points.
+min_pred <- seq(from = 0, to = 120, by = 1)
+
+B_pred <- predict(B,  min_pred)
+
+
+
+p1 <- data.frame(B_pred) |>
+  cbind(min = min_pred) |> 
+  pivot_longer(starts_with("X")) |> 
+  ggplot(aes(min, value, group = name, color = name)) +
+  geom_line() + 
+  alpha_theme() + 
+  scale_y_continuous(breaks = c(0, 1)) + 
+  labs(x = "Minute", 
+       y = "Basis value")  + 
+  theme(legend.position = "none")
+
+
+p1
+
+```
+
+The pre-intervention multilevel model (`mo1.stan`) for blood glucose ($y$) gives each participant $p$ their own curve via a random intercept $a_p$ and random spline coefficients $b_{k,p}$, drawn jointly (intercept + spline) from a correlated multivariate normal (this is equivalent to the brms `m5` parameterization `archive/ogtt-analysis.qmd`):
+
+
+$$
+\begin{align}
+y_i &\sim \operatorname{Normal}(\mu_i, \sigma) \\
+\mu_i &= \alpha + a_{p[i]} + \sum^K_{k=1} (\beta_k + b_{k,p[i]})\, B_{k,i} \\
+(a_p, b_{1,p}, \dots, b_{K,p})^\top &\sim \operatorname{MVNormal}(0,\ \mathbf{S\,R\,S}) \\
+\mathbf S &= \operatorname{diag}(\sigma_{\text{sd}}) \\ 
+\quad \sigma_{\text{sd}} &\sim \operatorname{Exponential}(2) \\
+\mathbf R &\sim \operatorname{LKJ}(1) \\
+\alpha &\sim \operatorname{Normal}(0,2) \\
+\beta_k &\sim \operatorname{Normal}(0,2) \\
+\sigma &\sim \operatorname{Exponential}(1)
+\end{align}
+$$
+
+
+The basis $B$ is `bs(min, df = 5)` (no intercept column), so the random intercept $a_p$ is identified separately from the spline weights. The choice of 5 spline components was done after preliminary prior- and posterior simulations indicating that this sufficiently regularize individual curves. The correlation matrix $\mathbf R$ is sampled via a non-centered Cholesky factor.
+
+In preliminary versions of this model (`archive/ogtt-analysis.qmd`), specific priors were used to regularize the population-level spline towards increased glucose in the first half of the test followed by declining values in the second half. Since the data will likely wash away such prior information we will simplify this part of the model to avoid prior-likelihood conflicts. 
+
+Below we run a prior predictive check of the pre-intervention model. The Prior-predictive check (@fig-mo1-pp) indicates that model does not expect systematic changes over the course of the test but allow for variation across participants.  
+
+
+
+```{r}
+#| label: fig-mo1-pp
+#| fig-width: 6
+#| fig-height: 4
+#| fig-cap: "Prior predictive simulation of population average and participant-level glucose curves."
+
+
+
+# Integer participant id (1..N_P)
+pre_dat <- pre_dat |>
+  mutate(P = dense_rank(participant))
+
+# Save the mean and sd from the subset of data 
+mglucose <- mean(pre_dat$glucose)
+sdglucose <- sd(pre_dat$glucose)
+
+
+# Create the data list (now with participant index)
+dat <- list(
+  y   = pre_dat$stglucose,
+  N   = nrow(pre_dat),
+  K   = ncol(B),
+  B   = B,
+  N_P = max(pre_dat$P),
+  P   = pre_dat$P, 
+  prior_only = 1
+)
+
+
+mo1 <- cmdstan_model(stan_file = "models/mo1.stan",
+                     exe_file = "models/mo1.exe")
+
+
+fit_wrap(mo1, fit = "fit.mo1.pp", DATA = dat)
+
+
+# Predict from the basis spline
+min_seq <- seq(from = 0, to = 120, by = 1)
+
+B_pred_long <- predict(B, min_seq) |>
+  data.frame() |>
+  cbind(min_seq) |>
+  pivot_longer(starts_with("X"),
+               values_to = "B")
+
+
+draws <- fit.mo1.pp$draws(format = "df")
+
+# Population level model (mean) using the global intercept and 
+# splines
+b_long <- draws |>
+  dplyr::select(.draw, a, starts_with("b[")) |>
+  pivot_longer(starts_with("b["), values_to = "b") |>
+  mutate(name = gsub("b\\[", "X", name),
+         name = gsub("\\]", "", name))
+
+pop_curve <- B_pred_long |>
+  inner_join(b_long, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(.draw, min_seq),
+            mu = (first(a) + sum(B * b) )  * sdglucose + mglucose) |>
+  summarise(.by = min_seq,
+            m   = mean(mu) ,
+            lwr = quantile(mu, 0.025),
+            upr = quantile(mu, 0.975)) 
+
+# Participant-level curves (posterior-mean random effects r_p[p, m])
+# r_p[p, 1] = random intercept, r_p[p, 2:(K+1)] = spline deviations
+rp_mean <- draws |>
+  dplyr::select(starts_with("r_p[")) |>
+  summarise(across(everything(), mean)) |>
+  pivot_longer(everything(), names_to = "par", values_to = "val") |>
+  mutate(p = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         m = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\2", par)))
+
+rp_int <- rp_mean |> filter(m == 1) |> dplyr::select(p, a_p = val)
+rp_spl <- rp_mean |> filter(m >= 2) |>
+  mutate(name = paste0("X", m - 1)) |>
+  dplyr::select(p, name, dev = val)
+
+# Posterior-mean population coefficients
+a_mean <- mean(draws$a)
+b_mean_long <- draws |>
+  dplyr::select(starts_with("b[")) |>
+  summarise(across(everything(), mean)) |>
+  pivot_longer(everything(), names_to = "name", values_to = "b") |>
+  mutate(name = gsub("b\\[", "X", name),
+         name = gsub("\\]", "", name))
+
+part_curves <- B_pred_long |>
+  inner_join(b_mean_long, by = "name") |>
+  inner_join(rp_spl, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(p, min_seq),
+            mu = sum(B * (b + dev))) |>
+  inner_join(rp_int, by = "p") |>
+  mutate(mu = (a_mean + a_p + mu) * sdglucose + mglucose)
+
+# Population ribbon + per-participant spaghetti
+
+ggplot(pop_curve, aes(min_seq, m)) +
+  geom_line(data = part_curves,
+            aes(min_seq, mu, group = p),
+            alpha = 0.3, linewidth = 0.3) +
+
+  geom_line(linewidth = 1) +
+  alpha_theme() +
+  labs(x = "Minute",
+       y = "Blood Glucose (mmol L<sup>-1</sup>") + 
+  theme(axis.title.y = ggtext::element_markdown())
+
+
+
+```
+
+
+Running the model on the actual data let's us explore the model fit to data. The overall model fit gives a population mean curve and allows for large variations between individuals (@fig-mo1 A). Inspecting three individuals indicate that individual curves are shrunken from very wiggly shapes (@fig-mo1 B). Analysis of residuals indicate that there might be a tendency towards larger positive errors at higher fitted values (@fig-mo1 C), the overall data patterns indicate that the observed data can be replicated using the model. Overall these checks validate the model for further development.
+
+
+```{r}
+#| label: fig-mo1
+#| fig-width: 6
+#| fig-height: 4
+#| fig-cap: "Posterior predictive simulation of population average and participant-level glucose curves (A and B). Residuals vs. predicted values (C) and distributions of simulated (y<sup>rep</sup>) data sets and the observed data. "
+
+
+# Set prior_only to 0 to sample from the likelihood
+dat$prior_only <- 0
+
+
+fit_wrap(mo1, fit = "fit.mo1", DATA = dat)
+
+
+# Predict from the basis spline
+min_seq <- seq(from = 0, to = 120, by = 1)
+
+B_pred_long <- predict(B, min_seq) |>
+  data.frame() |>
+  cbind(min_seq) |>
+  pivot_longer(starts_with("X"),
+               values_to = "B")
+
+
+draws <- fit.mo1$draws(format = "df")
+
+# Population level model (mean) using the global intercept and 
+# splines
+b_long <- draws |>
+  dplyr::select(.draw, a, starts_with("b[")) |>
+  pivot_longer(starts_with("b["), values_to = "b") |>
+  mutate(name = gsub("b\\[", "X", name),
+         name = gsub("\\]", "", name))
+
+pop_curve <- B_pred_long |>
+  inner_join(b_long, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(.draw, min_seq),
+            mu = (first(a) + sum(B * b) )  * sdglucose + mglucose) |>
+  summarise(.by = min_seq,
+            m   = mean(mu) ,
+            lwr = quantile(mu, 0.025),
+            upr = quantile(mu, 0.975)) 
+
+# Participant-level curves (posterior-mean random effects r_p[p, m])
+# r_p[p, 1] = random intercept, r_p[p, 2:(K+1)] = spline deviations
+rp_mean <- draws |>
+  dplyr::select(starts_with("r_p[")) |>
+  summarise(across(everything(), mean)) |>
+  pivot_longer(everything(), names_to = "par", values_to = "val") |>
+  mutate(p = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         m = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\2", par)))
+
+rp_int <- rp_mean |> filter(m == 1) |> dplyr::select(p, a_p = val)
+rp_spl <- rp_mean |> filter(m >= 2) |>
+  mutate(name = paste0("X", m - 1)) |>
+  dplyr::select(p, name, dev = val)
+
+# Posterior-mean population coefficients
+a_mean <- mean(draws$a)
+b_mean_long <- draws |>
+  dplyr::select(starts_with("b[")) |>
+  summarise(across(everything(), mean)) |>
+  pivot_longer(everything(), names_to = "name", values_to = "b") |>
+  mutate(name = gsub("b\\[", "X", name),
+         name = gsub("\\]", "", name))
+
+part_curves <- B_pred_long |>
+  inner_join(b_mean_long, by = "name") |>
+  inner_join(rp_spl, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(p, min_seq),
+            mu = sum(B * (b + dev))) |>
+  inner_join(rp_int, by = "p") |>
+  mutate(mu = (a_mean + a_p + mu) * sdglucose + mglucose)
+
+# Population ribbon + per-participant spaghetti
+
+p1 <- ggplot(pop_curve, aes(min_seq, m)) +
+  geom_line(data = part_curves,
+            aes(min_seq, mu, group = p),
+            alpha = 0.3, linewidth = 0.3) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              alpha = 0.2, 
+              fill = colscale[3]) +
+  geom_line(linewidth = 1) +
+  alpha_theme() +
+  labs(x = "Minute",
+       y = "Blood Glucose (mmol L<sup>-1</sup>") + 
+  theme(axis.title.y = ggtext::element_markdown())
+
+
+# Individual curves examples
+p2 <- ggplot(pop_curve, aes(min_seq, m)) +
+  geom_line(data = filter(part_curves, p %in% c(1,2,3)),
+            aes(min_seq, mu, group = p, color = as.factor(p)),
+            alpha = 0.3, linewidth = 1) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              alpha = 0.2) +
+  
+  geom_point(data = filter(pre_dat, P %in% c(1,2,3)), 
+              aes(min, glucose, color = as.factor(P)), 
+             size = 3) +
+  
+  alpha_theme() + 
+  geom_line(linewidth = 1) +
+  labs(x = "Minute",
+       y = "Blood Glucose (mmol L<sup>-1</sup>", 
+       color = "Participant ID") +  
+  theme(axis.title.y = ggtext::element_markdown()) +
+  scale_color_manual(values = colscale) 
+
+
+p3 <- draws |> 
+  dplyr::select(.draw, starts_with("y_pred")) |> 
+  pivot_longer(cols = starts_with("y_pred")) |> 
+  mutate(obs = rep(pre_dat$stglucose, 2000*4), 
+         resid = obs - value) |> 
+  summarise(.by = name, 
+            m_fitted = mean(value), 
+            s_fitted = sd(value), 
+            m_resid = mean(resid), 
+            s_resid = sd(resid)) |> 
+  ggplot(aes(m_fitted, m_resid)) + 
+  
+  geom_errorbar(aes(ymin = m_resid - s_resid, 
+                    ymax = m_resid + s_resid), 
+                alpha = 0.3) +
+    geom_errorbar(aes(xmin = m_fitted - s_fitted, 
+                    xmax = m_fitted + s_fitted), 
+                  orientation = "y",
+                alpha = 0.3) +
+  
+  geom_point(alpha = 0.3, 
+             size = 3) + 
+  
+  
+  
+  geom_smooth(color = colscale[3]) +
+  geom_hline(yintercept = 0, lty = 2, alpha = 0.4) +
+  alpha_theme()  + 
+  labs(x = "Predicted values (standardized glucose)", 
+       y = "Observed - Predicted values") + 
+  theme()
+
+
+p4 <- draws |> 
+  dplyr::select(.draw, starts_with("y_rep")) |> 
+  pivot_longer(cols = starts_with("y_rep")) |> 
+  filter(.draw %in% 1:40) |> 
+  ggplot(aes(value, group = .draw))  + 
+  geom_line(stat = "density", alpha = 0.3) + 
+  geom_line(data = pre_dat, 
+            aes(stglucose, group = NULL),
+            color = colscale[3], 
+            linewidth = 1,
+            stat = "density") + 
+  alpha_theme(yaxis = FALSE)   +
+  labs(x = "Standardized glucose (simulated and observed)", 
+       y = "")
+
+cowplot::plot_grid(p1, p2, p3, p4, 
+                   ncol = 2)
+
+
+
+
+
+```
+
+### Three-timepoint multilevel model
+
+The model (`mo2.stan`) extends the pre-intervention model to include three timepoints (T1, T2, T4) and the treatment groups, following the brms `m5` parameterization (`archive/ogtt-analysis.qmd`). The population mean is a cell mean plus a spline curve per cell $g$ (here $g$ = time x treatment). Each participant gets a random intercept and random spline coefficients that may differ by time $t$, drawn jointly from a correlated multivariate normal:
+
+
+$$
+\begin{align}
+y_i &\sim \operatorname{Normal}(\mu_i, \sigma) \\
+\mu_i &= \Big(a_{g[i]} + \sum_k b_{k,g[i]}\,B_{k,i}\Big)
+        + \Big(a_{p[i]} + \sum_k \beta_{k,t[i],p[i]}\,B_{k,i}\Big) \\
+(a_p, \beta_p)^\top &\sim \operatorname{MVNormal}(\mathbf 0,\ \mathbf{S\,R\,S}) \\
+\mathbf S &= \operatorname{diag}(\sigma_{\text{sd}}) \\
+\sigma_{\text{sd}} &\sim \operatorname{Exponential}(1) \\
+\mathbf R &\sim \operatorname{LKJ}(1) \\
+a_g &\sim \operatorname{Normal}(0,2) \\
+b_{k,g} &\sim \operatorname{Normal}(0,2) \\
+\sigma &\sim \operatorname{Exponential}(1) \\
+\end{align}
+$$ {#eq-mo2}
+
+The participant block has $M = 1 + K\,T$ effects (intercept + a spline per time point), all correlated through $\mathbf R$ and sampled with a non-centered Cholesky factor. The prior predictive simulation indicate a very flexible curves per time &times; treatment (@fig-prior-predictive-mo2) 
+
+
+```{r}
+#| label: fig-prior-predictive-mo2
+#| fig-height: 4
+#| fig-width: 7
+#| fig-cap: "Prior predictive simulation using model `mo2` showing average group &times time curves."
+
+
+# Three timepoints, complete OGTT curves only (7 samples per participant-time)
+ml_dat <- glucose_dat |>
+  inner_join(AOData::idkeys) |> 
+  dplyr::select(participant, time, min, glucose, treat) |> 
+  filter(time %in% c("T1", "T2", "T4")) |>
+  filter(!is.na(glucose)) |>
+  mutate(.by = c(participant, time), n = n()) |>
+  filter(n == 7) |>
+  mutate(stglucose = (glucose - mean(glucose)) / sd(glucose),
+         participant = as.factor(participant), 
+         tx = paste0(time, treat), 
+         tx = factor(tx, levels = c("T1ctrl", "T1omega", "T2ctrl", "T2omega", "T4ctrl", "T4omega"))) |>
+  mutate(P  = dense_rank(participant),  # participant index
+         G  = dense_rank(tx),         # population cell (time-only; swap for time x treat)
+         Tt = dense_rank(time))         # time index for the random spline
+
+mglucose <- mean(ml_dat$glucose)
+sglucose <- sd(ml_dat$glucose)
+
+
+# Basis without intercept column
+B2 <- bs(ml_dat$min, df = 5)
+
+dat2 <- list(
+  y   = ml_dat$stglucose,
+  N   = nrow(ml_dat),
+  K   = ncol(B2),
+  B   = B2,
+  N_G = max(ml_dat$G),
+  G   = ml_dat$G,
+  N_P = max(ml_dat$P),
+  P   = ml_dat$P,
+  N_T = max(ml_dat$Tt),
+  Tt  = ml_dat$Tt, 
+  prior_only = 1
+)
+
+
+mo2 <- cmdstan_model(stan_file = "models/mo2.stan",
+                     exe_file = "models/mo2.exe")
+
+
+
+fit_wrap(mo2, fit = "fit.mo2.pp", DATA = dat2)
+
+draws2 <- fit.mo2.pp$draws(format = "df")
+
+min_seq2 <- seq(from = 1, to = 120, by = 1)
+B2_pred_long <- predict(B2, min_seq2) |>
+  data.frame() |>
+  cbind(min_seq2) |>
+  pivot_longer(starts_with("X"), values_to = "B")
+
+ag_long <- draws2 |>
+  dplyr::select(.draw, starts_with("a_g[")) |>
+  pivot_longer(starts_with("a_g["), names_to = "par", values_to = "a_g") |>
+  mutate(g = as.integer(gsub("a_g\\[(\\d+)\\]", "\\1", par))) |>
+  dplyr::select(.draw, g, a_g)
+
+bg_long <- draws2 |>
+  dplyr::select(.draw, starts_with("b_g[")) |>
+  pivot_longer(starts_with("b_g["), names_to = "par", values_to = "b_g") |>
+  mutate(k = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         g = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\2", par)),
+         name = paste0("X", k))
+
+# Map cell index g back to the time label
+time_levels <- ml_dat |> distinct(time, G) |> arrange(G)
+
+pop_by_time <- B2_pred_long |>
+  inner_join(bg_long, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(.draw, g, min_seq2),
+            mu_spl = sum(B * b_g)) |>
+  inner_join(ag_long, by = c(".draw", "g")) |>
+  mutate(mu = a_g + mu_spl) |>
+  summarise(.by = c(g, min_seq2),
+            m   = mean(mu),
+            lwr = quantile(mu, 0.025),
+            upr = quantile(mu, 0.975)) |>
+  left_join(time_levels, by = c("g" = "G")) |> 
+  mutate(time = if_else(g %in% c(1,2), "T1", 
+    if_else(g %in% c(3, 4), "T2", "T3")), 
+    treat = if_else(g %in% c(1, 3, 5), "ctrl", "omega")) 
+
+pop_by_time |> 
+  ggplot(aes(min_seq2, m, 
+             color = treat, 
+        
+             group = paste(time, treat))) +
+
+  geom_line(linewidth = 1) +
+  alpha_theme() +
+  labs(x = "Minute", y = "Standardized glucose",
+       color = "Treatment") +
+        facet_wrap(~ time)
+```
+
+
+```{r}
+#| label: fig-posterior-mo2
+#| fig-height: 4
+#| fig-width: 7
+#| fig-cap: "Posterior implications of model `mo2` showing average group &times time curves with 95% percentile intervals at the three sampling time points, before the intervention (Baseline), after the supplementation-only period (Supplementation) and after the combined supplementation and resistance-training period (Combined)."
+
+
+
+
+dat2$prior_only <- 0
+
+fit_wrap(mo2, fit = "fit.mo2", DATA = dat2)
+
+# Population mean curve per time point (cell mean a_g + cell spline b_g) 
+draws2 <- fit.mo2$draws(format = "df")
+
+min_seq2 <- seq(from = 1, to = 120, by = 1)
+B2_pred_long <- predict(B2, min_seq2) |>
+  data.frame() |>
+  cbind(min_seq2) |>
+  pivot_longer(starts_with("X"), values_to = "B")
+
+ag_long <- draws2 |>
+  dplyr::select(.draw, starts_with("a_g[")) |>
+  pivot_longer(starts_with("a_g["), names_to = "par", values_to = "a_g") |>
+  mutate(g = as.integer(gsub("a_g\\[(\\d+)\\]", "\\1", par))) |>
+  dplyr::select(.draw, g, a_g)
+
+bg_long <- draws2 |>
+  dplyr::select(.draw, starts_with("b_g[")) |>
+  pivot_longer(starts_with("b_g["), names_to = "par", values_to = "b_g") |>
+  mutate(k = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         g = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\2", par)),
+         name = paste0("X", k))
+
+# Map cell index g back to the time label
+time_levels <- ml_dat |> distinct(time, G) |> arrange(G)
+
+pop_by_time <- B2_pred_long |>
+  inner_join(bg_long, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(.draw, g, min_seq2),
+            mu_spl = sum(B * b_g)) |>
+  inner_join(ag_long, by = c(".draw", "g")) |>
+  mutate(mu = a_g + mu_spl, 
+         # back tranmsform the standardization
+         mu = mu * sglucose + mglucose
+         ) |>
+  summarise(.by = c(g, min_seq2),
+            m   = mean(mu),
+            lwr = quantile(mu, 0.025),
+            upr = quantile(mu, 0.975)) |>
+  left_join(time_levels, by = c("g" = "G")) |> 
+  mutate(time = if_else(g %in% c(1,2), "Baseline", 
+    if_else(g %in% c(3, 4), "Supplementation", "Combined")), 
+    treat = if_else(g %in% c(1, 3, 5), "Placebo", "N-3"))  |> 
+  mutate(time = factor(time, levels = c("Baseline", "Supplementation", "Combined")))
+
+
+pop_by_time |> 
+ggplot(aes(min_seq2, m, color = treat, fill = treat, group = paste(time, treat))) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.2, color = NA) +
+  geom_line(linewidth = 1) +
+  alpha_theme() +
+  labs(x = "Minute", y = "Blood glucose (mmol L<sup>-1</sup>)",
+       color = "Treatment", fill = "Treatment") +
+        facet_wrap(~ time) + 
+  scale_color_manual(values = colscale[c(2, 4)]) + 
+  theme(axis.title.y = ggtext::element_markdown())
+
+```
+
+### Missing data model
+
+We further extend the multilevel-model including the time- and treatment effects to a full model including all baseline data and missing data imputation. Similarly to analyses of the metabolic syndrome criteria we want to draw conclusions from estimates that include the uncertainty associated with missing data.
+
+Model `mo3` (`models/mo3.stan`) use the same mechanism for data imputation as used in the models of the metabolic syndrome model sets. Missing data are treated as parameters and are informed by the likelihood. The relevant additions to the model compared to @eq-mo2 therefore include: 
+
+$$
+\begin{align}
+y_i^\text{all} &\sim \operatorname{Normal}(\mu_i, \sigma) \\
+
+y_i^{\text{all}} &=
+\begin{cases} 
+y_i^{\text{obs}} & \text{if observed}  \\
+y_i^{\text{miss}} & \text{if missing}
+\end{cases} \\
+y_i^\text{miss} &\sim \operatorname{Normal}(0,2) \\
+\end{align}
+$$ {#eq-mo3}
+
+Where the $\operatorname{Normal}(0,2)$ indicate a weak prior (on the standardized scale) for missing values. Again, the prior predictive check indicate that the model allows for very flexible curves per participants and groups (@fig-prior-mo3).
+
+
+```{r}
+#| label: fig-prior-mo3
+#| fig-height: 4
+#| fig-width: 7
+#| fig-cap: "Prior predictive simulation of the `mo3` model. The plot shows individual curves and implied group means for each time point."
+
+
+
+# Extract the full data sets.
+full_dat <- glucose_dat |>
+  inner_join(AOData::idkeys) |> 
+  filter(participant %in% part_full) |> 
+
+  dplyr::select(participant, time, min, glucose, treat) |> 
+  # Wider to find NA -> longer -> complete data set
+  pivot_wider(values_from = glucose, names_from = time) |> 
+  pivot_longer(values_to = "glucose", 
+               names_to = "time", 
+               cols = T1:T4) |>  
+  arrange(participant, time, min) |> 
+  # Indexing
+  mutate(
+    y_obs = (glucose - mean(glucose, na.rm = TRUE)) / sd(glucose, na.rm = TRUE), 
+    y_obs = if_else(is.na(glucose), -999, y_obs),
+    y_miss = if_else(is.na(glucose), 0, 1), 
+    tx = paste0(time, treat), 
+    tx = factor(tx, levels = c("T1ctrl", "T1omega", "T2ctrl", "T2omega", "T4ctrl", "T4omega")),
+    
+    G = dense_rank(tx),
+    P = dense_rank(participant), 
+    Tt = dense_rank(time)
+  ) 
+
+
+# For post-fitting analysis, mean and SD of glucose
+mglucose <- mean(full_dat$glucose, na.rm = TRUE)
+sdglucose <- sd(full_dat$glucose, na.rm = TRUE)
+
+
+B <- bs(full_dat$min, df = 5)
+
+
+dat <- list(
+  N = nrow(full_dat),
+  y_obs = full_dat$y_obs, 
+  y_miss = full_dat$y_miss, 
+  K = ncol(B), 
+  B = B, 
+  N_G = length(unique(full_dat$G)),
+  G = full_dat$G, 
+  N_P = length(unique(full_dat$P)),
+  P = full_dat$P, 
+  N_T = length(unique(full_dat$Tt)),
+  Tt = full_dat$Tt, 
+  prior_only = 1
+)
+
+
+# Get model code/fits
+mo3 <- cmdstan_model(stan_file = "models/mo3.stan",
+                     exe_file = "models/mo3.exe")
+
+
+fit_wrap(mo3, fit = "fit.mo3.pp", DATA = dat)
+
+
+draws <- fit.mo3.pp$draws(format = "df") 
+
+
+# Basis evaluated on a dense grid (B was built as bs(full_dat$min, df = 5))
+min_seq <- seq(from = 0, to = 120, by = 1)
+
+B_pred_long <- predict(B, min_seq) |>
+  data.frame() |>
+  cbind(min_seq) |>
+  pivot_longer(starts_with("X"), values_to = "B")
+
+# Map cell index g and time index Tt back to time / treatment labels, and
+# record which cell g each participant (P) belongs to at each time.
+cell_key <- full_dat |>
+  distinct(time, treat, G, Tt) |>
+  rename(g = G)
+
+part_key <- full_dat |>
+  distinct(P, Tt, G, time, treat) |>
+  rename(p = P, g = G)
+
+
+# Population-average curves (full posterior -> credible intervals) 
+
+ag_long <- draws |>
+  dplyr::select(.draw, starts_with("a_g[")) |>
+  pivot_longer(starts_with("a_g["), names_to = "par", values_to = "a_g") |>
+  mutate(g = as.integer(gsub("a_g\\[(\\d+)\\]", "\\1", par))) |>
+  dplyr::select(.draw, g, a_g)
+
+bg_long <- draws |>
+  dplyr::select(.draw, starts_with("b_g[")) |>
+  pivot_longer(starts_with("b_g["), names_to = "par", values_to = "b_g") |>
+  mutate(k = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         g = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\2", par)),
+         name = paste0("X", k))
+
+pop_curve <- B_pred_long |>
+  inner_join(bg_long, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(.draw, g, min_seq),
+            mu_spl = sum(B * b_g)) |>
+  inner_join(ag_long, by = c(".draw", "g")) |>
+  # Back transform to original scale
+  mutate(mu = (a_g + mu_spl) * sdglucose + mglucose) |>
+  summarise(.by = c(g, min_seq),
+            m   = mean(mu),
+            lwr = quantile(mu, 0.025),
+            upr = quantile(mu, 0.975)) |>
+  left_join(cell_key, by = "g")
+
+
+# Participant-level curves (posterior-mean random effects) 
+
+# Posterior-mean population coefficients per cell
+a_g_mean <- ag_long |>
+  summarise(.by = g, a_g = mean(a_g))
+
+b_g_mean <- bg_long |>
+  summarise(.by = c(g, name), b_g = mean(b_g))
+
+# Posterior-mean participant random effects r_p[p, m]
+rp_mean <- draws |>
+  dplyr::select(starts_with("r_p[")) |>
+  summarise(across(everything(), mean)) |>
+  pivot_longer(everything(), names_to = "par", values_to = "val") |>
+  mutate(p = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         m = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\2", par)))
+
+# Intercept (column 1) and time-specific spline deviations (columns 2..M)
+rp_int <- rp_mean |> filter(m == 1) |> dplyr::select(p, a_p = val)
+
+rp_spl <- rp_mean |> filter(m >= 2) |>
+  mutate(idx  = m - 1,
+         Tt   = ((idx - 1) %/% 5) + 1,   # which timepoint block
+         k    = ((idx - 1) %%  5) + 1,   # which spline column within the block
+         name = paste0("X", k)) |>
+  dplyr::select(p, Tt, name, dev = val)
+
+# Population cell spline contribution over the grid
+pop_spl <- B_pred_long |>
+  inner_join(b_g_mean, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(g, min_seq), mu_pop_spl = sum(B * b_g)) |>
+  inner_join(a_g_mean, by = "g") |>
+  mutate(mu_pop = a_g + mu_pop_spl)
+
+# Participant spline-deviation contribution over the grid (per p and timepoint)
+dev_spl <- B_pred_long |>
+  inner_join(rp_spl, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(p, Tt, min_seq), mu_dev_spl = sum(B * dev)) |>
+  inner_join(rp_int, by = "p") |>
+  mutate(mu_dev = a_p + mu_dev_spl)
+
+# Combine: each participant p at time Tt sits in the cell g for their treatment
+part_curves <- part_key |>
+  inner_join(pop_spl, by = "g", relationship = "many-to-many") |>
+  inner_join(dev_spl, by = c("p", "Tt", "min_seq")) |>
+  mutate(mu = (mu_pop + mu_dev) * sdglucose + mglucose)
+
+
+# Plot
+
+ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
+  geom_line(data = part_curves,
+            aes(min_seq, mu, group = interaction(p, treat)),
+            alpha = 0.25, linewidth = 0.3) +
+  geom_line(linewidth = 1) +
+  facet_wrap(~ time) +
+  alpha_theme() +
+  scale_color_manual(values = colscale) +
+  scale_fill_manual(values = colscale) +
+  labs(x = "Minute",
+       y = "Blood Glucose (mmol L<sup>-1</sup>)",
+       color = "Treatment", fill = "Treatment") +
+  theme(axis.title.y = ggtext::element_markdown())
+
+
+```
+
+Next we fit the full data set to the model to get the posterior distribution. Posterior predictive checks indicate that the model capture relevant information from the data (@fig-mo3-ppc). 
+
+```{r}
+
+dat$prior_only <- 0
+
+fit_wrap(mo3, fit = "fit.mo3", DATA = dat)
+
+```
+
+
+```{r}
+#| label: fig-mo3-ppc
+#| fig-width: 7
+#| fig-height: 6
+#| fig-cap: "Posterior predictive checks of model `mo3`. Population average curves per time &times; treatment with participant-level curves (A), three example participants with observed data (B), residuals vs. predicted values for observed data points (C) and distributions of simulated (y<sup>rep</sup>) data sets and the observed data (D)."
+
+# Posterior draws of the parameters needed for curves
+draws <- fit.mo3$draws(variables = c("a_g", "b_g", "r_p"), format = "df")
+
+# Basis evaluated on a dense grid (B was built as bs(full_dat$min, df = 5))
+min_seq <- seq(from = 0, to = 120, by = 1)
+
+B_pred_long <- predict(B, min_seq) |>
+  data.frame() |>
+  cbind(min_seq) |>
+  pivot_longer(starts_with("X"), values_to = "B")
+
+cell_key <- full_dat |>
+  distinct(time, treat, G, Tt) |>
+  rename(g = G)
+
+part_key <- full_dat |>
+  distinct(P, Tt, G, time, treat) |>
+  rename(p = P, g = G)
+
+# Population-average curves (full posterior -> credible intervals)
+ag_long <- draws |>
+  dplyr::select(.draw, starts_with("a_g[")) |>
+  pivot_longer(starts_with("a_g["), names_to = "par", values_to = "a_g") |>
+  mutate(g = as.integer(gsub("a_g\\[(\\d+)\\]", "\\1", par))) |>
+  dplyr::select(.draw, g, a_g)
+
+bg_long <- draws |>
+  dplyr::select(.draw, starts_with("b_g[")) |>
+  pivot_longer(starts_with("b_g["), names_to = "par", values_to = "b_g") |>
+  mutate(k = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         g = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\2", par)),
+         name = paste0("X", k))
+
+pop_curve <- B_pred_long |>
+  inner_join(bg_long, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(.draw, g, min_seq),
+            mu_spl = sum(B * b_g)) |>
+  inner_join(ag_long, by = c(".draw", "g")) |>
+  mutate(mu = (a_g + mu_spl) * sdglucose + mglucose) |>
+  summarise(.by = c(g, min_seq),
+            m   = mean(mu),
+            lwr = quantile(mu, 0.025),
+            upr = quantile(mu, 0.975)) |>
+  left_join(cell_key, by = "g")
+
+# Participant-level curves (posterior-mean random effects)
+a_g_mean <- ag_long |>
+  summarise(.by = g, a_g = mean(a_g))
+
+b_g_mean <- bg_long |>
+  summarise(.by = c(g, name), b_g = mean(b_g))
+
+rp_mean <- draws |>
+  dplyr::select(starts_with("r_p[")) |>
+  summarise(across(everything(), mean)) |>
+  pivot_longer(everything(), names_to = "par", values_to = "val") |>
+  mutate(p = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         m = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\2", par)))
+
+rp_int <- rp_mean |> filter(m == 1) |> dplyr::select(p, a_p = val)
+
+rp_spl <- rp_mean |> filter(m >= 2) |>
+  mutate(idx  = m - 1,
+         Tt   = ((idx - 1) %/% dat$K) + 1,   # which timepoint block
+         k    = ((idx - 1) %%  dat$K) + 1,   # which spline column within the block
+         name = paste0("X", k)) |>
+  dplyr::select(p, Tt, name, dev = val)
+
+pop_spl <- B_pred_long |>
+  inner_join(b_g_mean, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(g, min_seq), mu_pop_spl = sum(B * b_g)) |>
+  inner_join(a_g_mean, by = "g") |>
+  mutate(mu_pop = a_g + mu_pop_spl)
+
+dev_spl <- B_pred_long |>
+  inner_join(rp_spl, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(p, Tt, min_seq), mu_dev_spl = sum(B * dev)) |>
+  inner_join(rp_int, by = "p") |>
+  mutate(mu_dev = a_p + mu_dev_spl)
+
+part_curves <- part_key |>
+  inner_join(pop_spl, by = "g", relationship = "many-to-many") |>
+  inner_join(dev_spl, by = c("p", "Tt", "min_seq")) |>
+  mutate(mu = (mu_pop + mu_dev) * sdglucose + mglucose)
+
+
+# Population ribbon + per-participant spaghetti, per time x treatment
+p1 <- ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
+  geom_line(data = part_curves,
+            aes(min_seq, mu, group = p),
+            alpha = 0.2, linewidth = 0.3) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              alpha = 0.2, color = NA) +
+  geom_line(linewidth = 1) +
+  facet_wrap(~ time) +
+  alpha_theme() +
+  scale_color_manual(values = colscale[c(2, 4)]) +
+  scale_fill_manual(values = colscale[c(2, 4)]) +
+  labs(x = "Minute",
+       y = "Blood Glucose (mmol L<sup>-1</sup>)",
+       color = "Treatment", fill = "Treatment") +
+  theme(axis.title.y = ggtext::element_markdown())
+
+
+# Individual curves examples (observed data as points, missing are not shown)
+ex_p <- c(1, 2, 3)
+
+p2 <- ggplot(filter(pop_curve, treat %in% unique(filter(part_key, p %in% ex_p)$treat)),
+             aes(min_seq, m)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, group = treat),
+              alpha = 0.2) +
+  geom_line(aes(group = treat, lty = treat), linewidth = 1) +
+  geom_line(data = filter(part_curves, p %in% ex_p),
+            aes(min_seq, mu, group = p, color = as.factor(p)),
+            alpha = 0.5, linewidth = 1) +
+  geom_point(data = filter(full_dat, P %in% ex_p, !is.na(glucose)),
+             aes(min, glucose, color = as.factor(P)),
+             size = 2) +
+  facet_wrap(~ time) +
+  alpha_theme() +
+  labs(x = "Minute",
+       y = "Blood Glucose (mmol L<sup>-1</sup>)",
+       color = "Participant ID",
+       lty = "Treatment") +
+  theme(axis.title.y = ggtext::element_markdown()) +
+  scale_color_manual(values = colscale)
+
+
+# Residuals vs. predicted (observed data points only)
+obs_idx <- which(full_dat$y_miss == 1)
+
+y_pred <- fit.mo3$draws("y_pred", format = "matrix")[, obs_idx]
+
+resid  <- sweep(-y_pred, 2, full_dat$y_obs[obs_idx], "+")
+
+p3 <- data.frame(m_fitted = colMeans(y_pred),
+                 s_fitted = apply(y_pred, 2, sd),
+                 m_resid  = colMeans(resid),
+                 s_resid  = apply(resid, 2, sd)) |>
+  ggplot(aes(m_fitted, m_resid)) +
+  geom_errorbar(aes(ymin = m_resid - s_resid,
+                    ymax = m_resid + s_resid),
+                alpha = 0.3) +
+  geom_errorbar(aes(xmin = m_fitted - s_fitted,
+                    xmax = m_fitted + s_fitted),
+                orientation = "y",
+                alpha = 0.3) +
+  geom_point(alpha = 0.3,
+             size = 3) +
+  geom_smooth(color = colscale[3]) +
+  geom_hline(yintercept = 0, lty = 2, alpha = 0.4) +
+  alpha_theme() +
+  labs(x = "Predicted values (standardized glucose)",
+       y = "Observed - Predicted values")
+
+
+# Simulated vs. observed distributions (observed data points only)
+p4 <- fit.mo3$draws("y_rep", format = "df") |>
+  filter(.draw %in% 1:40) |>
+  dplyr::select(.draw, starts_with("y_rep")) |>
+  pivot_longer(cols = starts_with("y_rep")) |>
+  mutate(i = as.integer(gsub("y_rep\\[(\\d+)\\]", "\\1", name))) |>
+  filter(i %in% obs_idx) |>
+  ggplot(aes(value, group = .draw)) +
+  geom_line(stat = "density", alpha = 0.3) +
+  geom_line(data = filter(full_dat, y_miss == 1),
+            aes(y_obs, group = NULL),
+            color = colscale[3],
+            linewidth = 1,
+            stat = "density") +
+  alpha_theme(yaxis = FALSE) +
+  labs(x = "Standardized glucose (simulated and observed)",
+       y = "")
+
+cowplot::plot_grid(p1, p2, p3, p4,
+                   ncol = 2,
+                   labels = c("A", "B", "C", "D"))
+
+```
+
+
+
+
+
+
+### Inference
+
+We extract two sets of fitted curves from model `mo3`, the population-average glucose curve for every time x treatment combination (`a_g` + cell spline `b_g`), with 95% percentile intervals from the full posterior, and the participant-level curves, which add each participant's random intercept (`r_p[p, 1]`) and time-specific random spline deviations to the population cell they belong to.
+
+
+```{r}
+#| label: fig-mo3
+#| fig-width: !expr 18/2.54
+#| fig-height: !expr 10/2.54
+#| fig-cap: "Predictions (top panels), within-group time-contrasts (middle panels) and between-group contrasts of changes (&Delta;) from baseline. Error bars and ribbons represent 50 and 95% intervals in the middle and lower panels."
+
+
+draws <- fit.mo3$draws(format = "df")
+
+# Basis evaluated on a dense grid (B was built as bs(full_dat$min, df = 5))
+min_seq <- seq(from = 0, to = 120, by = 1)
+
+B_pred_long <- predict(B, min_seq) |>
+  data.frame() |>
+  cbind(min_seq) |>
+  pivot_longer(starts_with("X"), values_to = "B")
+
+# Map cell index g and time index Tt back to time / treatment labels, and
+# record which cell g each participant (P) belongs to at each time.
+cell_key <- full_dat |>
+  distinct(time, treat, G, Tt) |>
+  rename(g = G)
+
+part_key <- full_dat |>
+  distinct(P, Tt, G, time, treat) |>
+  rename(p = P, g = G)
+
+
+# Population-average curves (full posterior -> credible intervals) 
+
+ag_long <- draws |>
+  dplyr::select(.draw, starts_with("a_g[")) |>
+  pivot_longer(starts_with("a_g["), names_to = "par", values_to = "a_g") |>
+  mutate(g = as.integer(gsub("a_g\\[(\\d+)\\]", "\\1", par))) |>
+  dplyr::select(.draw, g, a_g)
+
+bg_long <- draws |>
+  dplyr::select(.draw, starts_with("b_g[")) |>
+  pivot_longer(starts_with("b_g["), names_to = "par", values_to = "b_g") |>
+  mutate(k = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         g = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\2", par)),
+         name = paste0("X", k))
+
+pop_curve <- B_pred_long |>
+  inner_join(bg_long, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(.draw, g, min_seq),
+            mu_spl = sum(B * b_g)) |>
+  inner_join(ag_long, by = c(".draw", "g")) |>
+  # This reverse the standardization (m and s are from the full data set above)
+  mutate(mu = (a_g + mu_spl) * sdglucose + mglucose) |>
+  summarise(.by = c(g, min_seq),
+            m   = mean(mu),
+            lwr = quantile(mu, 0.025),
+            upr = quantile(mu, 0.975)) |>
+  left_join(cell_key, by = "g")
+
+
+
+
+# Group-level predictions - These are implied group level glucose curves 
+# at the three time points
+
+pred <- B_pred_long |>
+
+  inner_join(bg_long, by = "name", relationship = "many-to-many") |>
+  
+  summarise(.by = c(.draw, g, min_seq),
+            mu_spl = sum(B * b_g)) |>
+  inner_join(ag_long, by = c(".draw", "g")) |> 
+  # back transform the standardization
+    mutate(mu = (a_g + mu_spl) * sdglucose + mglucose) |>
+  inner_join(cell_key) |> 
+  mutate(time_treat = paste0(time,"_",treat)) |> 
+  dplyr::select(.draw, min_seq, mu, time_treat) 
+
+
+# Calculate contrasts at measured time points
+
+within_contrasts <- pred |> 
+  pivot_wider(values_from = mu, 
+              names_from = time_treat) |> 
+  # Calculate contrasts
+  mutate(ctrl_t2 = T2_ctrl - T1_ctrl, 
+         ctrl_t4 = T4_ctrl - T1_ctrl, 
+         omega_t2 = T2_omega - T1_omega, 
+         omega_t4 =  T4_omega - T1_omega,
+         ) |> 
+  select(.draw, min_seq, ctrl_t2:omega_t4) |> 
+  
+  pivot_longer(cols = ctrl_t2:omega_t4) |> 
+  
+  filter(min_seq %in% c(15, 30, 45, 60, 60, 90, 120)) |> 
+  
+  summarise(.by = c(name,min_seq), 
+            m = median(value), 
+            lwr50 = quantile(value, 0.25), 
+            upr50 = quantile(value, 0.75), 
+            lwr95 = quantile(value, 0.025), 
+            upr95 = quantile(value, 0.975)) |>
+  
+  separate(name, into = c("treat", "time"), sep = "_") |> 
+  mutate(time = case_when(time == "t2" ~ "Supplementation vs. Baseline", 
+                          time == "t4" ~ "Combined vs. Baseline"), 
+         time = factor(time, levels = c("Supplementation vs. Baseline", 
+                                               "Combined vs. Baseline")), 
+         treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo change from baseline", "N-3 change from baseline"))) 
+  
+
+pd <- position_dodge(width = 3)
+
+p_wcontr <- within_contrasts |>  
+  ggplot(aes(min_seq, m, color = time, fill = time)) +
+  
+  geom_hline(yintercept = 0, lty = 2, color = "gray") +
+  
+  geom_errorbar(aes(ymin = lwr50, 
+                    ymax = upr50), 
+                linewidth = 1.2, width = 0, 
+                position = pd) +
+  geom_errorbar(aes(ymin = lwr95, 
+                    ymax = upr95), 
+                linewidth = 0.6, width = 0, 
+                position = pd) +
+  geom_point(shape = 21, color = "black", 
+                position = pd) +
+  
+  scale_color_manual(values = colscale[c(3,6)]) +
+ scale_fill_manual(values = colscale[c(3,6)]) +
+    scale_x_continuous(limits = c(0, 125), 
+                                expand = c(0, 0)) +
+  
+  labs(x = "Time (min)", 
+       y = " \u0394Blood\u0020 glucose<br>(mmol L<sup>\u22121</sup>)") +
+  
+  
+  facet_wrap(~ treat) + 
+  alpha_theme() + 
+    theme(axis.title.y = ggtext::element_markdown(), 
+        legend.title = element_blank(), 
+        axis.ticks.x = element_blank(), 
+        axis.line.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        strip.text = element_markdown(size = 7))
+  
+
+
+
+
+
+p_pred <- pred |> 
+  summarise(.by = c(time_treat, min_seq), 
+            m = median(mu), 
+            lwr50 = quantile(mu, 0.25), 
+            upr50 = quantile(mu, 0.75), 
+            lwr95 = quantile(mu, 0.025), 
+            upr95 = quantile(mu, 0.975)) |> 
+  
+  separate(time_treat, into = c("time", "treat"), sep = "_") |> 
+  mutate(time = case_when(time == "T1" ~ "Baseline", 
+                          time == "T2" ~ "Supplementation", 
+                          time == "T4" ~ "Combined"), 
+         time = factor(time, levels = c("Baseline", "Supplementation", 
+                                               "Combined")), 
+         treat = factor(treat, levels = c("ctrl", "omega"), 
+                        labels = c("Placebo predictions", "N-3 predictions"))) |> 
+  
+  ggplot(aes(min_seq, m, lty = time, color = treat)) + 
+  geom_line() + 
+  facet_wrap(~ treat, ncol = 2) + 
+  alpha_theme() +
+  labs(x = "Time (min)", 
+       y = "Blood glucose<br>(mmol L<sup>-1</sup>)") +
+  
+  scale_x_continuous(limits = c(0, 125), 
+                                expand = c(0, 0)) +
+  
+  scale_color_manual(values = colscale[c(4,2)], 
+                     guide = "none") +
+  theme(axis.title.y = ggtext::element_markdown(), 
+        legend.title = element_blank(), 
+        axis.ticks.x = element_blank(), 
+        axis.line.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.title.x = element_blank())
+            
+
+
+
+# Contrasts - These are differences in delta from baseline
+
+delta_contrasts <- pred |> 
+  pivot_wider(values_from = mu, 
+              names_from = time_treat)  |> 
+  # Calculate contrasts
+  mutate(ctrl_t2 = T2_ctrl - T1_ctrl, 
+         ctrl_t4 = T4_ctrl - T1_ctrl, 
+         omega_t2 = T2_omega - T1_omega, 
+         omega_t4 =  T4_omega - T1_omega,
+         omega_ctrl_t2 = omega_t2 - ctrl_t2, 
+         omega_ctrl_t4 = omega_t4 - ctrl_t4, 
+         ) |> 
+  pivot_longer(names_to = "contrast", 
+               values_to = "value", 
+               cols = T1_ctrl:omega_ctrl_t4) |> 
+  summarise(.by = c(min_seq, contrast), 
+            m = mean(value), 
+            lwr50 = quantile(value, 0.25), 
+            upr50 = quantile(value, 0.75), 
+            lwr95 = quantile(value, 0.025), 
+            upr95 = quantile(value, 0.975)) |> 
+  filter(contrast %in% c("omega_ctrl_t2", "omega_ctrl_t4")) |> 
+  mutate(contrast = case_when(contrast == "omega_ctrl_t2" ~ "Placebo vs. N-3: Supplementation period", 
+                              contrast == "omega_ctrl_t4" ~ "Placebo vs. N-3: Combined period"), 
+         contrast = factor(contrast, levels = c("Placebo vs. N-3 Supplementation: Supplementation period", 
+                                                "Placebo vs. N-3 Combined: Combined period"))) |> 
+  
+  ggplot(aes(min_seq, m, fill = contrast)) + 
+    scale_x_continuous(limits = c(0, 125), 
+                                expand = c(0, 0), 
+                       breaks = c(25, 50, 75, 100)) +
+  geom_ribbon(aes(ymin = lwr50, ymax = upr50), 
+              alpha = 0.3) +
+    geom_ribbon(aes(ymin = lwr95, ymax = upr95), 
+              alpha = 0.3) +
+  geom_line() + 
+  facet_wrap(~ contrast) + 
+  alpha_theme() +
+  scale_fill_manual(values = colscale[c(3,6)]) +
+  geom_hline(yintercept = 0, lty = 2, alpha = 0.5) + 
+  theme(legend.position = "none") + 
+  labs(x = "Time (min)", 
+       y = "&Delta;N-3 \u2212 &Delta;Placebo<br>(mmol L<sup>-1</sup>)")
+  
+
+  
+
+# Combine the full figure 
+
+ogtt <- cowplot::plot_grid(p_pred, 
+                   p_wcontr, 
+                   delta_contrasts, 
+                   ncol = 1, 
+                   rel_heights = c(1, 1, 1.4), 
+                   align = "v")
+
+
+
+ggsave(
+  filename = "figures/preliminary-figures/ogtt.pdf",
+  ogtt,
+  device = cairo_pdf,
+  width = 18,
+  height = 10,
+  units = "cm"
+)
+
+ogtt
+```
+
+
+
+
+
+
+
+
+
+```{r}
+#| label: fig-mo3-participant-curves
+#| fig-width: !expr 18/2.54
+#| fig-height: !expr 4/2.54
+#| fig-cap: "Predictions from the OGTT model `mo3` at each time point with participant-level predictions."
+
+
+# Participant-level curves (posterior-mean random effects) 
+
+# Posterior-mean population coefficients per cell
+a_g_mean <- ag_long |>
+  summarise(.by = g, a_g = mean(a_g))
+
+b_g_mean <- bg_long |>
+  summarise(.by = c(g, name), b_g = mean(b_g))
+
+# Posterior-mean participant random effects r_p[p, m]
+rp_mean <- draws |>
+  dplyr::select(starts_with("r_p[")) |>
+  summarise(across(everything(), mean)) |>
+  pivot_longer(everything(), names_to = "par", values_to = "val") |>
+  mutate(p = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         m = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\2", par)))
+
+# Intercept (column 1) and time-specific spline deviations (columns 2..M)
+rp_int <- rp_mean |> filter(m == 1) |> dplyr::select(p, a_p = val)
+
+rp_spl <- rp_mean |> filter(m >= 2) |>
+  mutate(idx  = m - 1,
+         Tt   = ((idx - 1) %/% 5) + 1,   # which timepoint block
+         k    = ((idx - 1) %%  5) + 1,   # which spline column within the block
+         name = paste0("X", k)) |>
+  dplyr::select(p, Tt, name, dev = val)
+
+# Population cell spline contribution over the grid
+pop_spl <- B_pred_long |>
+  inner_join(b_g_mean, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(g, min_seq), mu_pop_spl = sum(B * b_g)) |>
+  inner_join(a_g_mean, by = "g") |>
+  mutate(mu_pop = a_g + mu_pop_spl)
+
+# Participant spline-deviation contribution over the grid (per p and timepoint)
+dev_spl <- B_pred_long |>
+  inner_join(rp_spl, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(p, Tt, min_seq), mu_dev_spl = sum(B * dev)) |>
+  inner_join(rp_int, by = "p") |>
+  mutate(mu_dev = a_p + mu_dev_spl)
+
+# Combine: each participant p at time Tt sits in the cell g for their treatment
+part_curves <- part_key |>
+  inner_join(pop_spl, by = "g", relationship = "many-to-many") |>
+  inner_join(dev_spl, by = c("p", "Tt", "min_seq")) |>
+  mutate(mu = (mu_pop + mu_dev) * sdglucose + mglucose)
+
+
+# Plot
+
+ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
+  geom_line(data = part_curves,
+            aes(min_seq, mu, group = interaction(p, treat)),
+            alpha = 0.25, linewidth = 0.3) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.2, color = NA) +
+  geom_line(linewidth = 1) +
+  facet_wrap(~ time) +
+  alpha_theme() +
+  scale_color_manual(values = colscale) +
+  scale_fill_manual(values = colscale) +
+  labs(x = "Minute",
+       y = "Blood Glucose (mmol L<sup>-1</sup>)",
+       color = "Treatment", fill = "Treatment") +
+  theme(axis.title.y = ggtext::element_markdown())
+
+
+```
+
+
+
+## Model expansion: Participant-level time-specific intercepts.
+
+In model `mo3` the participant-level intercept ($a_p$) is common to all three time points, while the participant-level spline deviations are time-specific. As the basis $B$ has no intercept column, all basis functions are zero at the start of the test (min 0). The participant-level deviation from the population curve in fasting glucose is therefore constrained to be equal at all time points in `mo3`. Model `mo4` (`models/mo4.stan`) relaxes this assumption by decomposing the participant-level intercept at each time point into a shared intercept ($a_p$) and a time-specific deviation ($\delta_{t,p}$), otherwise the model is identical to `mo3` (including missing data imputation):
+
+$$
+\begin{align}
+\mu_i &= \Big(a_{g[i]} + \sum_k b_{k,g[i]}\,B_{k,i}\Big)
+        + \Big(a_{p[i]} + \delta_{t[i],p[i]} + \sum_k \beta_{k,t[i],p[i]}\,B_{k,i}\Big) \\
+(a_p, \beta_p)^\top &\sim \operatorname{MVNormal}(\mathbf 0,\ \mathbf{S\,R\,S}) \\
+\delta_{t,p} &\sim \operatorname{Normal}(0, \tau_\delta) \\
+\tau_\delta &\sim \operatorname{Exponential}(2)
+\end{align}
+$$ {#eq-mo4}
+
+The correlated participant block ($a_p$ and the time-specific spline deviations) is the same as in `mo3`, and the time-specific intercept deviations are independent of this block with a common standard deviation ($\tau_\delta$). Model `mo3` is the special case $\tau_\delta = 0$, and the $\operatorname{Exponential}(2)$ prior regularizes $\tau_\delta$ towards this simpler model. The implied correlation between a participant's intercepts at two time points is $\rho = \sigma_a^2 / (\sigma_a^2 + \tau_\delta^2)$, where $\sigma_a$ is the standard deviation of $a_p$.
+
+We chose this decomposition over a fully correlated block with one intercept per time point, as an LKJ prior on the resulting $18 \times 18$ correlation matrix implies a marginal prior on each correlation that strongly favors values close to zero (approximately $\pm 0.45$ 95% prior interval for LKJ(1)), regardless of the choice of the LKJ shape parameter. Other priors are the same as in @eq-mo2 and @eq-mo3. The prior predictive simulation is shown in @fig-prior-mo4.
+
+
+```{r}
+#| label: fig-prior-mo4
+#| fig-height: 4
+#| fig-width: 7
+#| fig-cap: "Prior predictive simulation of the `mo4` model. The plot shows individual curves and implied group means for each time point."
+
+# Same data as for mo3 (full_dat, B, dat), prior only
+dat4 <- dat
+dat4$prior_only <- 1
+
+mo4 <- cmdstan_model(stan_file = "models/mo4.stan",
+                     exe_file = "models/mo4.exe")
+
+fit_wrap(mo4, fit = "fit.mo4.pp", DATA = dat4)
+
+draws <- fit.mo4.pp$draws(variables = c("a_g", "b_g", "r_p", "delta"), format = "df")
+
+# Basis evaluated on a dense grid (B was built as bs(full_dat$min, df = 5))
+min_seq <- seq(from = 0, to = 120, by = 1)
+
+B_pred_long <- predict(B, min_seq) |>
+  data.frame() |>
+  cbind(min_seq) |>
+  pivot_longer(starts_with("X"), values_to = "B")
+
+cell_key <- full_dat |>
+  distinct(time, treat, G, Tt) |>
+  rename(g = G)
+
+part_key <- full_dat |>
+  distinct(P, Tt, G, time, treat) |>
+  rename(p = P, g = G)
+
+# Population-average curves (full posterior -> credible intervals)
+ag_long <- draws |>
+  dplyr::select(.draw, starts_with("a_g[")) |>
+  pivot_longer(starts_with("a_g["), names_to = "par", values_to = "a_g") |>
+  mutate(g = as.integer(gsub("a_g\\[(\\d+)\\]", "\\1", par))) |>
+  dplyr::select(.draw, g, a_g)
+
+bg_long <- draws |>
+  dplyr::select(.draw, starts_with("b_g[")) |>
+  pivot_longer(starts_with("b_g["), names_to = "par", values_to = "b_g") |>
+  mutate(k = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         g = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\2", par)),
+         name = paste0("X", k))
+
+pop_curve <- B_pred_long |>
+  inner_join(bg_long, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(.draw, g, min_seq),
+            mu_spl = sum(B * b_g)) |>
+  inner_join(ag_long, by = c(".draw", "g")) |>
+  mutate(mu = (a_g + mu_spl) * sdglucose + mglucose) |>
+  summarise(.by = c(g, min_seq),
+            m   = mean(mu),
+            lwr = quantile(mu, 0.025),
+            upr = quantile(mu, 0.975)) |>
+  left_join(cell_key, by = "g")
+
+# Participant-level curves (posterior-mean random effects)
+a_g_mean <- ag_long |>
+  summarise(.by = g, a_g = mean(a_g))
+
+b_g_mean <- bg_long |>
+  summarise(.by = c(g, name), b_g = mean(b_g))
+
+rp_mean <- draws |>
+  dplyr::select(starts_with("r_p[")) |>
+  summarise(across(everything(), mean)) |>
+  pivot_longer(everything(), names_to = "par", values_to = "val") |>
+  mutate(p = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         m = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\2", par)))
+
+# Time-specific participant intercept deviations delta[t, p]
+delta_mean <- draws |>
+  dplyr::select(starts_with("delta[")) |>
+  summarise(across(everything(), mean)) |>
+  pivot_longer(everything(), names_to = "par", values_to = "delta") |>
+  mutate(Tt = as.integer(gsub("delta\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         p  = as.integer(gsub("delta\\[(\\d+),(\\d+)\\]", "\\2", par))) |>
+  dplyr::select(p, Tt, delta)
+
+# Shared intercept (column 1) + time-specific deviation, and time-specific
+# spline deviations (columns 2..M, blocks of K per time point as in mo3)
+rp_int <- rp_mean |> filter(m == 1) |> dplyr::select(p, a_shared = val) |>
+  inner_join(delta_mean, by = "p") |>
+  mutate(a_p = a_shared + delta) |>
+  dplyr::select(p, Tt, a_p)
+
+rp_spl <- rp_mean |> filter(m >= 2) |>
+  mutate(idx  = m - 1,
+         Tt   = ((idx - 1) %/% dat$K) + 1,
+         k    = ((idx - 1) %%  dat$K) + 1,
+         name = paste0("X", k)) |>
+  dplyr::select(p, Tt, name, dev = val)
+
+pop_spl <- B_pred_long |>
+  inner_join(b_g_mean, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(g, min_seq), mu_pop_spl = sum(B * b_g)) |>
+  inner_join(a_g_mean, by = "g") |>
+  mutate(mu_pop = a_g + mu_pop_spl)
+
+dev_spl <- B_pred_long |>
+  inner_join(rp_spl, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(p, Tt, min_seq), mu_dev_spl = sum(B * dev)) |>
+  inner_join(rp_int, by = c("p", "Tt")) |>
+  mutate(mu_dev = a_p + mu_dev_spl)
+
+part_curves <- part_key |>
+  inner_join(pop_spl, by = "g", relationship = "many-to-many") |>
+  inner_join(dev_spl, by = c("p", "Tt", "min_seq")) |>
+  mutate(mu = (mu_pop + mu_dev) * sdglucose + mglucose)
+
+# Plot
+ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
+  geom_line(data = part_curves,
+            aes(min_seq, mu, group = interaction(p, treat)),
+            alpha = 0.25, linewidth = 0.3) +
+  geom_line(linewidth = 1) +
+  facet_wrap(~ time) +
+  alpha_theme() +
+  scale_color_manual(values = colscale) +
+  scale_fill_manual(values = colscale) +
+  labs(x = "Minute",
+       y = "Blood Glucose (mmol L<sup>-1</sup>)",
+       color = "Treatment", fill = "Treatment") +
+  theme(axis.title.y = ggtext::element_markdown())
+
+```
+
+Next we fit the model to the full data set and perform the same posterior predictive checks as for `mo3` (@fig-mo4-ppc).
+
+```{r}
+
+dat4$prior_only <- 0
+
+fit_wrap(mo4, fit = "fit.mo4", DATA = dat4)
+
+```
+
+
+```{r}
+#| label: fig-mo4-ppc
+#| fig-width: 7
+#| fig-height: 6
+#| fig-cap: "Posterior predictive checks of model `mo4`. Population average curves per time &times; treatment with participant-level curves (A), three example participants with observed data (B), residuals vs. predicted values for observed data points (C) and distributions of simulated (y<sup>rep</sup>) data sets and the observed data (D)."
+
+# Posterior draws of the parameters needed for curves
+draws <- fit.mo4$draws(variables = c("a_g", "b_g", "r_p", "delta"), format = "df")
+
+# Population-average curves (full posterior -> credible intervals)
+ag_long <- draws |>
+  dplyr::select(.draw, starts_with("a_g[")) |>
+  pivot_longer(starts_with("a_g["), names_to = "par", values_to = "a_g") |>
+  mutate(g = as.integer(gsub("a_g\\[(\\d+)\\]", "\\1", par))) |>
+  dplyr::select(.draw, g, a_g)
+
+bg_long <- draws |>
+  dplyr::select(.draw, starts_with("b_g[")) |>
+  pivot_longer(starts_with("b_g["), names_to = "par", values_to = "b_g") |>
+  mutate(k = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         g = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\2", par)),
+         name = paste0("X", k))
+
+pop_curve <- B_pred_long |>
+  inner_join(bg_long, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(.draw, g, min_seq),
+            mu_spl = sum(B * b_g)) |>
+  inner_join(ag_long, by = c(".draw", "g")) |>
+  mutate(mu = (a_g + mu_spl) * sdglucose + mglucose) |>
+  summarise(.by = c(g, min_seq),
+            m   = mean(mu),
+            lwr = quantile(mu, 0.025),
+            upr = quantile(mu, 0.975)) |>
+  left_join(cell_key, by = "g")
+
+# Participant-level curves (posterior-mean random effects)
+a_g_mean <- ag_long |>
+  summarise(.by = g, a_g = mean(a_g))
+
+b_g_mean <- bg_long |>
+  summarise(.by = c(g, name), b_g = mean(b_g))
+
+rp_mean <- draws |>
+  dplyr::select(starts_with("r_p[")) |>
+  summarise(across(everything(), mean)) |>
+  pivot_longer(everything(), names_to = "par", values_to = "val") |>
+  mutate(p = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         m = as.integer(gsub("r_p\\[(\\d+),(\\d+)\\]", "\\2", par)))
+
+delta_mean <- draws |>
+  dplyr::select(starts_with("delta[")) |>
+  summarise(across(everything(), mean)) |>
+  pivot_longer(everything(), names_to = "par", values_to = "delta") |>
+  mutate(Tt = as.integer(gsub("delta\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         p  = as.integer(gsub("delta\\[(\\d+),(\\d+)\\]", "\\2", par))) |>
+  dplyr::select(p, Tt, delta)
+
+# Shared intercept (column 1) + time-specific deviation, and time-specific
+# spline deviations (columns 2..M, blocks of K per time point as in mo3)
+rp_int <- rp_mean |> filter(m == 1) |> dplyr::select(p, a_shared = val) |>
+  inner_join(delta_mean, by = "p") |>
+  mutate(a_p = a_shared + delta) |>
+  dplyr::select(p, Tt, a_p)
+
+rp_spl <- rp_mean |> filter(m >= 2) |>
+  mutate(idx  = m - 1,
+         Tt   = ((idx - 1) %/% dat$K) + 1,
+         k    = ((idx - 1) %%  dat$K) + 1,
+         name = paste0("X", k)) |>
+  dplyr::select(p, Tt, name, dev = val)
+
+pop_spl <- B_pred_long |>
+  inner_join(b_g_mean, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(g, min_seq), mu_pop_spl = sum(B * b_g)) |>
+  inner_join(a_g_mean, by = "g") |>
+  mutate(mu_pop = a_g + mu_pop_spl)
+
+dev_spl <- B_pred_long |>
+  inner_join(rp_spl, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(p, Tt, min_seq), mu_dev_spl = sum(B * dev)) |>
+  inner_join(rp_int, by = c("p", "Tt")) |>
+  mutate(mu_dev = a_p + mu_dev_spl)
+
+part_curves <- part_key |>
+  inner_join(pop_spl, by = "g", relationship = "many-to-many") |>
+  inner_join(dev_spl, by = c("p", "Tt", "min_seq")) |>
+  mutate(mu = (mu_pop + mu_dev) * sdglucose + mglucose)
+
+
+# Population ribbon + per-participant spaghetti, per time x treatment
+p1 <- ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
+  geom_line(data = part_curves,
+            aes(min_seq, mu, group = p),
+            alpha = 0.2, linewidth = 0.3) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              alpha = 0.2, color = NA) +
+  geom_line(linewidth = 1) +
+  facet_wrap(~ time) +
+  alpha_theme() +
+  scale_color_manual(values = colscale[c(2, 4)]) +
+  scale_fill_manual(values = colscale[c(2, 4)]) +
+  labs(x = "Minute",
+       y = "Blood Glucose (mmol L<sup>-1</sup>)",
+       color = "Treatment", fill = "Treatment") +
+  theme(axis.title.y = ggtext::element_markdown())
+
+
+# Individual curves examples (observed data as points, missing are not shown)
+ex_p <- c(1, 2, 3)
+
+p2 <- ggplot(filter(pop_curve, treat %in% unique(filter(part_key, p %in% ex_p)$treat)),
+             aes(min_seq, m)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, group = treat),
+              alpha = 0.2) +
+  geom_line(aes(group = treat, lty = treat), linewidth = 1) +
+  geom_line(data = filter(part_curves, p %in% ex_p),
+            aes(min_seq, mu, group = p, color = as.factor(p)),
+            alpha = 0.5, linewidth = 1) +
+  geom_point(data = filter(full_dat, P %in% ex_p, !is.na(glucose)),
+             aes(min, glucose, color = as.factor(P)),
+             size = 2) +
+  facet_wrap(~ time) +
+  alpha_theme() +
+  labs(x = "Minute",
+       y = "Blood Glucose (mmol L<sup>-1</sup>)",
+       color = "Participant ID",
+       lty = "Treatment") +
+  theme(axis.title.y = ggtext::element_markdown()) +
+  scale_color_manual(values = colscale)
+
+
+# Residuals vs. predicted (observed data points only)
+obs_idx <- which(full_dat$y_miss == 1)
+
+y_pred <- fit.mo4$draws("y_pred", format = "matrix")[, obs_idx]
+
+resid  <- sweep(-y_pred, 2, full_dat$y_obs[obs_idx], "+")
+
+p3 <- data.frame(m_fitted = colMeans(y_pred),
+                 s_fitted = apply(y_pred, 2, sd),
+                 m_resid  = colMeans(resid),
+                 s_resid  = apply(resid, 2, sd)) |>
+  ggplot(aes(m_fitted, m_resid)) +
+  geom_errorbar(aes(ymin = m_resid - s_resid,
+                    ymax = m_resid + s_resid),
+                alpha = 0.3) +
+  geom_errorbar(aes(xmin = m_fitted - s_fitted,
+                    xmax = m_fitted + s_fitted),
+                orientation = "y",
+                alpha = 0.3) +
+  geom_point(alpha = 0.3,
+             size = 3) +
+  geom_smooth(color = colscale[3]) +
+  geom_hline(yintercept = 0, lty = 2, alpha = 0.4) +
+  alpha_theme() +
+  labs(x = "Predicted values (standardized glucose)",
+       y = "Observed - Predicted values")
+
+
+# Simulated vs. observed distributions (observed data points only)
+p4 <- fit.mo4$draws("y_rep", format = "df") |>
+  filter(.draw %in% 1:40) |>
+  dplyr::select(.draw, starts_with("y_rep")) |>
+  pivot_longer(cols = starts_with("y_rep")) |>
+  mutate(i = as.integer(gsub("y_rep\\[(\\d+)\\]", "\\1", name))) |>
+  filter(i %in% obs_idx) |>
+  ggplot(aes(value, group = .draw)) +
+  geom_line(stat = "density", alpha = 0.3) +
+  geom_line(data = filter(full_dat, y_miss == 1),
+            aes(y_obs, group = NULL),
+            color = colscale[3],
+            linewidth = 1,
+            stat = "density") +
+  alpha_theme(yaxis = FALSE) +
+  labs(x = "Standardized glucose (simulated and observed)",
+       y = "")
+
+cowplot::plot_grid(p1, p2, p3, p4,
+                   ncol = 2,
+                   labels = c("A", "B", "C", "D"))
+
+```
+
+If time-specific participant intercepts are not needed, the standard deviation of the time-specific deviations ($\tau_\delta$) should be close to zero and the implied correlation between a participant's intercepts at two time points ($\rho$) close to one, i.e. participants keep their relative fasting level across time points. Prior and posterior summaries of these parameters are shown in @tbl-mo4-intercepts.
+
+```{r}
+#| label: tbl-mo4-intercepts
+#| tbl-cap: "Prior and posterior summaries (mean and 95% percentile intervals) of the standard deviation of the shared participant-level intercept ($\\sigma_a$), the standard deviation of time-specific intercept deviations ($\\tau_\\delta$) and the implied correlation between a participant's intercepts at two time points ($\\rho$) in model `mo4`."
+
+int_pars <- c("sd_p[1]", "tau_delta", "rho_int")
+
+bind_rows(
+  fit.mo4.pp$summary(variables = int_pars,
+                     mean,
+                     ~ quantile(.x, probs = c(0.025, 0.975))) |>
+    mutate(dist = "Prior"),
+  fit.mo4$summary(variables = int_pars,
+                  mean,
+                  ~ quantile(.x, probs = c(0.025, 0.975))) |>
+    mutate(dist = "Posterior")) |>
+  mutate(variable = factor(variable,
+                           levels = int_pars,
+                           labels = c("SD shared intercept",
+                                      "SD time-specific deviations",
+                                      "Implied intercept correlation"))) |>
+  pivot_wider(names_from = dist,
+              values_from = c(mean, `2.5%`, `97.5%`),
+              names_glue = "{dist}_{.value}") |>
+  dplyr::select(variable, starts_with("Prior"), starts_with("Posterior")) |>
+  gt::gt() |>
+  gt::fmt_number(columns = -variable, decimals = 2) |>
+  gt::tab_spanner_delim(delim = "_") |>
+  gt::cols_label(variable = "")
+
+```
+
+
+### Inference (`mo4`)
+
+We perform the same inference as for `mo3` using model `mo4`. As the population-level part of the models is identical, differences between the models' implied group-level curves and contrasts are due to how participant-level deviations are partitioned across time points.
+
+
+```{r}
+#| label: fig-mo4
+#| fig-width: !expr 18/2.54
+#| fig-height: !expr 10/2.54
+#| fig-cap: "Model `mo4` predictions (top panels), within-group time-contrasts (middle panels) and between-group contrasts of changes (&Delta;) from baseline. Error bars and ribbons represent 50 and 95% intervals in the middle and lower panels."
+
+
+draws <- fit.mo4$draws(variables = c("a_g", "b_g"), format = "df")
+
+ag_long <- draws |>
+  dplyr::select(.draw, starts_with("a_g[")) |>
+  pivot_longer(starts_with("a_g["), names_to = "par", values_to = "a_g") |>
+  mutate(g = as.integer(gsub("a_g\\[(\\d+)\\]", "\\1", par))) |>
+  dplyr::select(.draw, g, a_g)
+
+bg_long <- draws |>
+  dplyr::select(.draw, starts_with("b_g[")) |>
+  pivot_longer(starts_with("b_g["), names_to = "par", values_to = "b_g") |>
+  mutate(k = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\1", par)),
+         g = as.integer(gsub("b_g\\[(\\d+),(\\d+)\\]", "\\2", par)),
+         name = paste0("X", k))
+
+
+# Group-level predictions - These are implied group level glucose curves
+# at the three time points
+
+pred <- B_pred_long |>
+  inner_join(bg_long, by = "name", relationship = "many-to-many") |>
+  summarise(.by = c(.draw, g, min_seq),
+            mu_spl = sum(B * b_g)) |>
+  inner_join(ag_long, by = c(".draw", "g")) |>
+  # back transform the standardization
+  mutate(mu = (a_g + mu_spl) * sdglucose + mglucose) |>
+  inner_join(cell_key) |>
+  mutate(time_treat = paste0(time,"_",treat)) |>
+  dplyr::select(.draw, min_seq, mu, time_treat)
+
+
+# Calculate contrasts at measured time points
+
+within_contrasts <- pred |>
+  pivot_wider(values_from = mu,
+              names_from = time_treat) |>
+  mutate(ctrl_t2 = T2_ctrl - T1_ctrl,
+         ctrl_t4 = T4_ctrl - T1_ctrl,
+         omega_t2 = T2_omega - T1_omega,
+         omega_t4 =  T4_omega - T1_omega) |>
+  select(.draw, min_seq, ctrl_t2:omega_t4) |>
+  pivot_longer(cols = ctrl_t2:omega_t4) |>
+  filter(min_seq %in% c(15, 30, 45, 60, 90, 120)) |>
+  summarise(.by = c(name,min_seq),
+            m = median(value),
+            lwr50 = quantile(value, 0.25),
+            upr50 = quantile(value, 0.75),
+            lwr95 = quantile(value, 0.025),
+            upr95 = quantile(value, 0.975)) |>
+  separate(name, into = c("treat", "time"), sep = "_") |>
+  mutate(time = case_when(time == "t2" ~ "Supplementation vs. Baseline",
+                          time == "t4" ~ "Combined vs. Baseline"),
+         time = factor(time, levels = c("Supplementation vs. Baseline",
+                                        "Combined vs. Baseline")),
+         treat = factor(treat, levels = c("ctrl", "omega"),
+                        labels = c("Placebo change from baseline", "N-3 change from baseline")))
+
+
+pd <- position_dodge(width = 3)
+
+p_wcontr <- within_contrasts |>
+  ggplot(aes(min_seq, m, color = time, fill = time)) +
+  geom_hline(yintercept = 0, lty = 2, color = "gray") +
+  geom_errorbar(aes(ymin = lwr50,
+                    ymax = upr50),
+                linewidth = 1.2, width = 0,
+                position = pd) +
+  geom_errorbar(aes(ymin = lwr95,
+                    ymax = upr95),
+                linewidth = 0.6, width = 0,
+                position = pd) +
+  geom_point(shape = 21, color = "black",
+             position = pd) +
+  scale_color_manual(values = colscale[c(3,6)]) +
+  scale_fill_manual(values = colscale[c(3,6)]) +
+  scale_x_continuous(limits = c(0, 125),
+                     expand = c(0, 0)) +
+  labs(x = "Time (min)",
+       y = " ΔBlood  glucose<br>(mmol L<sup>−1</sup>)") +
+  facet_wrap(~ treat) +
+  alpha_theme() +
+  theme(axis.title.y = ggtext::element_markdown(),
+        legend.title = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        strip.text = element_markdown(size = 7))
+
+
+p_pred <- pred |>
+  summarise(.by = c(time_treat, min_seq),
+            m = median(mu),
+            lwr50 = quantile(mu, 0.25),
+            upr50 = quantile(mu, 0.75),
+            lwr95 = quantile(mu, 0.025),
+            upr95 = quantile(mu, 0.975)) |>
+  separate(time_treat, into = c("time", "treat"), sep = "_") |>
+  mutate(time = case_when(time == "T1" ~ "Baseline",
+                          time == "T2" ~ "Supplementation",
+                          time == "T4" ~ "Combined"),
+         time = factor(time, levels = c("Baseline", "Supplementation",
+                                        "Combined")),
+         treat = factor(treat, levels = c("ctrl", "omega"),
+                        labels = c("Placebo predictions", "N-3 predictions"))) |>
+  ggplot(aes(min_seq, m, lty = time, color = treat)) +
+  geom_line() +
+  facet_wrap(~ treat, ncol = 2) +
+  alpha_theme() +
+  labs(x = "Time (min)",
+       y = "Blood glucose<br>(mmol L<sup>-1</sup>)") +
+  scale_x_continuous(limits = c(0, 125),
+                     expand = c(0, 0)) +
+  scale_color_manual(values = colscale[c(4,2)],
+                     guide = "none") +
+  theme(axis.title.y = ggtext::element_markdown(),
+        legend.title = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank())
+
+
+# Contrasts - These are differences in delta from baseline
+
+delta_contrasts <- pred |>
+  pivot_wider(values_from = mu,
+              names_from = time_treat)  |>
+  mutate(ctrl_t2 = T2_ctrl - T1_ctrl,
+         ctrl_t4 = T4_ctrl - T1_ctrl,
+         omega_t2 = T2_omega - T1_omega,
+         omega_t4 =  T4_omega - T1_omega,
+         omega_ctrl_t2 = omega_t2 - ctrl_t2,
+         omega_ctrl_t4 = omega_t4 - ctrl_t4) |>
+  pivot_longer(names_to = "contrast",
+               values_to = "value",
+               cols = T1_ctrl:omega_ctrl_t4) |>
+  summarise(.by = c(min_seq, contrast),
+            m = mean(value),
+            lwr50 = quantile(value, 0.25),
+            upr50 = quantile(value, 0.75),
+            lwr95 = quantile(value, 0.025),
+            upr95 = quantile(value, 0.975)) |>
+  filter(contrast %in% c("omega_ctrl_t2", "omega_ctrl_t4")) |>
+  mutate(contrast = case_when(contrast == "omega_ctrl_t2" ~ "Placebo vs. N-3: Supplementation period",
+                              contrast == "omega_ctrl_t4" ~ "Placebo vs. N-3: Combined period"),
+         contrast = factor(contrast, levels = c("Placebo vs. N-3: Supplementation period",
+                                                "Placebo vs. N-3: Combined period"))) |>
+  ggplot(aes(min_seq, m, fill = contrast)) +
+  scale_x_continuous(limits = c(0, 125),
+                     expand = c(0, 0),
+                     breaks = c(25, 50, 75, 100)) +
+  geom_ribbon(aes(ymin = lwr50, ymax = upr50),
+              alpha = 0.3) +
+  geom_ribbon(aes(ymin = lwr95, ymax = upr95),
+              alpha = 0.3) +
+  geom_line() +
+  facet_wrap(~ contrast) +
+  alpha_theme() +
+  scale_fill_manual(values = colscale[c(3,6)]) +
+  geom_hline(yintercept = 0, lty = 2, alpha = 0.5) +
+  theme(legend.position = "none") +
+  labs(x = "Time (min)",
+       y = "&Delta;N-3 − &Delta;Placebo<br>(mmol L<sup>-1</sup>)")
+
+
+# Combine the full figure
+
+cowplot::plot_grid(p_pred,
+                   p_wcontr,
+                   delta_contrasts,
+                   ncol = 1,
+                   rel_heights = c(1, 1, 1.4),
+                   align = "v")
+
+```
+
+
+```{r}
+#| label: fig-mo4-participant-curves
+#| fig-width: !expr 18/2.54
+#| fig-height: !expr 4/2.54
+#| fig-cap: "Predictions from the OGTT model `mo4` at each time point with participant-level predictions."
+
+# Population curves (pop_curve) and participant-level curves (part_curves)
+# from the mo4 posterior were calculated for the posterior predictive checks above.
+
+ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
+  geom_line(data = part_curves,
+            aes(min_seq, mu, group = interaction(p, treat)),
+            alpha = 0.25, linewidth = 0.3) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.2, color = NA) +
+  geom_line(linewidth = 1) +
+  facet_wrap(~ time) +
+  alpha_theme() +
+  scale_color_manual(values = colscale) +
+  scale_fill_manual(values = colscale) +
+  labs(x = "Minute",
+       y = "Blood Glucose (mmol L<sup>-1</sup>)",
+       color = "Treatment", fill = "Treatment") +
+  theme(axis.title.y = ggtext::element_markdown())
+
+```

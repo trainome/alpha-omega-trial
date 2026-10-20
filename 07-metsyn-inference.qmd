@@ -10,6 +10,8 @@ editor_options:
 ---
 
 ```{r}
+#| label: setup
+
 
 # Source figure options, packages, and main data prep.
 source("./R/fig-opt-fun.R")
@@ -20,24 +22,43 @@ source("./R/sim-fun.R")
 
 
 refit.models <- FALSE
+
+
+# Functions  ################################################################
+
+
+# Text formatting for inline reporting. Use the full version at first
+# mention, e.g. `r ctxt$TG_T4` -> "-9% (95% CrI: -20, +3%; P(benefit) 93%)",
+# and the short version thereafter, e.g. `r ctxt_simple$TG_T4` ->
+# "-9% (-20, +3%; P(benefit) 93%)"
+fmt_prob <- function(p) {
+  case_when(p > 0.99 ~ ">99%",
+            p < 0.01 ~ "<1%",
+            .default = paste0(round(100 * p), "%"))
+}
+
+
+
+
+
 ```
 
 
-Here we proceed by drawing inference regarding the effect of n-3 supplementation on metabolic health markers. 
-
-
+Here, we draw inferences about the effect of N-3 supplementation on metabolic health markers. First, we examine the differences in outcomes between placebo and N-3, followed by a combined analysis of the dichotomous diagnostic score (0/1) and a continuous version derived from the sum of the sub-scores, each given equal weight.
 
 
 ```{r}
+#| label: load-data
 
 
+# Creates labels, loads data and models.
 dat <- data_load_s7s10()
 
 
 # Create a data set for labelling types. Built from the scale slot returned
-# by data_load_s7s10() so that the type index matches the Stan data. Units
-# are taken from the AOData package documentation (?bloodvar, ?glucose,
-# ?waist_bp, ?bodycomp); BMI and relative fat mass are derived in
+# by data_load_s7s10(), type index matches the Stan data. Units
+# are checked against the AOData package documentation (?bloodvar, ?glucose,
+# ?waist_bp, ?bodycomp). BMI and relative fat mass are derived in
 # data-prep.R from DXA body mass (kg) and height (m).
 labels <- dat$scale |> 
   select(type, analyte) |> 
@@ -72,10 +93,13 @@ labels <- dat$scale |>
 d <- dat$d
 
 
-# Compile relevant models
+# Compile relevant models. 
+# S18 is the univariate t model. Used for sensitivity check, 
+# what is the effect of multivariate on inference.
 s18 <- cmdstan_model(stan_file = "models/s18.stan", 
                       exe_file = "models/s18.exe")
 
+# S13 is the preffered main model, multivariate t distribution.
 s13 <- cmdstan_model(stan_file = "models/s13.stan", 
                       exe_file = "models/s13.exe")
 
@@ -87,14 +111,15 @@ fit_wrap(s13, DATA = d, fit = "fit.s13.post")
 
 ```
 
-```{r}
-#| label: fig-metsyn-predictions
-#| fig-cap: "Observed group means (open symbols, all available observations; geometric means for triglycerides and HOMA2-IR) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CI) for each outcome on its natural scale. Adjusted means at T2 and T4 are predicted from model s13 (multivariate t) conditional on the overall mean pre-intervention value and averaged over sex. T1, pre-supplementation; T2, pre-training; T4, post-training."
-#| fig-width: 8
-#| fig-height: 9
 
+```{r}
+#| label: infer-fig-data-prep
+
+
+  
 # Observed data on the natural scale (all available observations)
 obs_dat <- criteria_dat |>
+
   select(participant, time, treat, sex, analyte, value) |>
   filter(!is.na(value)) |>
   inner_join(labels, by = "analyte") |>
@@ -125,7 +150,7 @@ obs_means <- obs_dat |>
 # Pre-intervention covariate: overall mean of the standardised baseline value
 # per type (the same value for both groups gives adjusted group means). Sex is
 # coded -0.5/0.5, so sex = 0 gives the average over sexes and the beta_sex
-# term (s13) drops out of the linear predictor.
+# term (s13 and s18) drops out of the linear predictor.
 pre_means <- dat$dat |>
   filter(pre_miss == 1) |>
   distinct(P, type, pre_obs) |>
@@ -153,6 +178,7 @@ predict_means <- function(fit, model) {
     inner_join(pre_means, by = "type") |>
     mutate(mu = alpha + beta * pre) |>
     summarise(.by = c(time, type, treat),
+              # We use the median here
               Mu = median(mu),
               lwr95 = quantile(mu, 0.025),
               upr95 = quantile(mu, 0.975),
@@ -173,12 +199,15 @@ pred_means <- bind_rows(
 ) |>
   inner_join(labels, by = c("type", "analyte")) 
 
-#  Plot 
+
+
+
+
+# We are creating two plots, one for the metabolic syndrom subscores
+# and one for the related scores.
 strip_lab <- function(label, unit) paste0(label, " (", unit, ")")
 
-pd <- position_dodge(width = 0.2)
-
-pred_plot_1 <- pred_means |>
+pred_plot_dat <- pred_means |>
   
    mutate(
      unit = case_when(
@@ -190,19 +219,61 @@ pred_plot_1 <- pred_means |>
            analyte == "Adiponectin" ~ "mg&times;L<sup>-1</sup>", 
            analyte == "HOMA2IR" ~ "index", 
            .default = NA_character_
-         )) |> 
+         ), 
+     analyte = factor(analyte, levels = c("waist",
+                                          "dias", 
+                                          "sys",
+                                          "glucose",
+                                          "HDL",
+                                          "TG",
+                                          "bmi",
+                                          "fat.rel",
+                                          "LDL",
+                                          "Adiponectin",
+                                          "HOMA2IR"))) |> 
+  mutate(panel = strip_lab(label, unit), 
+         strip.lab = strip_lab(label, unit),
+         # Facet strips follow the order of the analyte levels
+         strip.lab = fct_reorder(strip.lab, as.integer(analyte), .fun = min))
   
   
   
-  mutate(panel = strip_lab(label, unit)) |>
+
+pred_plot <- function(dat,obs, analytes) {
+  
+
+  # Position 
+  pd <- position_dodge(width = 0.1)
+  
+  
+  
+  obs_means <- obs |>
+    filter(analyte %in% analytes) |>
+    # Same factor levels as dat so both layers share the panel order
+    mutate(analyte = factor(analyte, levels = levels(dat$analyte))) |> 
+     mutate(time = factor(time, labels = c("Baseline", "Supplementation", 
+                                          "Combined"))) 
+
+  # Strip labels keyed by analyte
+  strip_labels <- dat |>
+    distinct(analyte, strip.lab) |>
+    with(setNames(as.character(strip.lab), analyte))
+
+  
+  dat |> 
+    mutate(time = factor(time, labels = c("Supplementation", 
+                                          "Combined"))) |> 
+    # Filter based on analyte
+  filter(analyte %in% analytes) |> 
+    
   ggplot(aes(time, Mu, color = treat, group = interaction(treat, model))) +
 
   # Observed means at all time-points (descriptive)
-  geom_point(data = obs_means |> mutate(panel = strip_lab(label, unit)),
+  geom_point(data = obs_means,
              aes(time, Mu, color = treat, group = treat),
-             shape = 1, size = 2.5,
+             shape = 1, size = 1.5,
              position = position_dodge(width = 0.5)) +
-  geom_line(data = obs_means |> mutate(panel = strip_lab(label, unit)),
+  geom_line(data = obs_means,
             aes(time, Mu, color = treat, group = treat),
             linetype = "dotted",
             position = position_dodge(width = 0.5)) +
@@ -210,21 +281,46 @@ pred_plot_1 <- pred_means |>
   # Model-based adjusted means at T2 and T4
   geom_errorbar(aes(ymin = lwr95, ymax = upr95), width = 0, linewidth = 0.4, position = pd) +
   geom_errorbar(aes(ymin = lwr50, ymax = upr50), width = 0, linewidth = 1.1, position = pd) +
-  geom_point(aes(fill = treat), size = 2.5, color = "black", position = pd, shape = 21) +
+  geom_point(aes(fill = treat), size = 1.5, color = "black", position = pd, shape = 21) +
 
-  facet_wrap(~ panel, scales = "free_y", ncol = 1) +
+  facet_wrap(~ analyte, scales = "free_y", ncol = 1,
+             labeller = as_labeller(strip_labels)) +
   scale_color_manual(values = colscale[c(4, 2)]) +
   scale_fill_manual(values = colscale[c(4, 2)]) +
-  scale_shape_manual(values = c(s18 = 24, s13 = 21)) +
+    scale_x_discrete(guide = guide_axis(n.dodge=2)) +
+  scale_y_continuous(breaks = scales::breaks_pretty(n = 3)) +
+    
+  # scale_shape_manual(values = c(s18 = 24, s13 = 21)) +
   alpha_theme() +
-  theme(legend.position = "bottom") +
+  theme(legend.position = "top") +
   
-  theme(strip.text = ggtext::element_markdown()) +
+  theme(strip.text = ggtext::element_markdown(), 
+        axis.title.x = element_blank(), 
+        legend.title = element_blank()) +
   
   labs(x = "Time-point",
        y = "Outcome (natural scale)",
        color = "Treatment", fill = "Treatment")
+    
+  
+  
+  
+}
+  
 
+
+
+
+# Metabolic syndrome subscores
+met_sym_scores <- pred_plot(pred_plot_dat, 
+                            obs_means, 
+                            analytes = c("HDL", "glucose", "TG", "waist", "sys", "dias"))
+
+# Related scores
+rel_scores <- pred_plot(pred_plot_dat, 
+                            obs_means, 
+                            analytes = c("fat.rel", "Adiponectin", "HOMA2IR", 
+                                         "bmi", "LDL"))
 
 
 ## Add the contrats plot 
@@ -257,9 +353,9 @@ infer_treat <- function(draws_list, scale = dat$scale) {
   # sex = 0, and there is no treatment x pre interaction, so omega - ctrl is
   # the adjusted mean difference at any pre value). Back-transformation uses
   # the per-type sd from data_load_s7s10()$scale:
-  #   contrast_nat = sd * contrast  -> difference in natural units, or on the
+  # contrast_nat = sd * contrast  -> difference in natural units, or on the
   #                                   log scale for TG and HOMA2IR
-  #   ratio        = exp(sd * contrast) -> N-3 / placebo ratio (log outcomes
+  # ratio = exp(sd * contrast) -> N-3 / placebo ratio (log outcomes
   #                                   only; NA otherwise)
   contrasts[[i]] <- estimates[[i]] |> 
     pivot_wider(names_from = treat, 
@@ -285,138 +381,203 @@ infer_treat <- function(draws_list, scale = dat$scale) {
 infer <- infer_treat(ls)
 
 
-contrast_plot <- infer$contrasts |> 
+contrast_dat <- infer$contrasts |> 
    inner_join(labels, by = c("type", "analyte")) |> 
   filter(model == "s13")   |> 
   mutate(
      unit = case_when(
-           analyte %in% c("HDL", "LDL", "TG", "glucose") ~ "mmol&times;L<sup>-1</sup>", 
+           analyte %in% c("HDL", "LDL", "glucose") ~ "mmol&times;L<sup>-1</sup>", 
            analyte %in% c("sys", "dias") ~ "mmHg", 
            analyte == "waist" ~ "cm", 
+           analyte == "TG" ~ "Fold-difference",
            analyte == "bmi" ~ "kg&times;m<sup>-2</sup>", 
            analyte == "fat.rel" ~ "%", 
            analyte == "Adiponectin" ~ "mg&times;L<sup>-1</sup>", 
-           analyte == "HOMA2IR" ~ "index", 
+           analyte == "HOMA2IR" ~ "Fold-difference", 
            .default = NA_character_
-         )) |>
-  mutate(strip.lab = strip_lab(label, unit)) |> 
+         ), 
+     analyte = factor(analyte, levels = c("waist",
+                                          "dias", 
+                                          "sys",
+                                          "glucose",
+                                          "HDL",
+                                          "TG",
+                                          "bmi",
+                                          "fat.rel",
+                                          "LDL",
+                                          "Adiponectin",
+                                          "HOMA2IR"))) |>
+  mutate(strip.lab = strip_lab(label, unit),
+         # Facet strips follow the order of the analyte levels
+         strip.lab = fct_reorder(strip.lab, as.integer(analyte), .fun = min),
+         contrast_out = if_else(transform == "log", ratio, contrast_nat), 
+         # Add a no diff line (0 for natural scale and 1 for ratio (fold-difference))
+         no_diff = if_else(analyte %in% c("TG", "HOMA2IR"), 1, 0))    
   
 
-   ggplot(aes(contrast_nat, color = time )) +
+contrast_plot <- function(dat, analytes) {
+  
+  
+  dat |> 
+  filter(analyte %in% analytes) |> 
+    mutate(time = factor(
+      if_else(time == 1, "Supplementation", "Combined"), 
+      levels = c("Supplementation", "Combined"))) |> 
+  ggplot(aes(contrast_out, color = time )) +
   geom_line(stat = "density") + 
    
    facet_wrap( ~ strip.lab, scales = "free", 
                ncol = 1) + 
-  alpha_theme(yaxis = FALSE) +
-  theme(strip.text = ggtext::element_markdown()) +
-  labs(x = "Contrast (N-3 - Placebo)") +
+  alpha_theme(yaxis = FALSE, text_base_size = 7) +
+  theme(axis.title.y = element_blank(), 
+        legend.position = "top", 
+        legend.title = element_blank(), 
+        axis.title.x = element_markdown(size = 7, margin = margin(t = -6)), 
+        strip.text = element_blank()) +
+  labs(x = "Contrast (N-3 - Placebo)", 
+       color = "Time") +
   
   
-  geom_vline(xintercept = 0) + 
+  geom_vline(aes(xintercept = no_diff)) + 
   scale_color_manual(values = c(
     colscale[3], 
     colscale[6])) 
   
-
-
-# Combine plot 
-
-cowplot::plot_grid(pred_plot, contrast_plot, align = "vh")
-
-
-ggsave(
-  filename = "figures/preliminary-figures/subscores-predictions.pdf",
-  pred_plot,
-  width = 20,
-  height = 22,
-  units = "cm"
-)
-
-```
-
-
-```{r}
-
-
-
-
-
-ggsave(
-  filename = "figures/preliminary-figures/subscores.pdf",
-  est_mod, 
-  width = 20, 
-  height = 15, 
-  units = "cm"
-       )
-
   
-
-
-
-
-```
-
-
-```{r}
-
-## Extract diagnostic critera
-
-draws <- fit.s13.post$draws("n_criteria", format = "df")
-
-
-# Create a data sets with treatment allocations
-  dobs <- d_full |> 
-    mutate(P = as.character(dense_rank(participant)), 
-           time = as.character(dense_rank(time)), 
-           treat = as.character(dense_rank(treat))) |> 
-    distinct(P, time, treat) |> 
-    arrange(P)
-
-
-
-
-
-infer_ncrit <- function(draws, dobs, ndraws = 100) {
-  
-  p <- draws |> 
-    filter(.draw %in% sample(1:8000, ndraws)) |> 
-    pivot_longer(cols = starts_with("n_crit")) |> 
-    mutate(name = gsub("n_criteria\\[|\\]", "", name)) |> 
-    separate(name, into = c("P", "time")) |> 
-
-    inner_join(dobs) |> 
-    summarise(.by = c(treat, .draw, time, value),
-              frac = n()) |> 
-    mutate(.by = c(treat, .draw, time), 
-           frac = 100 * (frac / sum(frac))) |> 
-    mutate(.by = c(treat, time), 
-               .draw = dense_rank(.draw)) |> 
-    
-    ggplot(aes(.draw, frac, fill = as.factor(value))) + 
-    geom_bar(stat = "identity", width = 1) + 
-    facet_wrap(treat ~ time, labeller = label_both) + 
-    scale_alpha_manual(values = c(0.9, 0.3)) +
-    scale_fill_manual(values = c(colscale[1], colscale[6], colscale[4],colscale[5], colscale[3], colscale[2])) +
-    alpha_theme() + 
-    
-    labs(y = "Relative frequency (%)", 
-         fill = "Number of \ndiagnostic criteria") +
-    
-    theme(axis.text.x = element_blank(), 
-          axis.ticks.x = element_blank(), 
-          axis.title.x = element_blank(), 
-          axis.line.x = element_blank(), 
-          legend.position = "bottom")
-  
-  p
   
   
 }
 
 
-p1 <- infer_ncrit(draws = draws, dobs = dobs, ndraws = 100)
+met_syn_contrast <- contrast_plot(contrast_dat, 
+                                  analytes = c("HDL", "glucose", "TG", "waist", "sys", "dias"))
+
+rel_contrast <- contrast_plot(contrast_dat, 
+                                  analytes = c("fat.rel", "Adiponectin", "HOMA2IR", 
+                                         "bmi", "LDL"))
+```
 
 
+```{r}
+#| label: joint-burden-score
+
+# Extract all alpha effects
+a <- fit.s13.post$draws("alpha", format = "df")
+
+# A function for getting the t:th time point and k:th effect from the matrix
+# and contrasted between treatment groups (2 vs 1).
+# the effect (eff) is then combined below.
+eff <- function(t, k) a[[sprintf("alpha[%d,%d,2]", t, k)]] - a[[sprintf("alpha[%d,%d,1]", t, k)]]
+
+# Combined posterior effect. The type index of each criterion is looked up
+# from the data (dat$scale), matching diag_idx in s13.stan:
+# HDL = 2, TG = 6, dias = 8, glucose = 10, sys = 11, waist = 12
+type_idx <- setNames(dat$scale$type, dat$scale$analyte)
+
+# The score is
+# (0.5 * (dias + sys) +
+# (- HDL) + TG + glucose + waist) / 5
+burden_eff <- sapply(1:2, function(t)
+    (-eff(t, type_idx[["HDL"]]) + eff(t, type_idx[["TG"]]) +
+       0.5 * (eff(t, type_idx[["dias"]]) + eff(t, type_idx[["sys"]])) +
+       eff(t, type_idx[["glucose"]]) + eff(t, type_idx[["waist"]])) / 5
+  )
+
+colnames(burden_eff) <- c("T2", "T4")
+
+# Store burden contrast for text (see below)
+burden_contrast <- burden_eff |> 
+  data.frame()  |> 
+  pivot_longer(everything()) |> 
+    summarise(.by = c(name),
+            # Median posterior w. 95% CrI on the reporting standardized scale
+            # (sd units)
+            med = median(value),
+            # Density height at the median (same defaults as stat_density)
+            dens_med = with(density(value), approx(x, y, xout = med)$y),
+            lwr95 = quantile(value, 0.025),
+            upr95 = quantile(value, 0.975),
+            # Proportion of posterior that shows benefit in treatment
+            benefit = mean(value < 0))  |>
+  mutate(
+    digits = 2,
+    unit_txt = "SD-units",
+    est = sprintf("%.*f %s", digits, med, unit_txt),
+    ci = sprintf("%.*f, %.*f", digits, lwr95, digits, upr95),
+    prob = paste("P(benefit)", fmt_prob(benefit)),
+    txt = sprintf("%s (95%% CrI: %s; %s)", est, ci, prob),
+    txt_simple = sprintf("%s (%s; %s)", est, ci, prob),
+    name = factor(name, levels = c("T2", "T4"), 
+                       labels = c("Supplementation", 
+                                  "Combined"))) 
+
+
+burden_t2 <- burden_contrast |> 
+  filter(name == "Supplementation") |> 
+  pull(txt_simple)
+
+burden_t4 <- burden_contrast |> 
+  filter(name == "Combined") |> 
+  pull(txt_simple)
+
+## Burden figure 
+
+
+
+burden_fig <- burden_eff |> 
+  data.frame()  |> 
+
+  pivot_longer(everything()) |> 
+    mutate(name = factor(name, levels = c("T2", "T4"), 
+                       labels = c("Supplementation", 
+                                  "Combined"))) |> 
+  ggplot(aes(value, color = name)) +
+  # Shade the part of each density indicating benefit (N-3 < Placebo)
+  geom_area(aes(y = after_stat(ifelse(x < 0, density, 0)), fill = name),
+            stat = "density", color = NA, alpha = 0.3,
+            position = "identity") +
+  geom_line(stat = "density", alpha = 0.8, 
+            show.legend = FALSE)   +
+  
+  geom_vline(xintercept = 0, lty = 2, color = "gray50") +
+  
+  geom_text(data = burden_contrast, 
+            aes(x = med - 0.12, 
+                y = dens_med, 
+            label = prob), 
+            show.legend = FALSE, 
+            size = 6/.pt) +
+
+  alpha_theme(yaxis = FALSE, text_base_size = 7) +
+  theme(axis.title.y = element_blank(), 
+        legend.position = "bottom", 
+        legend.title = element_blank(), 
+        legend.direction = "horizontal", 
+        legend.key.size = unit(3, "mm"))  +
+  labs(color = "Treatment-period",
+       fill = "Treatment-period",
+       x = "Average burden score<br>N-3 - Placebo (SD-units)") + 
+  scale_fill_manual(values = colscale[c(3,6)]) + 
+  scale_color_manual(values = colscale[c(3,6)]) 
+  
+
+
+```
+
+
+
+```{r}
+#| label: diagnostic-criteria-analysis
+#| 
+
+
+# Create a data sets with treatment allocations
+dat <- data_load_s7s10()
+
+
+dobs <- dat$dat |> 
+  distinct(P, treat) |> 
+  expand_grid(time = c(1, 2, 3))
 
 
 draws <- fit.s13.post$draws("diagnosed", format = "df")
@@ -424,65 +585,127 @@ draws <- fit.s13.post$draws("diagnosed", format = "df")
 
 infer_diagnosed <- function(draws, dobs, ndraws = 1000) {
   
-  draws |> 
+  
+  pd <- position_dodge(width = 0.15)
+  
+  dat_out <- draws |> 
     filter(.draw %in% sample(1:8000, ndraws)) |> 
     pivot_longer(cols = starts_with("diagnosed")) |> 
     mutate(name = gsub("diagnosed\\[|\\]", "", name)) |> 
     separate(name, into = c("P", "time")) |> 
+        mutate(P = as.integer(P), 
+           time = as.integer(time)) |> 
+    
+
     inner_join(dobs) |> 
+    
+    mutate(time = if_else(time == 1, "Baseline", 
+                          if_else(time == 2, "Supplementation", "Combined")),
+           time = factor(time, levels = c("Baseline", "Supplementation", "Combined")), 
+           
+           treat = if_else(treat == 1, "Placebo", "N-3"), 
+           treat = factor(treat, levels = c("Placebo", "N-3"))) |> 
+    
     summarise(.by = c(treat, time,.draw), 
-              frac.diagnosed = sum(value) / n()) |> 
-        mutate(.by = c(treat, time), 
-               .draw = dense_rank(.draw)) |> 
-    ggplot(aes(.draw, frac.diagnosed, fill = as.factor(treat))) + 
-    geom_bar(stat = "identity", width = 1) + 
-    facet_wrap(treat ~ time, labeller = label_both) + 
-    scale_fill_manual(values = colscale) +
-        labs(y = "Relative frequency (%)", 
-         fill = "Number of \ndiagnostic criteria") +
+              frac.diagnosed = 100 * (sum(value) / n())) |> 
+    summarise(.by = c(treat, time), 
+              m = median(frac.diagnosed), 
+              lwr99 = quantile(frac.diagnosed, 0.01), 
+              lwr95 = quantile(frac.diagnosed, 0.025), 
+              lwr50 = quantile(frac.diagnosed, 0.25), 
+              upr50 = quantile(frac.diagnosed, 0.75),
+              upr95 = quantile(frac.diagnosed, 0.975),
+              upr99 = quantile(frac.diagnosed, 0.99)) 
     
-    alpha_theme() + 
+  
+  
+  dat_out |> 
+  
+    ggplot(aes(time, m, 
+               fill = as.factor(treat), 
+               color = as.factor(treat),
+               group = as.factor(treat))) + 
     
-    theme(axis.text.x = element_blank(), 
-          axis.ticks.x = element_blank(), 
+
+    geom_errorbar(aes(ymin = lwr95, 
+                      ymax = upr95),
+                  size = 0.4,
+                  width = 0, 
+                  position = pd) +
+    geom_errorbar(aes(ymin = lwr50, 
+                      ymax = upr50),
+                  size  = 1.5,
+                  width = 0, 
+                  position = pd) +
+    
+    geom_line(position = pd) + 
+    
+    geom_point(shape = 21, 
+               size = 0.9, 
+               color = "black",
+                  position = pd) + 
+    
+  
+    scale_fill_manual(values = colscale[c(4,2)]) +
+    scale_color_manual(values = colscale[c(4,2)]) +
+        labs(y = "Diagnosis (%)") +
+    
+      alpha_theme(text_base_size = 7) + 
+    
+    theme(legend.position = "inside", 
+          legend.position.inside = c(0.5, 0.9),
           axis.title.x = element_blank(), 
-          axis.line.x = element_blank(), 
-          legend.position = "bottom")
+          legend.title = element_blank(), 
+          legend.key.height = unit(2, "mm"), 
+          legend.background = element_blank())  +
+      scale_x_discrete(guide = guide_axis(n.dodge=2)) 
+    
   
 }
   
 
-p2 <- infer_diagnosed(draws, dobs, ndraws = 1000)
+diagnosis_per_treat <- infer_diagnosed(draws, dobs, ndraws = 100)
+
+
+
 
 
 # Using seqwrap to infer diagnosed fraction differences 
-# between treatment groups
+# between treatment groups. 
+# Background: The diagnose criteria is a 0/1 variable built from 
+# the sub-scores and thresholds associated with each score. It is difficult 
+# to include a binary (threshold) quantity as a parameter in the Stan model. 
+# A simpler alternative is to get the diagnosis in each MCMC iteration in the 
+# generated quantities block and then model across a set of iterations.
+# The standard errors of the per iteration model estimates needs to be combined 
+# (see below) to get correct confidence intervals where imputation uncertainty
+# and sampling uncertainty are both included.
 
+
+# We will use the seqwrap package to model the diagnostic generated quantities
+# across iterations. 
 library(seqwrap)
 
 
 draws.s13 <- fit.s13.post$draws("diagnosed", format = "df")
 draws.s18 <- fit.s18.post$draws("diagnosed", format = "df")
 
-
-
 # Create a data sets with treatment allocations
-  dobs <- d_full |> 
-    mutate(P = as.character(dense_rank(participant)), 
-           time = as.character(dense_rank(time)), 
-           treat = as.character(dense_rank(treat))) |> 
-    distinct(P, time, treat) |> 
-    arrange(P)
+dat <- data_load_s7s10()
+
+dobs <- dat$dat |> 
+  distinct(P, treat) |> 
+  expand_grid(time = c(1, 2, 3))
 
 
 
-
+# A function for performing the seqwrap routine. 
 infer_seqwrap <- function(draws, dobs, ndraws = 500) {
   
   
   # The variance co-variance eval function
   # Use this if creating a "joint test" 
-  # We are skipping thuis now
+  # We are skipping this now
    vcov_eval <- function(m) {
     V  <- vcov(m)$cond
     nm <- rownames(V)
@@ -492,12 +715,26 @@ infer_seqwrap <- function(draws, dobs, ndraws = 500) {
   }
   
   
-  
-  # Create meta-data 
-  metadata <- dobs |> 
-  mutate(seq_sample_id = paste0("diagnosed", P, "_", time), 
+   
+   # Create metadata
+  metadata <- draws |> 
+    filter(.draw == 1) |> 
+    # Re-name seq_sample_id
+    select(.draw, starts_with("diagnosed")) |> 
+    pivot_longer(cols = starts_with("diag")) |> 
+    mutate(name = gsub("\\[|\\]", "", name), 
+         name = gsub(",", "_", name), 
+         part_time = gsub("diagnosed", "", name)) |> 
+  separate(part_time, into = c("P", "time")) |> 
+     mutate(P = as.integer(P)) |> 
+     inner_join( dobs |> 
+                   distinct(P, treat)) |> 
+     select(seq_sample_id = name, P, time, treat) |> 
+       mutate(
          treat = paste0("treat", treat), 
-         time = paste0("time", time)) 
+         time = paste0("time", time))  
+     
+
   # Data set 
   dat <- draws |> 
     slice_sample(n = ndraws) |> 
@@ -539,19 +776,36 @@ infer_seqwrap <- function(draws, dobs, ndraws = 500) {
   
 }
 
-
-
-
-sw_results13 <- infer_seqwrap(draws.s13, dobs = dobs, 
+# Retreived from saved if already there...
+if (!file.exists("data-derived/ch-07-diag-crit-rubin-s13.RDS") ) {
+  sw_results13 <- infer_seqwrap(draws.s13, dobs = dobs, 
                      ndraws = 500)
-sw_results18 <- infer_seqwrap(draws.s18, dobs = dobs, 
+  
+  saveRDS(sw_results13, "data-derived/ch-07-diag-crit-rubin-s13.RDS")
+  
+} else {
+  sw_results13 <- readRDS("data-derived/ch-07-diag-crit-rubin-s13.RDS")
+}
+
+
+if (!file.exists("data-derived/ch-07-diag-crit-rubin-s18.RDS") ) {
+  sw_results18 <- infer_seqwrap(draws.s18, dobs = dobs, 
                      ndraws = 500)
+  
+  saveRDS(sw_results18, "data-derived/ch-07-diag-crit-rubin-s18.RDS")
+  
+} else {
+  sw_results18 <- readRDS("data-derived/ch-07-diag-crit-rubin-s18.RDS")
+}
+
 
 
 # Rubin's Rule Pooling 
-# see here for light introduction https://metricgate.com/docs/rubins-rules-pooling/
-# We want to pool variances from each imputed data set - this will give uncertainties
-# that reflect both imputation and sampling uncertainty.
+# see here for light introduction 
+# https://metricgate.com/docs/rubins-rules-pooling/
+# We want to pool variances from each imputed data set - 
+# this will give uncertainties that reflect both imputation and 
+# sampling uncertainty.
 
 pool_rubin <- function(sums) {
     sums |>
@@ -582,84 +836,287 @@ pool_rubin <- function(sums) {
   }
 
 
-sums13 <- sw_results13$summaries
-sums18 <- sw_results18$summaries
-
-
 est_13 <- pool_rubin(sw_results13$summaries)
 est_18 <- pool_rubin(sw_results18$summaries)
 
-p3 <- est_13 |> 
-  mutate(term = if_else(term == "timetime2:treattreat2", "N-3 - Control, T2", 
-                        "N-3 - Control, T3"), 
+diag_criteria_fig <- est_13 |> 
+  mutate(term = if_else(term == "timetime2:treattreat2", "N-3 - Control\nSupplementation", 
+                        "N-3 - Control\nCombined treatment"), 
          term = factor(term, levels = c(
-           "N-3 - Control, T3", 
-           "N-3 - Control, T2"))) |> 
+           "N-3 - Control\nCombined treatment", 
+           "N-3 - Control\nSupplementation"))) |> 
   
-  ggplot(aes(term, qbar)) + 
+  ggplot(aes(term, qbar, color = term)) + 
   geom_errorbar(aes(ymin = lwr, 
                     ymax = upr), 
-                width = 0) +
-  geom_point(size = 3) +
-  alpha_theme() + 
+                width = 0,
+                show.legend = FALSE) +
+  geom_point(size = 1.5, 
+             show.legend = FALSE) +
+  scale_color_manual(values = colscale[c(3,6)] ) +
+  alpha_theme(text_base_size = 7) + 
   
   labs(x = "", 
-       y = "Log-odds differences in diagnostic criteria (&pm; 95% CI)") +
+       y = "Log(OR) (&pm; 95% CI)") +
   
   geom_hline(yintercept = 0, lty = 2, color = "gray50") +
   coord_flip() + 
+
   theme(axis.title.x = ggtext::element_markdown())
   
 
 
 
+
 ```
 
 
 
 
 ```{r}
+#| label: fig-metsyn-inference
+#| fig-cap: "A, Observed group means (open symbols, all available observations; geometric means for triglycerides) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CI) for each outcome in the metabolic syndrome score on its natural scale (A). Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (N-3 - Placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively. B, posterior distribution of the average burden score contrast (N-3 - placebo) at post-supplementation and after the combined period. P(benefit) indicates the percentage of the posterior associated with any benefit for N-3. C, the percentage of participants meeting the diagnostic criteria in each group; error bars represent the uncertainty associated with missing-value imputation (95th and 50th percentile intervals). D, treatment contrast for the occurrence of metabolic syndrome diagnosis, baseline-adjusted differences between groups at post-supplementation and after the combined treatment period."
+#| fig-width: 3.55
+#| fig-height: 7.1
 
-pfull <- cowplot::plot_grid(p1, p2, p3, ncol = 1)
+
+subscores_plot <- cowplot::plot_grid(
+  cowplot::plot_grid(met_sym_scores, met_syn_contrast, align = "h"), 
+  cowplot::plot_grid(burden_fig, 
+                     cowplot::plot_grid(diagnosis_per_treat, 
+                                        diag_criteria_fig, ncol = 1), 
+                     rel_widths = c(0.5, 0.5)), 
+  
+  rel_heights = c(1, 0.3), 
+  ncol = 1) + 
+  annotate("text", 
+           x = c(0.025, 0.025, 0.48, 0.55), 
+           y = c(0.95, 0.22, 0.22, .1), 
+           label = c("A", "B", "C", "D"), 
+           size = 12/.pt)
+  
 
 
+subscores_plot
 
 ggsave(
-  filename = "figures/preliminary-figures/diag-crit.pdf",
-  pfull, 
-  width = 15, 
-  height = 30, 
+  filename = "figures/preliminary-figures/subscores-plot.pdf",
+  subscores_plot,
+  width = 9,
+  height = 18,
   units = "cm"
-       )
+)
+
+```
+
+
+
+```{r}
+#| label: fig-metsyn-related
+#| fig-cap: "Observed group means (open symbols, all available observations; geometric means for HOMA2-IR) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CI) for each outcome on its natural scale. Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (N-3 - Placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively."
+#| fig-width: 3.55
+#| fig-height: 5.12
+
+
+
+related_plot <- cowplot::plot_grid(rel_scores, 
+                                     rel_contrast, align = "h")
+
+
+
+related_plot
+
+ggsave(
+  filename = "figures/preliminary-figures/related-scores-plot.pdf",
+  related_plot,
+  width = 9,
+  height = 13,
+  units = "cm"
+)
+
+```
+
+
+
+
+```{r}
+#| eval: false
+
+contrast_summary <- contrast_dat |>
+  # Add a fix for direction of the effect, HDL and adiponectin are beneficial
+  # when increased. A "unified" direction contrast:
+  mutate(contrast_unif = if_else(analyte %in% c("Adiponectin","HDL"), -contrast, contrast),
+         time = if_else(time == 1, "T2", "T4")) |>
+  summarise(.by = c(analyte, time, transform),
+            # Median posterior w. 95% CrI on the reporting scale (natural
+            # units, or N-3/placebo ratio for log outcomes)
+            med = median(contrast_out),
+            lwr95 = quantile(contrast_out, 0.025),
+            upr95 = quantile(contrast_out, 0.975),
+            # Proportion of posterior that shows benefit in treatment
+            benefit = mean(contrast_unif < 0)) |>
+  arrange(analyte, time)
+
+
+
+
+ctxt_dat <- contrast_summary |>
+  mutate(
+    unit_txt = case_when(
+      analyte %in% c("HDL", "LDL", "glucose") ~ "mmol/L",
+      analyte %in% c("sys", "dias") ~ "mmHg",
+      analyte == "waist" ~ "cm",
+      analyte == "bmi" ~ "kg/m^2^",
+      analyte == "fat.rel" ~ "%-points",
+      analyte == "Adiponectin" ~ "mg/L",
+      .default = NA_character_),
+    digits = if_else(analyte %in% c("sys", "dias", "waist", "fat.rel"), 1, 2),
+    # Point estimate and interval bounds, ratios reported as percent
+    # difference (N-3 vs. placebo)
+    est = if_else(transform == "log",
+                  sprintf("%+.0f%%", 100 * (med - 1)),
+                  sprintf("%.*f %s", digits, med, unit_txt)),
+    ci = if_else(transform == "log",
+                 sprintf("%+.0f, %+.0f%%", 100 * (lwr95 - 1), 100 * (upr95 - 1)),
+                 sprintf("%.*f, %.*f", digits, lwr95, digits, upr95)),
+    prob = paste("P(benefit)", fmt_prob(benefit)),
+    txt = sprintf("%s (95%% CrI: %s; %s)", est, ci, prob),
+    txt_simple = sprintf("%s (%s; %s)", est, ci, prob),
+    key = paste(analyte, time, sep = "_"))
+
+ctxt <- with(ctxt_dat, setNames(as.list(txt), key))
+ctxt_simple <- with(ctxt_dat, setNames(as.list(txt_simple), key))
+
+
+# Waist single values
+waist_est_t2 <- ctxt_dat |> 
+  filter(analyte == "waist", time == "T2") |> 
+  mutate(stat = sprintf("%s (95%% PI: %s)", est, ci)) |> 
+  pull(stat)
+
+waist_prob_t2 <- ctxt_dat |> 
+  filter(analyte == "waist", time == "T2") |> 
+  mutate(stat = fmt_prob(benefit)) |> 
+  pull(stat)
+
+
+
 
 
 ```
 
-### The effect of treatment on the joint burden score
+
+
+
+At post-supplementation (T2), baseline- and sex-adjusted differences between groups indicated a reduced waist circumference in N-3 compared to placebo `r waist_est_t2` with the probability of any benefit (proportion of the posterior density indicating benefit for the N-3 group, P(benefit)) being `r waist_prob_t2`. After the combined period (supplementation and resistance training), the between-group contrast for waist circumference indicated no difference, `r ctxt$waist_T4$` (@fig-metsyn-inference). Both diastolic and systolic blood pressure indicated beneficial effects in N-3 compared to placebo at T2 (`r ctxt_simple$dias_T2` and `r ctxt_simple$sys_T2` for diastolic and systolic blood pressure, respectively). Although both the average diastolic and systolic blood pressure were more similar between N-3 and placebo after the second period, the probability distribution indicated a higher probability of benefit in the N-3 group (`r ctxt_simple$dias_T4` and `r ctxt_simple$sys_T4` for diastolic and systolic blood pressure, respectively; @fig-metsyn-inference).
+
+After the supplementation period, the N-3 group displayed similar levels of high-density lipoproteins (HDL) as compared to the placebo group (`r ctxt_simple$HDL_T2`). However, following the combined period, the N-3 group increased HDL levels compared to placebo, indicating a higher probability of beneficial effects of N-3 supplementation (`r ctxt_simple$HDL_T4`). Triglyceride levels were estimated to be similar between intervention protocols, both after the post-supplementation period (`r ctxt_simple$TG_T2`) and after the combined period (`r ctxt_simple$TG_T4`).
+
+A combined score was created by summing the five sub-scores of the metabolic syndrome diagnostic criteria from their continuous, standardized scales, with each score given equal weight (the average blood pressure score was one-fifth of the total score). Comparing the combined scores between treatments indicated a high probability of benefit from N-3 at both post-treatment time points (post-supplementation, `r burden_t2`; post combined treatment, `r burden_t4`; @fig-metsyn-inference B). The differences in the combined score did not yield a significant (95% confidence interval not containing 0) difference in the dichotomous diagnostic criteria (waist circumference above the threshold followed by at least 2 of 4 sub-scores passing the thresholds; @fig-metsyn-inference C and D).      
 
 
 ```{r}
 
-a <- fit.s13.post$draws("alpha", format = "df")
-
-eff <- function(t, k) a[[sprintf("alpha[%d,%d,2]", t, k)]] - a[[sprintf("alpha[%d,%d,1]", t, k)]]
-
-burden_eff <- sapply(1:2, function(t)
-    (-eff(t, 2) + eff(t, 5) + 0.5 * (eff(t, 7) + eff(t, 10)) + eff(t, 9) + eff(t, 11)) / 5
-  )
-
-colnames(burden_eff) <- c("T2", "T4")
-posterior::summarise_draws(posterior::as_draws_matrix(burden_eff))
-
-burden_eff |> 
-  data.frame() |> 
-  pivot_longer(cols = everything()) |> 
-  
-  ggplot(aes(value, color = name)) + geom_line(stat = "density")
+ctxt$HOMA2IR_T2
 
 ```
 
 
+
+Comparing BMI between treatment groups indicated no clear difference between groups at follow-up time points (`r ctxt_simple$bmi_T2` and `r ctxt_simple$bmi_T2`, for after the supplementation and combined periods, respectively). However, relative fat mass indicated a higher probability of an adverse effect of N-3 compared to placebo after the supplementation period (`r ctxt_simple$fat.rel_T2`). After the combined period, differences were smaller (`r ctxt$fat.rel_T2`). Adjusted differences between groups in low density lipoprotein (LDL) and Adiponectin were indicated similarity between treatments (LDL post-supplementation, `r ctxt_simple$LDL_T2`; LDL post-combined treatment, `r ctxt_simple$LDL_T4`; Adiponectin post-supplementation, `r ctxt_simple$Adiponectin_T2`; Adiponectin post-combined treatment `r ctxt_simple$Adiponectin_T4`). Insulin resistance, estimated using the HOMA2-IR model score, indicated that a grater posterior probability of benefit at post-supplementation after N-3 compared to placebo (`r ctxt_simple$HOMA2IR_T2`), a difference that was not present after the combined time period (`r ctxt_simple$HOMA2IR_T4`).
+
+
+
+
+
+```{r}
+#| label: between-type-correlations
+
+# Residual correlation matrix Omega from s13 (M = 2K; rows/cols 1:K = T2,
+# (K+1):M = T4). These are correlations conditional on treatment, baseline
+# value and sex, i.e. how participants' deviations from their expected
+# values co-vary between measurement types.
+K <- dat$d$K
+
+type_lab <- dat$scale |>
+  distinct(type, analyte) |>
+  arrange(type)
+
+omega_draws <- fit.s13.post$draws("Omega", format = "df") |>
+  pivot_longer(cols = starts_with("Omega")) |>
+  mutate(name = gsub("Omega\\[|\\]", "", name)) |>
+  separate(name, into = c("i", "j"), convert = TRUE) |>
+  mutate(time_i = if_else(i <= K, "T2", "T4"),
+         time_j = if_else(j <= K, "T2", "T4"),
+         type_i = (i - 1) %% K + 1,
+         type_j = (j - 1) %% K + 1)
+
+omega_sum <- omega_draws |>
+  summarise(.by = c(i, j, time_i, time_j, type_i, type_j),
+            med = median(value),
+            lwr95 = quantile(value, 0.025),
+            upr95 = quantile(value, 0.975),
+            # Posterior probability of a positive correlation
+            p_pos = mean(value > 0)) |>
+  left_join(type_lab |> rename(type_i = type, analyte_i = analyte),
+            by = "type_i") |>
+  left_join(type_lab |> rename(type_j = type, analyte_j = analyte),
+            by = "type_j")
+
+# Within-time correlations between the burden score components
+diag_types <- type_lab |>
+  filter(analyte %in% c("HDL", "TG", "dias", "glucose", "sys", "waist")) |>
+  pull(type)
+
+omega_sum |>
+  filter(time_i == time_j,
+         type_i %in% diag_types, type_j %in% diag_types,
+         type_i < type_j) |>
+  select(time = time_i, analyte_i, analyte_j, med, lwr95, upr95, p_pos) |>
+  arrange(time, analyte_i, analyte_j) |> 
+  print(n = 30)
+
+# Within-type correlation over time (T2 vs. T4 residuals)
+fit.s13.post$draws("rho_time", format = "df") |>
+  pivot_longer(cols = starts_with("rho_time")) |>
+  mutate(type = as.integer(gsub("rho_time\\[|\\]", "", name))) |>
+  summarise(.by = type,
+            med = median(value),
+            lwr95 = quantile(value, 0.025),
+            upr95 = quantile(value, 0.975)) |>
+  left_join(type_lab, by = "type")
+
+# Heatmap of posterior median correlations within each time-point
+omega_sum |>
+  filter(time_i == time_j) |>
+  ggplot(aes(analyte_i, analyte_j, fill = med)) +
+  geom_tile() +
+  geom_text(aes(label = sprintf("%.2f", med)), size = 2.5) +
+  scale_fill_gradient2(limits = c(-1, 1)) +
+  facet_wrap(~ time_i) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title = element_blank())
+
+
+# What the correlations do for the burden score: the sign-aligned treatment
+# contrasts are correlated in the posterior. Summing draw-by-draw (as in
+# burden_eff) carries these covariances; assuming independence does not.
+comp_eff <- lapply(1:2, function(t)
+  cbind(HDL = -eff(t, type_idx[["HDL"]]), TG = eff(t, type_idx[["TG"]]),
+        BP = 0.5 * (eff(t, type_idx[["dias"]]) + eff(t, type_idx[["sys"]])),
+        glucose = eff(t, type_idx[["glucose"]]),
+        waist = eff(t, type_idx[["waist"]])))
+names(comp_eff) <- c("T2", "T4")
+
+# Posterior correlation between the (sign-aligned) component contrasts
+lapply(comp_eff, function(x) round(cor(x), 2))
+
+# Posterior SD of the burden contrast, joint vs. assuming independence
+sapply(comp_eff, function(x)
+  c(sd_joint = sd(rowSums(x) / 5),
+    sd_indep = sqrt(sum(apply(x, 2, var))) / 5))
+
+```
 
 
 
@@ -693,7 +1150,7 @@ $$
 \Delta_{k,t}(x) = \alpha_{k,t,2} - \alpha_{k,t,1} + \delta_{k,t}\, x.
 $$
 
-Since the outcomes are standardised, the baseline mean is close to zero and the intercept difference keeps its interpretation from s13 as the effect at an average baseline value, while $\delta_{k,t}$ is the change in the treatment effect per SD of the baseline value. The $2K = 22$ interaction terms share a common scale $\tau_\delta$ (non-centred parameterisation), which shrinks individual interactions towards zero unless they are jointly supported by the data. A prior scale of 0.25 places most prior mass on interactions smaller than half an SD of the outcome per SD of baseline.
+Since the outcomes are standardised, the baseline mean is close to zero and the intercept difference keeps its interpretation from s13 as the effect at an average baseline value, while $\delta_{k,t}$ is the change in the treatment effect per SD of the baseline value. The $2K = 24$ interaction terms share a common scale $\tau_\delta$ (non-centred parameterisation), which shrinks individual interactions towards zero unless they are jointly supported by the data. A prior scale of 0.25 places most prior mass on interactions smaller than half an SD of the outcome per SD of baseline.
 
 **Model s20: treatment &times; baseline metabolic burden.** Rather than each outcome's own baseline, s20 uses a single moderator shared across outcomes: a continuous baseline metabolic burden score defined as the mean of the sign-aligned standardised baseline values of the five diagnostic criteria,
 
@@ -731,7 +1188,7 @@ where $m_p$ is the moderator ($x_{p,k}$ in s19 and $\tilde{b}_p$ in s20). These 
 
 
 ```{r}
-
+#| eval: false
 # If models aren't fitted re-fit from scripts (this saves loo also).
 if (!file.exists("fits/paper1/fit.s19.post.RDS")) source("models-scripts/model-s19.R")
 if (!file.exists("fits/paper1/fit.s20.post.RDS")) source("models-scripts/model-s20.R")
@@ -955,12 +1412,12 @@ p2 <- ppcheck_dist(yrep.s20, dobs)+ labs(subtitle = "Model s20")
 
 
 ```{r}
-
+#| eval: false
 
 ## Extract interaction terms from s19
 
-delta <- fit.s19.post$draws("delta", format = "df")   # 22 columns: delta[k,t]
-delta_raw <- fit.s19.post$draws("delta_raw", format = "df")   # 22 columns: delta[k,t]
+delta <- fit.s19.post$draws("delta", format = "df")   # 2K columns: delta[k,t]
+delta_raw <- fit.s19.post$draws("delta_raw", format = "df")   # 2K columns: delta[k,t]
 
 tau   <- fit.s19.post$draws("tau_delta", format = "df")
 
@@ -1057,7 +1514,7 @@ loo_compare(list("s19" = loo.s19,
 
 
 ```{r}
-
+#| eval: false
 
 gamma  <- fit.s20.post$draws("gamma", format = "df")
 tau_g  <- fit.s20.post$draws("tau_gamma", format = "df")
@@ -1142,4 +1599,131 @@ loo_compare(list("s19" = loo.s19,
 - Together, these model expansions provides no support for baseline-dependent treatment effects. This is the conclusion from both models where s19 looks at each individual score and s20 uses the burden score (metabolic syndrom burden score).
 
 
+### Archive
+
+```{r}
+#| eval: false
+
+
+#| eval: TRUE
+#| label: diagnostic-criteria
+
+
+## Extract diagnostic critera
+draws <- fit.s13.post$draws("n_criteria", format = "df")
+
+
+# Create a data sets with treatment allocations
+dat <- data_load_s7s10()
+
+dobs <- dat$dat |> 
+  distinct(P, treat) |> 
+  expand_grid(time = c(1, 2, 3))
+
+
+infer_ncrit <- function(draws, dobs, ndraws = 500) {
+  
+  # Sort the data 
+  d <- draws |> 
+    filter(.draw %in% sample(1:8000, ndraws)) |> 
+    pivot_longer(cols = starts_with("n_crit")) |> 
+    mutate(name = gsub("n_criteria\\[|\\]", "", name)) |> 
+    separate(name, into = c("P", "time")) |> 
+    mutate(P = as.integer(P), 
+           time = as.integer(time)) |> 
+
+    inner_join(dobs) |> 
+    summarise(.by = c(treat, .draw, time, value),
+              frac = n()) |> 
+    mutate(.by = c(treat, .draw, time), 
+           frac = 100 * (frac / sum(frac))) |> 
+    mutate(.by = c(treat, time), 
+               .draw = dense_rank(.draw)) |> 
+    # combine to a time_treat variable
+    mutate(time_treat = paste(time, treat, sep = "_"), 
+           time_treat = factor(time_treat, levels = c("1_1", "1_2", 
+                                                      "2_1", "2_2", 
+                                                      "3_1", "3_2")))
+  
+
+  
+  sub_plot <- function(time_treats, lab) {
+    
+    d |> 
+      filter(time_treat %in% time_treats) |> 
+      ggplot(aes(.draw, frac, fill = as.factor(value))) + 
+      geom_bar(stat = "identity", width = 1) + 
+      facet_wrap(~time_treat) + 
+      scale_alpha_manual(values = c(0.9, 0.3)) +
+      scale_fill_manual(values = c(colscale[1], 
+                                   colscale[6], 
+                                   colscale[4],
+                                   colscale[5], 
+                                   colscale[3], 
+                                   colscale[2])) +
+      alpha_theme() + 
+      labs(subtitle = lab) +
+    
+    theme(axis.text.x = element_blank(), 
+          axis.ticks.x = element_blank(), 
+          axis.title.x = element_blank(), 
+          axis.line.x = element_blank(), 
+          legend.position = "bottom", 
+          strip.text = element_blank(), 
+          strip.background = element_blank())
+    
+     
+  }
+    
+  
+  p <- sub_plot(time_treats = c("1_1", "1_2"), 
+                 lab = "Pre-\ntreatment") + 
+    labs(y = "Fraction of participants", 
+         fill = "Number of criteria")
+  
+  legend <-  cowplot::get_legend(p, legend = "bottom")
+  
+   
+    
+                                         p1 <- sub_plot(time_treats = c("1_1", "1_2"), 
+                 lab = "Pre-\ntreatment") + 
+    labs(y = "Fraction of participants") +
+    scale_y_continuous(limits = c(0, 100), 
+                       expand = c(0, 0)) + 
+    theme(legend.position = "none")
+  p2 <- sub_plot(time_treats = c("2_1", "2_2"), 
+                 lab = "Post-\nsupplementation") +
+    scale_y_continuous(limits = c(0, 100), 
+                       expand = c(0, 0)) + 
+    theme(axis.title.y = element_blank(), 
+          axis.text.y = element_blank(), 
+          axis.line.y = element_blank(), 
+          axis.ticks.y = element_blank()) + 
+    theme(legend.position = "none")
+  p3 <- sub_plot(time_treats = c("3_1", "3_2"), 
+                 lab = "Post-\ntreatment")+
+    scale_y_continuous(limits = c(0, 100), 
+                       expand = c(0, 0)) + 
+    theme(axis.title.y = element_blank(), 
+          axis.text.y = element_blank(), 
+          axis.line.y = element_blank(), 
+          axis.ticks.y = element_blank()) + 
+    theme(legend.position = "none")
+  
+  cowplot::plot_grid(
+    cowplot::plot_grid(p1, p2, p3,NULL, ncol = 4, 
+                     rel_widths = c(0.35, 0.3, 0.3, 0.05)), 
+    cowplot::ggdraw(legend), ncol = 1, rel_heights = c(1, 0.1))
+  
+  
+}
+
+
+p1 <- infer_ncrit(draws = draws, dobs = dobs, ndraws = 200)
+
+
+
+
+
+```
 

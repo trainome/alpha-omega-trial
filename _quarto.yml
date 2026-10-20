@@ -6,9 +6,64 @@ project:
 
 book:
   output-file: "supplementary-data"
-  title: "Effects of N-3 on metabolic syndrome: Supplementary data"
-  author: "..."
-  date: "2026-04-28"
+  title: "Krill oil supplementation with and without resistance training lowers the burden of the metabolic syndrome but does not affect glucose tolerance in sedentary adults: a randomized controlled trial"
+  # Each affiliation is defined (with an `id`) the first time it is used and
+  # referred to with `ref` for later authors. Affiliations are numbered in
+  # order of first appearance.
+  author:
+    - name: Håvard Hamarsland
+      email: havard.hamarsland@inn.no
+      corresponding: false
+      # Marked with a dagger and "These authors contributed equally"
+      equal-contributor: true
+      affiliations:
+        - id: inn
+          name: University of Inland Norway
+          department: Section for Health and Exercise Physiology
+          city: Lillehammer
+          country: Norway
+    - name: Magnus Husøy
+      equal-contributor: true
+      affiliations:
+        - ref: inn
+        - id: aff2
+          name: Laboratory of Medical Biochemistry, Innlandet Hospital Trust
+          city: Lillehammer
+          country: Norway
+    - name: Håvard Nygaard
+      affiliations:
+        - ref: inn
+    - name: Solveig Vuilliomenet
+      affiliations:
+        - ref: inn
+    - name: Jørn K. Thorgersen
+      affiliations:
+        - ref: inn
+    - name: Even H. Rosenlund
+      affiliations:
+        - ref: inn
+    - name: Emilie S. Larsen
+      affiliations:
+        - ref: inn
+    - name: Øistein Hovde
+      affiliations:
+        - id: aff3
+          name: Innlandet Hospital Trust
+          city: Brumunddal
+          country: Norway
+    - name: Daniel Hammarström
+      email: daniel.hammarstrom@inn.no
+      corresponding: false
+      affiliations:
+        - ref: inn
+    - name: Stian Ellefsen
+      email: stian.ellefsen@inn.no
+      corresponding: true
+      affiliations:
+        - ref: inn
+        - ref: aff3
+  date: today
+  date-format: "D MMMM YYYY"   # 20 October 2026
   chapters:
     - index.qmd
     - 01-data.qmd
@@ -16,10 +71,20 @@ book:
     - 03-metsyn-intro.qmd
     - 04-metsyn-models.qmd
     - 05-metsyn-simulations.qmd
-    - 06-metsyn-postpred.qmd
-#  - 07-metsyn-inference.qmd
+  #  - 06-metsyn-postpred.qmd
+  #  - 07-metsyn-inference.qmd
+  #  - 08-ogtt.qmd
+  #  - 09-results.qmd
+
+# Re-run a chapter's code only when its .qmd has changed; results are stored
+# in _freeze/. Changes to sourced scripts or data are not detected.
+execute:
+  freeze: auto
 
 bibliography: resources/bibliography.bib
 csl: vancouver
 format:
-  typst
+  typst:
+    # Adds authors and affiliations on the page after the cover
+    template-partials:
+      - resources/typst-show.typ

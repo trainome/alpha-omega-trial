@@ -422,13 +422,13 @@ comp_fun2 <- function(d, mods) {
 # age, time, analyte, value.
 cor_plot <- function(d) {
   # Check distinct to help with debug
-  if (length(unique(d$analyte)) != 11) stop("The function expect 11 analytes")
+  if (length(unique(d$analyte)) != 12) stop("The function expect 12 analytes")
 
   compl_temp <- d |>
     filter(!is.na(value_std)) |>
     mutate(.by = participant, n = n()) |>
     # This is hardcoded and assumes 11 measurements and 3 time points
-    filter(n == 33) |>
+    filter(n == 36) |>
     select(-value) |>
     pivot_wider(names_from = time, values_from = value_std)
 

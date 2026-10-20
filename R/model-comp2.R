@@ -30,7 +30,7 @@ for (m in c("s7", "s8", "s9", "s10")) {
 
 
 sim_comp_wrap2 <- function(i) {
-  k <- 11 # number of measurement types (analytes)
+  k <- 12 # number of measurement types (analytes)
   # Get models
   s7 <- cmdstanr::cmdstan_model(
     exe_file = "models/s7.exe",
@@ -63,7 +63,7 @@ sim_comp_wrap2 <- function(i) {
         c_corr = rbeta(k, 5, 10),
         # Mix of homoskedastic (ratio = 1) and heteroskedastic (ratio != 1)
         # cells so recovery can be tested for both regimes within one sim.
-        sigma_ratio = c(1.5, 0.6, 1.0, 1.0, 1.3, 0.8, 1.0, 1.0, 1.2, 0.7, 1.0),
+        sigma_ratio = c(1.5, 0.6, 1.0, 1.0, 1.3, 0.8, 1.0, 1.0, 1.2, 0.7, 1.0, 1.0),
         N = 148,
         K = k,
         prop_noise = 0.025,

@@ -1,5 +1,5 @@
 ---
-title: "Effects of N-3 supplementation on indications of metabolic syndrome - Introduction"
+title: "Effects of krill oil supplementation on indications of metabolic syndrome - Introduction"
 execute:
   echo: false
   warning: false
@@ -25,7 +25,7 @@ refit.models <- FALSE # Should fit_wrap refit models.
 
 ## Effects of N-3 supplementation on indicies of metabolic syndrome 
 
-Here we aim to model the sub-scores for the metabolic syndrome diagnostic criteria, along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting criteria thresholds for metabolic syndrome in each group while accounting for uncertainty associated with missing observations. The metabolic syndrome definition requires a minimum waist circumference (central obesity) and two more threshold values among the set of criteria markers [@alberti2006].
+Here we aim to model the components of the metabolic syndrome definition [@alberti2006], along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting metabolic syndrome definition thresholds in each group while accounting for uncertainty associated with missing observations. The metabolic syndrome definition requires a minimum waist circumference (central obesity) and two more threshold values among the set of criteria markers [@alberti2006].
 
 @fig-descriptive-data shows distributions of the variables selected for joint modeling, including variables used to define metabolic syndrome (waist circumference, raised triglycerisdes, reduced HDL-cholesterol, raised blood pressure, raised fasting glucose). 
 
@@ -61,7 +61,7 @@ d_full <- criteria_dat |>
                values_to = "value",
                names_to = "analyte" ) |> 
  
-  mutate(value_std = if_else(analyte == "TG", log(value), value)) |> 
+  mutate(value_std = if_else(analyte %in% c("TG","HOMA2IR"), log(value), value)) |> 
   
   mutate(.by = analyte, 
          value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE)) |> 
@@ -88,7 +88,8 @@ d_full |>
            analyte == "fat.rel" ~ "Relative fat mass<br>(%)", 
            analyte == "bmi" ~ "Body mass index<br>(kg m<sup>-2</sup>)",
            analyte == "HOMA2IR" ~ "Insulin sensitivity<br>index", 
-           analyte == "Adiponectin" ~ "Adiponectin, &mu;g L<sup>-1</sup>"
+           analyte == "Adiponectin" ~ "Adiponectin, &mu;g L<sup>-1</sup>", 
+           analyte == "HbA1c" ~ "Glycated hemoglobin mmol mol<sup>-1</sup>"
            
          ), 
          sex = if_else(sex == "f", "Female", "Male")) |> 
@@ -166,7 +167,7 @@ d |>
               values_from = n_prev)  |> 
   
   mutate(sex = if_else(sex == "m", "Male", "Female"), 
-         treat = if_else(treat == "ctrl", "Placebo", "N-3")) |> 
+         treat = if_else(treat == "ctrl", "Placebo", "Krill oil")) |> 
   
   bind_rows(
     d |> 
@@ -183,11 +184,10 @@ d |>
               values_from = n_prev)  |> 
   
   mutate(sex = "Total",
-         treat = if_else(treat == "ctrl", "Placebo", "N-3")) |> 
+         treat = if_else(treat == "ctrl", "Placebo", "Krill oil")) |> 
   select(treat, sex, T1:T4) 
   ) |> 
   
-
   group_by(sex) |> 
   gt() |> 
   fmt_markdown() |> 
@@ -195,7 +195,7 @@ d |>
               columns = 2:5) |> 
   
   cols_label(treat = "") |> 
-  tab_footnote(footnote = "Data are presented as n (Metabolic syndrome proportion)")
+  tab_footnote(footnote = md("Data are presented as n (Metabolic syndrome proportion).<br>Time T1, Baseline;T2 Supplementation; T4, Combined."))
 
 
 
@@ -242,7 +242,7 @@ d |>
     scale_fill_manual(values = colscale) +
   
   
-  theme_classic() +
+  alpha_theme() +
   theme(axis.title.y = element_markdown(), 
         strip.background = element_rect(color = "white"),   
         strip.text = element_text(hjust = 0, size = 12), 
@@ -279,7 +279,8 @@ data.frame(
                "Body mass index", 
                "Insulin resistance index", 
                "Adiponectin", 
-               "LDL Cholesterol"), 
+               "LDL Cholesterol", 
+    "HbA1c"), 
   Threshold = c(
      "> 102 cm for men, > 88 cm for women", 
     "< 40 mg/dL for men, < 50 mg/dL for women", 
@@ -291,7 +292,8 @@ data.frame(
                 "NA", 
                 "NA", 
                 "NA", 
-                "NA")) |> 
+                "NA", 
+    "NA")) |> 
   gt() |> 
   gt::tab_footnote(footnote = "*, required for metabolic syndrome diagnosis")
 
@@ -329,7 +331,7 @@ d_full <- criteria_dat |>
                values_to = "value",
                names_to = "analyte" ) |> 
   
-  mutate(value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value)) |> 
+  mutate(value_std = if_else(analyte %in% c("TG", "HOMA2IR", "HbA1c"), log(value), value)) |> 
   
 
   
@@ -350,7 +352,7 @@ ps <- cor_plot(d_full)
 
 ```
 
-Correlation patterns among variables will be used to inform simulations (see @sec-synth-data). Correlations among variables also suggest that uncertainty associated with missing data can be reduced by exploiting the covariance among variables. The missing data patterns of the observed data indicate that some missing data occurs in a single variable at a single time point whilst some participants have missing data in all variables at specific time points (@fig-missing-data). 
+Correlation patterns among variables will be used to inform simulations (see @sec-synth-data). Correlations among variables also suggest that uncertainty associated with missing data can be reduced by exploiting the covariance among variables. The missing data patterns in the data set indicate that some missing data occurs in a single variable at a single time point whilst some participants have missing data in all variables at specific time points (@fig-missing-data). 
 
 
 ```{r}
@@ -367,11 +369,12 @@ d_full |>
 
   
     # Add indicator for met syn criteria. 
-  mutate(met_sym_crit = if_else(analyte %in% c("bmi", "fat.rel", "HOMA2IR","LDL", "Adiponectin"), 0, 1)) |> 
-  
-
-
-  
+  mutate(met_sym_crit = if_else(analyte %in% c("bmi", 
+                                               "fat.rel",
+                                               "HOMA2IR",
+                                               "LDL",
+                                               "Adiponectin", 
+                                               "HbA1c"), 0, 1)) |> 
   mutate(.by = participant, 
          n_miss =  sum(is.na(value))) |> 
   # Reorder participants by missing values
@@ -391,8 +394,9 @@ d_full |>
            analyte == "HDL" ~ "HDL Cholesterol",
            analyte == "fat.rel" ~ "Relative fat mass", 
            analyte == "bmi" ~ "Body mass index",
-          analyte == "HOMA2IR" ~ "Insulin sensitivity index", 
-          analyte == "Adiponectin" ~ "Adiponectin"
+           analyte == "HOMA2IR" ~ "Insulin sensitivity index", 
+           analyte == "Adiponectin" ~ "Adiponectin", 
+           analyte == "HbA1c" ~ "HbA1c"
            
          ),
          
@@ -407,7 +411,8 @@ d_full |>
                                      "Relative fat mass", 
                                      "Body mass index", 
                                      "Insulin sensitivity index", 
-                                     "Adiponectin")),
+                                     "Adiponectin", 
+                                     "HbA1c")),
          
          miss = factor(miss, levels = c("data", "miss"), 
                        labels = c("Observed data", 
@@ -419,7 +424,7 @@ d_full |>
                                 "Body composition")) |> 
     arrange(participant, time, analyte) |> 
     mutate(.by = participant,
-         coord = rep(1:11, 3))|> 
+         coord = rep(1:12, 3))|> 
 
 
   
@@ -486,7 +491,7 @@ miss_dat <- criteria_dat |>
                values_to = "value", 
                names_to = "analyte")  |> 
     mutate(.by = analyte, 
-         value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value), 
+         value_std = if_else(analyte %in% c("TG", "HOMA2IR", "HbA1c"), log(value), value), 
          value_std = (value_std - mean(value_std, na.rm = TRUE)) / sd(value_std, na.rm = TRUE)) 
 
 ## For mean-centering 
@@ -577,7 +582,7 @@ draws.m1 |>
   mutate(log_odds = alpha2 + beta2_x * x + beta2_tx * TX + beta2_xtx * TX * x, 
          prob = plogis(log_odds)) |> 
   mutate(Treatment = if_else(TX == -0.5, "Placebo", "N-3"), 
-         A = factor(A, levels = seq(1:12))) |> 
+         A = factor(A, levels = seq(1:13))) |> 
   ggplot(aes(prob, color = Treatment)) + 
   geom_line(stat = "density") +
   facet_grid( A ~ x ) +
@@ -651,7 +656,8 @@ a <- draws.m1 |>
     analyte == "fat.rel" ~ "Relative fat<br>mass (%)", 
     analyte == "bmi" ~ "Body mass index<br>(kg m<sup>-2</sup>)",
     analyte == "HOMA2IR" ~ "Insulin resistance<br>index (log)", 
-    analyte == "Adiponectin" ~ "Adiponectin<br>(mg L<sup>-1</sup>)")) |> 
+    analyte == "Adiponectin" ~ "Adiponectin<br>(mg L<sup>-1</sup>)", 
+    analyte == "HbA1c" ~ "Glycated hemoglobin")) |> 
   inner_join(
     baseline_cent
    )
@@ -664,9 +670,9 @@ a <- draws.m1 |>
              ymin = lwr, ymax = upr)) +
   geom_ribbon(alpha = 0.2) + 
   facet_wrap(~ Outcome, scales = "free_x") + 
-  
+  alpha_theme() +
   theme(strip.text = element_markdown(), 
-        legend.position = c(0.9, 0.96), 
+        legend.position = c(0.9, 0.05), 
         legend.title = element_blank()) + 
   labs(x = "", 
        y = "Probability of drop-out", 
@@ -715,7 +721,8 @@ b <- draws.m1 |>
     analyte == "fat.rel" ~ "Relative fat<br>mass (%)", 
     analyte == "bmi" ~ "Body mass index<br>(kg m<sup>-2</sup>)",
     analyte == "HOMA2IR" ~ "Insulin resistance<br>index (log)", 
-    analyte == "Adiponectin" ~ "Adiponectin<br>(mg L<sup>-1</sup>)")) |> 
+    analyte == "Adiponectin" ~ "Adiponectin<br>(mg L<sup>-1</sup>)", 
+    analyte == "HbA1c" ~ "Glycated hemoglobin")) |> 
   inner_join(
     baseline_cent
    )
@@ -728,7 +735,7 @@ b <- draws.m1 |>
              ymin = lwr, ymax = upr)) +
   geom_ribbon(alpha = 0.2) + 
   facet_wrap(~ Outcome, scales = "free_x") + 
-  
+    alpha_theme() +
   theme(strip.text = element_markdown(), 
         legend.position = "none") + 
   labs(x = "", 
@@ -791,7 +798,7 @@ draws.m1 |>
     Outcome = case_when(
     analyte == "age" ~ "Age (years)", 
     analyte == "waist" ~ "Waist circumference (cm)", 
-    analyte == "glucose" ~ "Resting glucose (mmol L<sup>-1</sup>)" ,
+    analyte == "glucose" ~ "Fasting glucose (mmol L<sup>-1</sup>)" ,
     analyte == "dias" ~ "Diastolic blood pressure (mmHg)", 
     analyte == "sys" ~ "Systolic blood pressure (mmHg)", 
     analyte == "TG" ~ "Triglycerides (log mmol L<sup>-1</sup>)", 
@@ -800,7 +807,8 @@ draws.m1 |>
     analyte == "fat.rel" ~ "Relative fat mass (%)", 
     analyte == "bmi" ~ "Body mass index (kg m<sup>-2</sup>)",
     analyte == "HOMA2IR" ~ "Insulin resistance index (log)", 
-    analyte == "Adiponectin" ~ "Adiponectin (mg L<sup>-1</sup>)"))) |> 
+    analyte == "Adiponectin" ~ "Adiponectin (mg L<sup>-1</sup>)", 
+    analyte == "HbA1c" ~ "Glycated hemoglobin"))) |> 
   pivot_wider(names_from = name, 
               values_from = stat) |> 
   dplyr::select(Outcome, avg_t2, txd_t2, avg_t4, txd_t4) |> 
@@ -967,7 +975,7 @@ draws.m1 |>
 
 ### Synthetic data {#sec-synth-data}
 
-Synthetic data is generated with known parameter values to validate models and to explore the effects of model misspecification and missing data. The first data simulation function uses a multivariate normal distribution to simulate conditional means for *K* measurement types and *N* participants.
+Synthetic data is generated with known parameter values to validate models and to enable exploration of the effects of model misspecification and missing data. The first data simulation function uses a multivariate normal distribution to simulate conditional means for *K* measurement types and *N* participants.
 
 $$
 \begin{align}
