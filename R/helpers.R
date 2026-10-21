@@ -89,6 +89,7 @@ make_inits <- function(model, DATA = d, jitter = 0.3, lo = 0.5, hi = 1.5) {
   function(chain_id = 1) {
     out <- lapply(names(pars), function(nm) {
       sz <- sizes[[nm]]
+      if (is.null(sz)) sz <- 0 # zero-length vectors are absent from metadata
       n <- prod(sz)
       if (grepl("^L_Omega", nm)) {
         diag(sz[1])
@@ -318,11 +319,22 @@ comp_fun <- function(d, s7, s8) {
 # d,    a simulated data set with $full, $miss, $true_effects
 #   (produced by sim_wrap2 or sim_wrap3).
 #
+# extra_data, a named list added to each Stan data list, e.g. list(nu = 4)
+#   for the Student-t models (s12, s13, s18).
+# use_inits, if TRUE, chains start from make_inits() (built per data set)
+#   instead of cmdstan's random inits.
+#
 # Each model is fit on both the full and missing variants so that
 # marginal group contrasts can be compared with vs. without missingness.
 # Output structure matches comp_fun (coverage, error_comp, est_error_dist,
 # average_hmc_metrics) so downstream plotting code works unchanged.
-comp_fun2 <- function(d, mods) {
+comp_fun2 <- function(d, mods, extra_data = list(), use_inits = FALSE) {
+  # Parameter names present in a fit (zero-length parameters, e.g. y_impute
+  # in complete data, are absent from the output)
+  fit_pars <- function(fit, mod) {
+    intersect(names(mod$variables()$parameters), fit$metadata()$stan_variables)
+  }
+
   K <- ncol(d$true_effects)
   # True treatment differences per time x type
   true_effects <- data.frame(
@@ -333,6 +345,7 @@ comp_fun2 <- function(d, mods) {
 
   fit_model <- function(mod, dat) {
     dat$prior_only <- 0
+    dat[names(extra_data)] <- extra_data
     fit <- mod$sample(
       data = dat,
       chains = 3,
@@ -340,9 +353,12 @@ comp_fun2 <- function(d, mods) {
       iter_sampling = 750,
       parallel_chains = 1,
       refresh = 0,
-      show_messages = FALSE
+      show_messages = FALSE,
+      init = if (use_inits) make_inits(mod, DATA = dat) else NULL
     )
-    fit$draws()
+    # Read parameters only: generated quantities (y_rep, log_lik, ...) are
+    # several hundred MB per fit and are not used here.
+    fit$draws(variables = fit_pars(fit, mod))
     fit$sampler_diagnostics()
     fit
   }
@@ -364,8 +380,7 @@ comp_fun2 <- function(d, mods) {
   )
 
   summarise_hmc <- function(fit, model, variant) {
-    fit$summary() |>
-      filter(variable != "lp__") |>
+    fit$summary(variables = fit_pars(fit, mods[[model]])) |>
       select(rhat:ess_tail) |>
       pivot_longer(cols = everything()) |>
       summarise(

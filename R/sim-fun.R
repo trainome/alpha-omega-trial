@@ -676,14 +676,27 @@ sim_type2 <- function(
 #
 # d, a data set from the simulation function
 # verbose, if TRUE prints the scaling procedure.
+# scale_pars, optional data frame (type, m, s) of per-type means and SDs to
+#   standardize with, e.g. the $scale_pars of the full data so that the
+#   missing-data variant is on the same scale. NULL computes them from d.
 #
-struct_sim <- function(d, verbose = TRUE) {
-  # Standardize data
+struct_sim <- function(d, verbose = TRUE, scale_pars = NULL) {
+  # Type labels "type1".."typeK" are indexed by their number; dense_rank on
+  # the strings would sort "type10" before "type2" and misalign types with
+  # the true effects when K >= 10.
+  type_index <- function(x) {
+    if (all(grepl("^type[0-9]+$", x))) {
+      dense_rank(as.integer(sub("^type", "", x)))
+    } else {
+      dense_rank(x)
+    }
+  }
+
   dstd <- d |>
     mutate(
       group = dense_rank(group),
       sex = dense_rank(sex),
-      type = dense_rank(type),
+      type = type_index(type),
       participant = dense_rank(participant)
     ) |>
     mutate(time = paste0("time", time)) |>
@@ -695,8 +708,21 @@ struct_sim <- function(d, verbose = TRUE) {
     ) |>
     mutate(
       time = if_else(time == "pre", "T1", if_else(time == "time1", "T2", "T3"))
-    ) |>
-    mutate(.by = type, ystd = (y - mean(y, na.rm = TRUE)) / sd(y, na.rm = TRUE))
+    )
+
+  # Standardize data
+  if (is.null(scale_pars)) {
+    scale_pars <- dstd |>
+      summarise(
+        .by = type,
+        m = mean(y, na.rm = TRUE),
+        s = sd(y, na.rm = TRUE)
+      )
+  }
+  dstd <- dstd |>
+    left_join(scale_pars, by = "type") |>
+    mutate(ystd = (y - m) / s) |>
+    select(-m, -s)
 
   # Table the standardized and unstandardized data
   sum_tab <- dstd |>
@@ -835,7 +861,8 @@ struct_sim <- function(d, verbose = TRUE) {
     raw_df = dstd,
     dl_compl_single = dl_compl_single,
     dl_itt_single = dl_itt_single,
-    dl_itt = dl_itt
+    dl_itt = dl_itt,
+    scale_pars = scale_pars
   )
 }
 
@@ -1310,6 +1337,12 @@ sim_type3 <- function(
 # prop_noise, proportion of observed measurements with additional noise.
 # sd_noise, SD of the additional noise.
 #
+# dropout_int, logit intercept of participant-level dropout at each follow-up
+#   (slope on age fixed at -0.5). Dropout at time 1 carries over to time 2.
+#   -2 gives ~12% dropout at time 1 and ~22% at time 2.
+# miss_prop_y, proportion of follow-up values missing completely at random.
+# miss_prop_pre, proportion of pre values missing completely at random.
+#
 # The cross-time correlation C_cross and pre-intervention structure are
 # handled as in sim_wrap2.
 sim_wrap3 <- function(
@@ -1322,7 +1355,10 @@ sim_wrap3 <- function(
   N = 148,
   K = 8,
   prop_noise = 0.025,
-  sd_noise = 1.5
+  sd_noise = 1.5,
+  dropout_int = -2,
+  miss_prop_y = 0.02,
+  miss_prop_pre = 0.005
 ) {
   if (length(group1) != K) stop("group1 must have length K")
   if (length(group2) != K) stop("group2 must have length K")
@@ -1400,10 +1436,8 @@ sim_wrap3 <- function(
 
   miss_t2 <- ~ 1 + age
   miss_t4 <- ~ 1 + age
-  miss_beta_t2 <- c(-2, -0.5)
-  miss_beta_t4 <- c(-2, -0.5)
-  miss_prop_pre <- 0.005
-  miss_prop_y <- 0.02
+  miss_beta_t2 <- c(dropout_int, -0.5)
+  miss_beta_t4 <- c(dropout_int, -0.5)
 
   simout <- sim_type3(
     n = N,
@@ -1432,14 +1466,24 @@ sim_wrap3 <- function(
     verbose = FALSE
   )
 
+  # Both variants are standardized with the full-data per-type mean and SD,
+  # and the true effects are put on that standardized scale, so estimated
+  # contrasts and true effects are directly comparable.
   d3_full <- struct_sim(simout$full, verbose = FALSE)
-  d3_miss <- struct_sim(simout$miss, verbose = FALSE)
+  d3_miss <- struct_sim(
+    simout$miss,
+    verbose = FALSE,
+    scale_pars = d3_full$scale_pars
+  )
+  s_type <- d3_full$scale_pars$s[order(d3_full$scale_pars$type)]
+  true_raw <- matrix(c(group1, group2), ncol = K, byrow = TRUE)
 
   out <- list(
     full = d3_full,
     miss = d3_miss,
-    true_effects = matrix(c(group1, group2), ncol = K, byrow = TRUE),
-    true_sigma = S2 # K x 2 matrices per time, for recovery checks
+    true_effects = sweep(true_raw, 2, s_type, "/"),
+    true_effects_raw = true_raw,
+    true_sigma = S2 # K x 2 matrices per time (raw scale), for recovery checks
   )
 
   return(out)
