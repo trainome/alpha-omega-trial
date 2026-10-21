@@ -29,6 +29,7 @@ fit_wrap(
   s17,
   DATA = d,
   fit = "fit.s17.post",
+  init = make_inits(s17, DATA = d),
   refit = TRUE,
   ad = 0.95,
   iterwu = 2000

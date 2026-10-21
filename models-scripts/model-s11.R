@@ -22,7 +22,13 @@ s11 <- cmdstan_model(
 
 # Fit and save the model with fit wrap. This will be possible to extract again
 # in the qmd file.
-fit_wrap(s11, DATA = d, fit = "fit.s11.post", refit = TRUE)
+fit_wrap(
+  s11,
+  DATA = d,
+  fit = "fit.s11.post",
+  init = make_inits(s11, DATA = d),
+  refit = TRUE
+)
 # Initialize methods for loo
 fit.s11.post$init_model_methods()
 

@@ -55,6 +55,58 @@ fit_wrap <- function(
 }
 
 
+# Generic initial values for models s7-s20
+#
+# cmdstan's default random inits (uniform(-2, 2) on the unconstrained scale)
+# can start the 2K-dimensional cholesky_factor_corr near-singular, freezing the
+# chain (step size -> 0, all draws identical). This returns an init function
+# that starts in a safe region:
+#   * L_Omega* (cholesky_factor_corr): identity
+#   * positive scales (sigma*, psi, lambda_diag, tau_*): uniform(lo, hi)
+#   * everything else (alpha, beta, imputed values, loadings, *_raw):
+#     normal(0, jitter)
+# Parameter names and sizes are read from a one-iteration fixed_param run, so
+# sizes defined in transformed data (n_miss_y, n_lambda_lower, ...) are exact.
+#
+# model, a compiled cmdstanr model
+# DATA, the data list used to fit the model
+# jitter, sd of the normal jitter for unconstrained parameters
+# lo, hi, range for positive scale parameters
+# returns a function(chain_id) for the init argument of fit_wrap/$sample
+make_inits <- function(model, DATA = d, jitter = 0.3, lo = 0.5, hi = 1.5) {
+  skel <- model$sample(
+    data = DATA,
+    fixed_param = TRUE,
+    chains = 1,
+    iter_sampling = 1,
+    init = 0, # identity correlations, unit scales, zeros elsewhere
+    refresh = 0,
+    show_messages = FALSE
+  )
+  pars <- model$variables()$parameters
+  sizes <- skel$metadata()$stan_variable_sizes[names(pars)]
+
+  function(chain_id = 1) {
+    out <- lapply(names(pars), function(nm) {
+      sz <- sizes[[nm]]
+      n <- prod(sz)
+      if (grepl("^L_Omega", nm)) {
+        diag(sz[1])
+      } else {
+        x <- if (grepl("^(sigma|psi|lambda_diag|tau_)", nm)) {
+          runif(n, lo, hi)
+        } else {
+          rnorm(n, 0, jitter)
+        }
+        if (pars[[nm]]$dimensions == 0) x else array(x, dim = sz)
+      }
+    })
+    names(out) <- names(pars)
+    out
+  }
+}
+
+
 # Check for effect of divergent transitions in parameters
 #
 # fit, a cmdstanr fit (e.g., from fit_wrap)

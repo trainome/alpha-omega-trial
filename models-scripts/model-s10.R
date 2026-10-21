@@ -20,21 +20,6 @@ s10 <- cmdstan_model(
 )
 
 
-# Initial values: start the correlation Cholesky factors near the identity so
-# chains begin away from the singular (rank-deficient) boundary of L_Omega that
-# trapped a chain previously. Other parameters keep cmdstan's random init.
-near_identity_chol <- function(dim, jitter = 0.01) {
-  L <- diag(dim)
-  L[lower.tri(L)] <- rnorm(sum(lower.tri(L)), 0, jitter)
-  L / sqrt(rowSums(L^2)) # renormalise rows -> valid corr Cholesky (unit diag)
-}
-init_s10 <- function() {
-  list(
-    L_Omega = near_identity_chol(2 * d$K),
-    L_Omega_pre = near_identity_chol(d$K)
-  )
-}
-
 # Fit and save the model with fit wrap. This will be possible to extract again
 # in the qmd file.
 fit_wrap(
@@ -46,7 +31,7 @@ fit_wrap(
 
   chains = 4,
 
-  init = init_s10,
+  init = make_inits(s10, DATA = d),
   refit = TRUE
 )
 # Initialize methods for loo
