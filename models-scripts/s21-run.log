@@ -174,3 +174,34 @@ Chain 2 Iteration: 1000 / 4000 [ 25%]  (Warmup)
 Chain 3 Iteration: 1000 / 4000 [ 25%]  (Warmup) 
 Chain 1 Iteration: 1000 / 4000 [ 25%]  (Warmup) 
 Chain 4 Iteration: 1000 / 4000 [ 25%]  (Warmup) 
+Chain 2 Iteration: 2000 / 4000 [ 50%]  (Warmup) 
+Chain 2 Iteration: 2001 / 4000 [ 50%]  (Sampling) 
+Chain 3 Iteration: 2000 / 4000 [ 50%]  (Warmup) 
+Chain 3 Iteration: 2001 / 4000 [ 50%]  (Sampling) 
+Chain 4 Iteration: 2000 / 4000 [ 50%]  (Warmup) 
+Chain 4 Iteration: 2001 / 4000 [ 50%]  (Sampling) 
+Chain 1 Iteration: 2000 / 4000 [ 50%]  (Warmup) 
+Chain 1 Iteration: 2001 / 4000 [ 50%]  (Sampling) 
+Chain 2 Iteration: 3000 / 4000 [ 75%]  (Sampling) 
+Chain 3 Iteration: 3000 / 4000 [ 75%]  (Sampling) 
+Chain 4 Iteration: 3000 / 4000 [ 75%]  (Sampling) 
+Chain 1 Iteration: 3000 / 4000 [ 75%]  (Sampling) 
+Chain 2 Iteration: 4000 / 4000 [100%]  (Sampling) 
+Chain 2 finished in 2078.0 seconds.
+Chain 3 Iteration: 4000 / 4000 [100%]  (Sampling) 
+Chain 3 finished in 2086.0 seconds.
+Chain 4 Iteration: 4000 / 4000 [100%]  (Sampling) 
+Chain 4 finished in 2088.3 seconds.
+Chain 1 Iteration: 4000 / 4000 [100%]  (Sampling) 
+Chain 1 finished in 2090.6 seconds.
+
+All 4 chains finished successfully.
+Mean chain execution time: 2085.7 seconds.
+Total execution time: 2090.7 seconds.
+
+Warning message:
+In file.remove(fit.filepath) :
+  cannot remove file 'fits/paper1/fit.s21.post.RDS', reason 'No such file or directory'
+Warning message:
+Some Pareto k diagnostic values are too high. See help('pareto-k-diagnostic') for details.
+ 
