@@ -6,4 +6,6 @@ format: html
 
 ## 
 
+The residual correlations modeled in s13 allows us to account for associations between outcome variables when estimating treatment effects. Conceptually this could affect estimates in two ways. First, adding uncertainty associated with the between-variable correlation could increase uncertainty in the treatment effect. However, the correlations will help in estimating missing data, this would reduce uncertainty in estimation of single measurements which propagates into the treatment effect.     
+
 
