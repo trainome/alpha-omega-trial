@@ -1,5 +1,5 @@
 ---
-title: "Effects of N-3 supplementation on indications of metabolic syndrome - Posterior predictive simulations and model expansions"
+title: "Effects of krill oil supplementation on indications of metabolic syndrome - Posterior predictive simulations and model expansions"
 execute:
   echo: false
   warning: false

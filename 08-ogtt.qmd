@@ -7,7 +7,7 @@ editor_options:
 
 ## Introduction
 
-Here we model the oral glucose-tolerance test data. Blood glucose was measured every fifteen minute after a standard 75 g glucose drink over the course of a 2 hour period. The test was performed before the intervention period (T1), after the supplementation-only period (T2), and after the full intervention (combined period, supplementation and resistance training vs. placebo and resistance training). The goal is to evaluate the effect of the intervention (supplementation of N-3) on the glucose tolerance curve.
+Here we model the oral glucose-tolerance test data. Blood glucose was measured every fifteen minute after a standard 75 g glucose drink over the course of a 2 hour period. The test was performed before the intervention period (T1), after the supplementation-only period (T2), and after the full intervention (combined period, supplementation and resistance training vs. placebo and resistance training). The goal is to evaluate the effect of the intervention (krill oil supplementation) on the glucose tolerance curve.
 
 We aim to build a model that captures the glucose time-course after ingesting the drink. We will accomplish this by fitting a spline model to participant-level data with treatment-groups and time-points as population-level effects. 
 
@@ -609,7 +609,7 @@ pop_by_time <- B2_pred_long |>
   left_join(time_levels, by = c("g" = "G")) |> 
   mutate(time = if_else(g %in% c(1,2), "Baseline", 
     if_else(g %in% c(3, 4), "Supplementation", "Combined")), 
-    treat = if_else(g %in% c(1, 3, 5), "Placebo", "N-3"))  |> 
+    treat = if_else(g %in% c(1, 3, 5), "Placebo", "Krill oil"))  |> 
   mutate(time = factor(time, levels = c("Baseline", "Supplementation", "Combined")))
 
 
@@ -1145,7 +1145,7 @@ within_contrasts <- pred |>
          time = factor(time, levels = c("Supplementation vs. Baseline", 
                                                "Combined vs. Baseline")), 
          treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo change from baseline", "N-3 change from baseline"))) 
+                        labels = c("Placebo change from baseline", "Krill oil change from baseline"))) 
   
 
 pd <- position_dodge(width = 3)
@@ -1205,7 +1205,7 @@ p_pred <- pred |>
          time = factor(time, levels = c("Baseline", "Supplementation", 
                                                "Combined")), 
          treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo predictions", "N-3 predictions"))) |> 
+                        labels = c("Placebo predictions", "Krill oil predictions"))) |> 
   
   ggplot(aes(min_seq, m, lty = time, color = treat)) + 
   geom_line() + 
@@ -1252,10 +1252,10 @@ delta_contrasts <- pred |>
             lwr95 = quantile(value, 0.025), 
             upr95 = quantile(value, 0.975)) |> 
   filter(contrast %in% c("omega_ctrl_t2", "omega_ctrl_t4")) |> 
-  mutate(contrast = case_when(contrast == "omega_ctrl_t2" ~ "Placebo vs. N-3: Supplementation period", 
-                              contrast == "omega_ctrl_t4" ~ "Placebo vs. N-3: Combined period"), 
-         contrast = factor(contrast, levels = c("Placebo vs. N-3 Supplementation: Supplementation period", 
-                                                "Placebo vs. N-3 Combined: Combined period"))) |> 
+  mutate(contrast = case_when(contrast == "omega_ctrl_t2" ~ "Placebo vs. Krill oil: Supplementation period", 
+                              contrast == "omega_ctrl_t4" ~ "Placebo vs. Krill oil: Combined period"), 
+         contrast = factor(contrast, levels = c("Placebo vs. Krill oil: Supplementation period", 
+                                                "Placebo vs. Krill oil: Combined period"))) |> 
   
   ggplot(aes(min_seq, m, fill = contrast)) + 
     scale_x_continuous(limits = c(0, 125), 
@@ -1272,7 +1272,7 @@ delta_contrasts <- pred |>
   geom_hline(yintercept = 0, lty = 2, alpha = 0.5) + 
   theme(legend.position = "none") + 
   labs(x = "Time (min)", 
-       y = "&Delta;N-3 \u2212 &Delta;Placebo<br>(mmol L<sup>-1</sup>)")
+       y = "&Delta;Krill oil \u2212 &Delta;Placebo<br>(mmol L<sup>-1</sup>)")
   
 
   
@@ -1829,7 +1829,7 @@ within_contrasts <- pred |>
          time = factor(time, levels = c("Supplementation vs. Baseline",
                                         "Combined vs. Baseline")),
          treat = factor(treat, levels = c("ctrl", "omega"),
-                        labels = c("Placebo change from baseline", "N-3 change from baseline")))
+                        labels = c("Placebo change from baseline", "Krill oil change from baseline")))
 
 
 pd <- position_dodge(width = 3)
@@ -1878,7 +1878,7 @@ p_pred <- pred |>
          time = factor(time, levels = c("Baseline", "Supplementation",
                                         "Combined")),
          treat = factor(treat, levels = c("ctrl", "omega"),
-                        labels = c("Placebo predictions", "N-3 predictions"))) |>
+                        labels = c("Placebo predictions", "Krill oil predictions"))) |>
   ggplot(aes(min_seq, m, lty = time, color = treat)) +
   geom_line() +
   facet_wrap(~ treat, ncol = 2) +
@@ -1918,10 +1918,10 @@ delta_contrasts <- pred |>
             lwr95 = quantile(value, 0.025),
             upr95 = quantile(value, 0.975)) |>
   filter(contrast %in% c("omega_ctrl_t2", "omega_ctrl_t4")) |>
-  mutate(contrast = case_when(contrast == "omega_ctrl_t2" ~ "Placebo vs. N-3: Supplementation period",
-                              contrast == "omega_ctrl_t4" ~ "Placebo vs. N-3: Combined period"),
-         contrast = factor(contrast, levels = c("Placebo vs. N-3: Supplementation period",
-                                                "Placebo vs. N-3: Combined period"))) |>
+  mutate(contrast = case_when(contrast == "omega_ctrl_t2" ~ "Placebo vs. Krill oil: Supplementation period",
+                              contrast == "omega_ctrl_t4" ~ "Placebo vs. Krill oil: Combined period"),
+         contrast = factor(contrast, levels = c("Placebo vs. Krill oil: Supplementation period",
+                                                "Placebo vs. Krill oil: Combined period"))) |>
   ggplot(aes(min_seq, m, fill = contrast)) +
   scale_x_continuous(limits = c(0, 125),
                      expand = c(0, 0),
@@ -1937,7 +1937,7 @@ delta_contrasts <- pred |>
   geom_hline(yintercept = 0, lty = 2, alpha = 0.5) +
   theme(legend.position = "none") +
   labs(x = "Time (min)",
-       y = "&Delta;N-3 − &Delta;Placebo<br>(mmol L<sup>-1</sup>)")
+       y = "&Delta;Krill oil − &Delta;Placebo<br>(mmol L<sup>-1</sup>)")
 
 
 # Combine the full figure

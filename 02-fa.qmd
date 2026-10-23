@@ -1,5 +1,5 @@
 ---
-title: "Effects of N-3 supplementation of serum fatty acids"
+title: "Effects of krill oil supplementation of serum fatty acids"
 execute:
   echo: false
   warning: false
@@ -24,7 +24,7 @@ refit.models <- FALSE
 
 
 
-Fatty acids, including including EPA (C205n3) and DHA (226n3) where measured in red blood cells. We will assess the effect of krill oil (N-3) supplementation on group level fatty acid profiles. As preliminary models indicated heteroscedasticity of residuals, log-transformed and standardized data was used in modelling. This allows for the same weakly regularizing priors for all fatty acids ($\text{FA}$). In addition to each fatty acid, the Omega 3 index [@harris2004] is included in these models as the EPA and DHA content relative to the total fatty acid content of red blood cells. The omega 3 index is included in models from model `m3` (see below).    
+Fatty acids, including including EPA (C205n3) and DHA (226n3) where measured in red blood cells. We will assess the effect of krill oil supplementation on group level fatty acid profiles. As preliminary models indicated heteroscedasticity of residuals, log-transformed and standardized data was used in modelling. This allows for the same weakly regularizing priors for all fatty acids ($\text{FA}$). In addition to each fatty acid, the Omega 3 index [@harris2004] is included in these models as the EPA and DHA content relative to the total fatty acid content of red blood cells. The omega 3 index is included in models from model `m3` (see below).    
 
 The models were designed to estimate differences between treatments ($\text{TX}$) at post-treatment time-points (T2 and T4) using pre-treatment ($\text{Pre}_{i[\text{FA}]}$) values as a covariate. The intercept in the model ($\alpha_{\text{[FA, TI, TX]}}$) gives us mean estimates for fatty-acid $\text{FA}$, time-point $\text{TI}$, and treatment $\text{TX}$.
 
@@ -309,7 +309,7 @@ draws.m2 |>
 
 ```
 
-Treatment with N-3 fatty acids robustly increased whole blood fatty acid composition levels of C205n3, C225n3 and C226n3 fatty acids compared to placebo (@fig-m2-meanpred and @fig-m2-contrast). Post-treatment values were lower in the N-3 group for C181c9, C183n6, C203n6 and C204n6 with high probability at both T2 and T4 (@fig-m2-contrast). 
+Krill oil supplementation robustly increased whole blood fatty acid composition levels of C205n3, C225n3 and C226n3 fatty acids compared to placebo (@fig-m2-meanpred and @fig-m2-contrast). Post-treatment values were lower in the krill oil group for C181c9, C183n6, C203n6 and C204n6 with high probability at both T2 and T4 (@fig-m2-contrast). 
 
 
 ```{r}
@@ -396,7 +396,7 @@ m2_sum <- draws.m2 |>
   mutate(time = if_else(TI == 1, "T2", "T4"), 
          treat = if_else(TX == 1, "ctrl", "omega"), 
          treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
+                        labels = c("Placebo", "Krill oil"))) |> 
 
   add_row(
     fat_dat |> 
@@ -407,7 +407,7 @@ m2_sum <- draws.m2 |>
              TI = NA,
              FA = NA, 
               treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3"))) 
+                        labels = c("Placebo", "Krill oil"))) 
   ) 
   
   
@@ -423,7 +423,7 @@ AOData::omega3  |>
                names_to = "fa", 
                values_to = "value") |>
     mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
+                        labels = c("Placebo", "Krill oil"))) |> 
   
   
   ggplot(aes(time, value, color = treat, group = paste(participant, fa))) + 
@@ -544,7 +544,7 @@ draws.m2 |>
     geom_density(alpha = 0.2) +
     facet_wrap(~ fa, scales = "free") +
     
-    labs(x = "Fold-difference (N-3 vs. Placebo)", 
+    labs(x = "Fold-difference (Krill oil vs. Placebo)", 
          y = "Posterior density", 
          fill = "Time-point") +
     theme_classic() + 
@@ -1007,7 +1007,7 @@ m3_sum <- draws.m3 |>
   mutate(time = if_else(TI == 1, "T2", "T4"), 
          treat = if_else(TX == 1, "ctrl", "omega"), 
          treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
+                        labels = c("Placebo", "Krill oil"))) |> 
   
 
   
@@ -1021,7 +1021,7 @@ m3_sum <- draws.m3 |>
              TI = NA,
              FA = NA, 
               treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3"))) 
+                        labels = c("Placebo", "Krill oil"))) 
   ) 
   
 
@@ -1036,7 +1036,7 @@ AOData::omega3  |>
                names_to = "fa", 
                values_to = "value") |>
     mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
+                        labels = c("Placebo", "Krill oil"))) |> 
   
   
   ggplot(aes(time, value, color = treat, group = paste(participant, fa))) + 
@@ -1158,7 +1158,7 @@ draws.m3 |>
     geom_density(alpha = 0.2) +
     facet_wrap(~ fa, scales = "free") +
     
-    labs(x = "Fold-difference (N-3 vs. Placebo)", 
+    labs(x = "Fold-difference (Krill oil vs. Placebo)", 
          y = "Posterior density", 
          fill = "Time-point") +
     alpha_theme() + 
@@ -1376,7 +1376,7 @@ bind_rows(
     
   scale_linetype_manual(values = c(2, 1)) +
   
-    labs(x = "Fold-difference (N-3 vs. Placebo)", 
+    labs(x = "Fold-difference (Krill oil vs. Placebo)", 
          y = "Posterior density", 
          color = "Model", 
          linetype = "Model") +
@@ -1807,7 +1807,7 @@ fa_labels <- data.frame(
 ```{r}
 #| eval: true
 #| label: fig-fa-infer
-#| fig-cap: "Adjusted group means and treatment contrasts of fatty acids concentrations and the omega-3 index in whole blood. Error bars in treatment-group means represents 95% CrI, posterior contrasts are displayed as the full posterior distribution ratio between N-3 to Placebo estimates at time-point T2 and T4 (1 indicating equivalent concentrations)."
+#| fig-cap: "Adjusted group means and treatment contrasts of fatty acids concentrations and the omega-3 index in whole blood. Error bars in treatment-group means represents 95% CrI, posterior contrasts are displayed as the full posterior distribution ratio between krill oil and placebo estimates at time-point T2 and T4 (1 indicating equivalent concentrations)."
 #| fig-width: 3.543
 #| fig-height: 9
 
@@ -1903,7 +1903,7 @@ sumdat <- draws |>
   mutate(time = if_else(TI == 1, "T2", "T4"), 
          treat = if_else(TX == 1, "ctrl", "omega"), 
          treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
+                        labels = c("Placebo", "Krill oil"))) |> 
   
   add_row(
     fat_dat_compl |> 
@@ -1915,7 +1915,7 @@ sumdat <- draws |>
              FA = NA) |> 
       expand_grid(treat = c("ctrl", "omega")) |> 
       mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3")))
+                        labels = c("Placebo", "Krill oil")))
   )   |> 
     inner_join(fa_labels) 
   
@@ -2032,7 +2032,7 @@ p2 <- draws|>
     
   scale_linetype_manual(values = c(6, 1)) +
   
-    labs(x = "Fold-difference<br>(N-3 vs. Placebo)", 
+    labs(x = "Fold-difference<br>(Krill oil vs. Placebo)", 
          y = "Posterior density", 
          subtitle = "Treatment contrasts<br>(Posterior densities)") +
     alpha_theme(yaxis = FALSE) + 
@@ -2292,7 +2292,7 @@ contr <- draws|>
 ```
 
 
-Fish-oil supplementation led to robust increases in Docosahexaenoic (DHA; time-point T2 N-3 vs. Placebo, `r contr_text$stat[contr_text$fa == "C226n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C226n3" & contr_text$TI == 2]`), Eicosapentaenoic (EPA; T2, `r contr_text$stat[contr_text$fa == "C205n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C205n3" & contr_text$TI == 2]`), and Docosapentaenoic acid (T2, `r contr_text$stat[contr_text$fa == "C225n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C225n3" & contr_text$TI == 2]`; @fig-fa-infer, @tbl-infer-fa). At the same time, omega-6 fatty acids were reduced in the N-3 group compared to Placebo at both time-points (Alpha-linolenic acid T2, `r contr_text$stat[contr_text$fa == "C183n6" & contr_text$TI == 1]`; Alpha-linolenic acid T4, `r contr_text$stat[contr_text$fa == "C183n6" & contr_text$TI == 2]`; Arachidonic acid T2, `r contr_text$stat[contr_text$fa == "C204n6" & contr_text$TI == 1]`; Arachidonic acid T4, `r contr_text$stat[contr_text$fa == "C204n6" & contr_text$TI == 2]`; Dihomo-gamma-linolenic acid T2, `r contr_text$stat[contr_text$fa == "C203n6" & contr_text$TI == 1]`; Dihomo-gamma-linolenic acid T4, `r contr_text$stat[contr_text$fa == "C203n6" & contr_text$TI == 2]`; @fig-fa-infer, @tbl-infer-fa). While gamma-linolenic, linoleic, steraic and palmitic acids remained stable unchanged in N-3 compared to Placebo (@fig-fa-infer, @tbl-infer-fa), Oleic acid was reduced in N-3 compared to control at T2 (`r contr_text$stat[contr_text$fa == "C181c9" & contr_text$TI == 1]`) but not at T4 (`r contr_text$stat[contr_text$fa == "C181c9" & contr_text$TI == 2]`).  
+Krill oil supplementation led to robust increases in Docosahexaenoic (DHA; time-point T2 krill oil vs. placebo, `r contr_text$stat[contr_text$fa == "C226n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C226n3" & contr_text$TI == 2]`), Eicosapentaenoic (EPA; T2, `r contr_text$stat[contr_text$fa == "C205n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C205n3" & contr_text$TI == 2]`), and Docosapentaenoic acid (T2, `r contr_text$stat[contr_text$fa == "C225n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C225n3" & contr_text$TI == 2]`; @fig-fa-infer, @tbl-infer-fa). At the same time, omega-6 fatty acids were reduced in the krill oil group compared to placebo at both time-points (Alpha-linolenic acid T2, `r contr_text$stat[contr_text$fa == "C183n6" & contr_text$TI == 1]`; Alpha-linolenic acid T4, `r contr_text$stat[contr_text$fa == "C183n6" & contr_text$TI == 2]`; Arachidonic acid T2, `r contr_text$stat[contr_text$fa == "C204n6" & contr_text$TI == 1]`; Arachidonic acid T4, `r contr_text$stat[contr_text$fa == "C204n6" & contr_text$TI == 2]`; Dihomo-gamma-linolenic acid T2, `r contr_text$stat[contr_text$fa == "C203n6" & contr_text$TI == 1]`; Dihomo-gamma-linolenic acid T4, `r contr_text$stat[contr_text$fa == "C203n6" & contr_text$TI == 2]`; @fig-fa-infer, @tbl-infer-fa). While gamma-linolenic, linoleic, steraic and palmitic acids remained stable unchanged in krill oil compared to placebo (@fig-fa-infer, @tbl-infer-fa), Oleic acid was reduced in krill oil compared to placebo at T2 (`r contr_text$stat[contr_text$fa == "C181c9" & contr_text$TI == 1]`) but not at T4 (`r contr_text$stat[contr_text$fa == "C181c9" & contr_text$TI == 2]`).  
 
 
 ```{=typst}

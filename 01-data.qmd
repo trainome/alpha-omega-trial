@@ -21,7 +21,7 @@ Descriptive data are presented as mean and standard deviation (SD). Inferential 
 
 ## Description of the data set and participants
 
-The overall objective of the present analysis is to determine the effect of krill oil (sometimes referred to as N-3) supplementation in combination with resistance training on glucose metabolism and indicators of metabolic health. Outcome variables in the analysis are:
+The overall objective of the present analysis is to determine the effect of krill oil supplementation in combination with resistance training on glucose metabolism and indicators of metabolic health. Outcome variables in the analysis are:
 
 - Whole blood fatty acid composition, including omega-3 and omega-6 fatty acids and the omega-3 index
 - Blood glucose in response to a oral glucose tolerance-test
@@ -176,7 +176,7 @@ baseline_dat |>
   gt() |> 
   fmt_markdown() |> 
   
-  cols_label(omega = md(paste0("N-3<br>(&male; n = ", 
+  cols_label(omega = md(paste0("Krill oil<br>(&male; n = ", 
                                n_groups_sex["omegam"], 
                                "; &female; n = ", 
                                n_groups_sex["omegaf"], ")")),
@@ -193,7 +193,7 @@ baseline_dat |>
 Participants were given krill oil or placebo in a supplementation-only period followed by a lead-in and combined period (supplementation and resistance training; @fig-figure2)
 
 ```{r}
-#| fig-cap: "Study design. After baseline testing (week 0), participants received krill oil (N-3) or placebo for 7 weeks, followed by 13 weeks of supervised resistance training, comprising a 3-week familiarization period (weeks 8–10) and 10 weeks of progressive resistance training (weeks 11–20), with supplementation continued throughout. The measurements listed were taken at each of the three time points: baseline (week 0), after supplementation alone (end of week 7) and after the combined period (end of week 20). The lower panel shows the change in training volume across the 20 training sessions, relative to session 1 and summed across all upper- and lower-body exercises. Line and shaded area show the smoothed trend  with 95% confidence interval. BMI, body mass index; DXA, dual-energy X-ray absorptiometry; HDL, high-density lipoprotein cholesterol; HOMA2-IR, updated homeostasis model assessment of insulin resistance; LDL, low-density lipoprotein cholesterol; N-3, n-3 polyunsaturated fatty acids (krill oil); OGTT, oral glucose tolerance test; TG, triglycerides. "
+#| fig-cap: "Study design. After baseline testing (week 0), participants received krill oil or placebo for 7 weeks, followed by 13 weeks of supervised resistance training, comprising a 3-week familiarization period (weeks 8–10) and 10 weeks of progressive resistance training (weeks 11–20), with supplementation continued throughout. The measurements listed were taken at each of the three time points: baseline (week 0), after supplementation alone (end of week 7) and after the combined period (end of week 20). The lower panel shows the change in training volume across the 20 training sessions, relative to session 1 and summed across all upper- and lower-body exercises. Line and shaded area show the smoothed trend  with 95% confidence interval. BMI, body mass index; DXA, dual-energy X-ray absorptiometry; HDL, high-density lipoprotein cholesterol; HOMA2-IR, updated homeostasis model assessment of insulin resistance; LDL, low-density lipoprotein cholesterol; OGTT, oral glucose tolerance test; TG, triglycerides. "
 #| label: fig-figure2
 #| fig-width: !expr 180/25.4
 #| fig-height: !expr 95/25.4

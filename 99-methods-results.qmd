@@ -112,7 +112,7 @@ Priors were $\alpha \sim \operatorname{Normal}(0, 1)$, $\beta \sim \operatorname
 Comparing the multivariate model to an univariate version of the same model (shared mean and variance structure but without the between-outcomes correlation structure) indicated that the multivariate model had a better out-of-sample predictive performance  (&delta; expected log point-wise predictive density `r loo_diff_txt`; leave-one-out cross-validation [@vehtari2017] on the level of participant for `r loo_n_part` complete cases). This difference between the two models indicate that the correlation structure brings information that benefit prediction. Assuming that missing values are missing at random, the multivariate model is expected to provide more realistic imputation estimates.  
 Treatment effects on each outcome ($k$) were assessed as the contrast between treatments ($\alpha_{k,t,\text{Krill-oil}} - \alpha_{k,t,\text{Placebo}}$) at each follow-up time-point ($t$).
 A composite metabolic syndrome burden score was calculated as the average contrast across the five diagnostic criteria (blood pressure as the average of systolic and diastolic pressure, and HDL with reversed sign), such that positive values indicate a less favorable metabolic profile in the krill-oil group.
-Metabolic syndrome diagnosis was determined for each participant and time-point in every posterior draw (including imputed values), defined as central obesity (sex-specific waist circumference threshold) plus at least two of the four remaining criteria (TG, HDL, blood pressure and fasting glucose) [@alberti2006].
+Metabolic syndrome diagnosis was determined for each participant and time-point in every posterior draw (including imputed values), using the harmonised definition, i.e. at least three of the five criteria (sex-specific waist circumference, TG, HDL, blood pressure and fasting glucose) beyond their thresholds [@alberti2009].
 Treatment effects on diagnosis were estimated by fitting logistic mixed-effects models (time &times; treatment interaction, participant-specific intercepts) to 500 posterior draws using `glmmTMB` [@brooks2017], and pooling estimates using Rubin's rules [@rubin1987].
 
 To assess whether treatment effects depended on participants' metabolic status at baseline, the multivariate model was extended in two ways.
@@ -764,7 +764,7 @@ knitr::include_graphics("figures/figure-1.svg")
 
 
 
-### Effects of N-3 supplementation on red blood cell fatty acid composition
+### Effects of krill oil supplementation on red blood cell fatty acid composition
 
 
 ```{r}

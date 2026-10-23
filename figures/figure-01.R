@@ -44,7 +44,7 @@ totaln_rando <- baseline_dat |>
   nrow()
 
 
-# Allocated to placebo / N-3
+# Allocated to placebo / krill oil
 allocation <- baseline_dat |>
   distinct(treat, participant) |>
 
@@ -237,7 +237,7 @@ boxes <- bind_rows(
   ),
   arm_boxes("Placebo", "pla") |>
     mutate(x = x_arm[["pla"]], y = c(57, 41, 25, 9), w = w_arm),
-  arm_boxes("Krill-oil", "n3") |>
+  arm_boxes("Krill oil", "n3") |>
     mutate(x = x_arm[["n3"]], y = c(57, 41, 25, 9), w = w_arm)
 ) |>
   mutate(

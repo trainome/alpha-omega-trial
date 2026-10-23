@@ -1,5 +1,5 @@
 ---
-title: "Effects of N-3 supplementation on indications of metabolic syndrome - Inference"
+title: "Effects of krill oil supplementation on indications of metabolic syndrome - Inference"
 execute:
   echo: false
   warning: false
@@ -44,7 +44,7 @@ fmt_prob <- function(p) {
 ```
 
 
-Here, we draw inferences about the effect of N-3 supplementation on metabolic health markers. First, we examine the differences in outcomes between placebo and N-3, followed by a combined analysis of the dichotomous diagnostic score (0/1) and a continuous version derived from the sum of the sub-scores, each given equal weight.
+Here, we draw inferences about the effect of krill oil supplementation on metabolic health markers. First, we examine the differences in outcomes between placebo and krill oil, followed by a combined analysis of the dichotomous diagnostic score (0/1) and a continuous version derived from the sum of the sub-scores, each given equal weight.
 
 
 ```{r}
@@ -74,16 +74,18 @@ labels <- dat$scale |>
            analyte == "HOMA2IR" ~ "HOMA2-IR", 
            analyte == "bmi" ~ "Body mass index", 
            analyte == "Adiponectin" ~ "Adiponectin",
+           analyte == "HbA1c" ~ "HbA1c",
            .default = analyte
-         ), 
+         ),
          unit = case_when(
-           analyte %in% c("HDL", "LDL", "TG", "glucose") ~ "mmol/L", 
-           analyte %in% c("sys", "dias") ~ "mmHg", 
-           analyte == "waist" ~ "cm", 
-           analyte == "bmi" ~ "kg/m^2", 
-           analyte == "fat.rel" ~ "%", 
-           analyte == "Adiponectin" ~ "mg/L", 
-           analyte == "HOMA2IR" ~ "index (unitless)", 
+           analyte %in% c("HDL", "LDL", "TG", "glucose") ~ "mmol/L",
+           analyte %in% c("sys", "dias") ~ "mmHg",
+           analyte == "waist" ~ "cm",
+           analyte == "bmi" ~ "kg/m^2",
+           analyte == "fat.rel" ~ "%",
+           analyte == "Adiponectin" ~ "mg/L",
+           analyte == "HOMA2IR" ~ "index (unitless)",
+           analyte == "HbA1c" ~ "mmol/mol",
            .default = NA_character_
          )) |> 
   arrange(type)
@@ -125,10 +127,10 @@ obs_dat <- criteria_dat |>
   inner_join(labels, by = "analyte") |>
   inner_join(dat$scale |> select(type, transform), by = "type") |>
   mutate(treat = factor(treat, levels = c("ctrl", "omega"),
-                        labels = c("Placebo", "N-3")))
+                        labels = c("Placebo", "Krill oil")))
 
 # Observed group means. Geometric means for the log-transformed outcomes
-# (TG, HOMA2IR) so that they are comparable with the back-transformed model
+# (TG, HOMA2IR, HbA1c) so that they are comparable with the back-transformed model
 # estimates, arithmetic means otherwise.
 obs_means <- obs_dat |>
   summarise(.by = c(type, analyte, label, unit, time, treat),
@@ -142,9 +144,10 @@ obs_means <- obs_dat |>
            analyte == "bmi" ~ "kg&times;m<sup>-2</sup>", 
            analyte == "fat.rel" ~ "%", 
            analyte == "Adiponectin" ~ "mg&times;L<sup>-1</sup>", 
-           analyte == "HOMA2IR" ~ "index", 
+           analyte == "HOMA2IR" ~ "index",
+           analyte == "HbA1c" ~ "mmol&times;mol<sup>-1</sup>",
            .default = NA_character_
-         )) 
+         ))
 
 # Covariate values for adjusted means
 # Pre-intervention covariate: overall mean of the standardised baseline value
@@ -189,7 +192,7 @@ predict_means <- function(fit, model) {
     mutate(across(c(Mu, lwr95, upr95, lwr50, upr50),
                   ~ if_else(transform == "log", exp(mean + sd * .x), mean + sd * .x))) |>
     mutate(time = if_else(time == 1, "T2", "T4"),
-           treat = factor(treat, levels = c(1, 2), labels = c("Placebo", "N-3")),
+           treat = factor(treat, levels = c(1, 2), labels = c("Placebo", "Krill oil")),
            model = model) |>
     select(model, time, type, analyte, treat, Mu, lwr95, upr95, lwr50, upr50)
 }
@@ -217,11 +220,12 @@ pred_plot_dat <- pred_means |>
            analyte == "bmi" ~ "kg&times;m<sup>-2</sup>", 
            analyte == "fat.rel" ~ "%", 
            analyte == "Adiponectin" ~ "mg&times;L<sup>-1</sup>", 
-           analyte == "HOMA2IR" ~ "index", 
+           analyte == "HOMA2IR" ~ "index",
+           analyte == "HbA1c" ~ "mmol&times;mol<sup>-1</sup>",
            .default = NA_character_
-         ), 
+         ),
      analyte = factor(analyte, levels = c("waist",
-                                          "dias", 
+                                          "dias",
                                           "sys",
                                           "glucose",
                                           "HDL",
@@ -230,8 +234,9 @@ pred_plot_dat <- pred_means |>
                                           "fat.rel",
                                           "LDL",
                                           "Adiponectin",
-                                          "HOMA2IR"))) |> 
-  mutate(panel = strip_lab(label, unit), 
+                                          "HOMA2IR",
+                                          "HbA1c"))) |>
+  mutate(panel = strip_lab(label, unit),
          strip.lab = strip_lab(label, unit),
          # Facet strips follow the order of the analyte levels
          strip.lab = fct_reorder(strip.lab, as.integer(analyte), .fun = min))
@@ -317,10 +322,10 @@ met_sym_scores <- pred_plot(pred_plot_dat,
                             analytes = c("HDL", "glucose", "TG", "waist", "sys", "dias"))
 
 # Related scores
-rel_scores <- pred_plot(pred_plot_dat, 
-                            obs_means, 
-                            analytes = c("fat.rel", "Adiponectin", "HOMA2IR", 
-                                         "bmi", "LDL"))
+rel_scores <- pred_plot(pred_plot_dat,
+                            obs_means,
+                            analytes = c("fat.rel", "Adiponectin", "HOMA2IR",
+                                         "bmi", "LDL", "HbA1c"))
 
 
 ## Add the contrats plot 
@@ -354,8 +359,8 @@ infer_treat <- function(draws_list, scale = dat$scale) {
   # the adjusted mean difference at any pre value). Back-transformation uses
   # the per-type sd from data_load_s7s10()$scale:
   # contrast_nat = sd * contrast  -> difference in natural units, or on the
-  #                                   log scale for TG and HOMA2IR
-  # ratio = exp(sd * contrast) -> N-3 / placebo ratio (log outcomes
+  #                                   log scale for TG, HOMA2IR and HbA1c
+  # ratio = exp(sd * contrast) -> krill oil / placebo ratio (log outcomes
   #                                   only; NA otherwise)
   contrasts[[i]] <- estimates[[i]] |> 
     pivot_wider(names_from = treat, 
@@ -393,11 +398,12 @@ contrast_dat <- infer$contrasts |>
            analyte == "bmi" ~ "kg&times;m<sup>-2</sup>", 
            analyte == "fat.rel" ~ "%", 
            analyte == "Adiponectin" ~ "mg&times;L<sup>-1</sup>", 
-           analyte == "HOMA2IR" ~ "Fold-difference", 
+           analyte == "HOMA2IR" ~ "Fold-difference",
+           analyte == "HbA1c" ~ "Fold-difference",
            .default = NA_character_
-         ), 
+         ),
      analyte = factor(analyte, levels = c("waist",
-                                          "dias", 
+                                          "dias",
                                           "sys",
                                           "glucose",
                                           "HDL",
@@ -406,13 +412,14 @@ contrast_dat <- infer$contrasts |>
                                           "fat.rel",
                                           "LDL",
                                           "Adiponectin",
-                                          "HOMA2IR"))) |>
+                                          "HOMA2IR",
+                                          "HbA1c"))) |>
   mutate(strip.lab = strip_lab(label, unit),
          # Facet strips follow the order of the analyte levels
          strip.lab = fct_reorder(strip.lab, as.integer(analyte), .fun = min),
          contrast_out = if_else(transform == "log", ratio, contrast_nat), 
          # Add a no diff line (0 for natural scale and 1 for ratio (fold-difference))
-         no_diff = if_else(analyte %in% c("TG", "HOMA2IR"), 1, 0))    
+         no_diff = if_else(analyte %in% c("TG", "HOMA2IR", "HbA1c"), 1, 0))
   
 
 contrast_plot <- function(dat, analytes) {
@@ -434,7 +441,7 @@ contrast_plot <- function(dat, analytes) {
         legend.title = element_blank(), 
         axis.title.x = element_markdown(size = 7, margin = margin(t = -6)), 
         strip.text = element_blank()) +
-  labs(x = "Contrast (N-3 - Placebo)", 
+  labs(x = "Contrast (Krill oil - Placebo)", 
        color = "Time") +
   
   
@@ -452,9 +459,9 @@ contrast_plot <- function(dat, analytes) {
 met_syn_contrast <- contrast_plot(contrast_dat, 
                                   analytes = c("HDL", "glucose", "TG", "waist", "sys", "dias"))
 
-rel_contrast <- contrast_plot(contrast_dat, 
-                                  analytes = c("fat.rel", "Adiponectin", "HOMA2IR", 
-                                         "bmi", "LDL"))
+rel_contrast <- contrast_plot(contrast_dat,
+                                  analytes = c("fat.rel", "Adiponectin", "HOMA2IR",
+                                         "bmi", "LDL", "HbA1c"))
 ```
 
 
@@ -532,7 +539,7 @@ burden_fig <- burden_eff |>
                        labels = c("Supplementation", 
                                   "Combined"))) |> 
   ggplot(aes(value, color = name)) +
-  # Shade the part of each density indicating benefit (N-3 < Placebo)
+  # Shade the part of each density indicating benefit (krill oil < placebo)
   geom_area(aes(y = after_stat(ifelse(x < 0, density, 0)), fill = name),
             stat = "density", color = NA, alpha = 0.3,
             position = "identity") +
@@ -556,7 +563,7 @@ burden_fig <- burden_eff |>
         legend.key.size = unit(3, "mm"))  +
   labs(color = "Treatment-period",
        fill = "Treatment-period",
-       x = "Average burden score<br>N-3 - Placebo (SD-units)") + 
+       x = "Average burden score<br>Krill oil - Placebo (SD-units)") + 
   scale_fill_manual(values = colscale[c(3,6)]) + 
   scale_color_manual(values = colscale[c(3,6)]) 
   
@@ -603,8 +610,8 @@ infer_diagnosed <- function(draws, dobs, ndraws = 1000) {
                           if_else(time == 2, "Supplementation", "Combined")),
            time = factor(time, levels = c("Baseline", "Supplementation", "Combined")), 
            
-           treat = if_else(treat == 1, "Placebo", "N-3"), 
-           treat = factor(treat, levels = c("Placebo", "N-3"))) |> 
+           treat = if_else(treat == 1, "Placebo", "Krill oil"), 
+           treat = factor(treat, levels = c("Placebo", "Krill oil"))) |> 
     
     summarise(.by = c(treat, time,.draw), 
               frac.diagnosed = 100 * (sum(value) / n())) |> 
@@ -840,11 +847,11 @@ est_13 <- pool_rubin(sw_results13$summaries)
 est_18 <- pool_rubin(sw_results18$summaries)
 
 diag_criteria_fig <- est_13 |> 
-  mutate(term = if_else(term == "timetime2:treattreat2", "N-3 - Control\nSupplementation", 
-                        "N-3 - Control\nCombined treatment"), 
+  mutate(term = if_else(term == "timetime2:treattreat2", "Krill oil - Placebo\nSupplementation", 
+                        "Krill oil - Placebo\nCombined treatment"), 
          term = factor(term, levels = c(
-           "N-3 - Control\nCombined treatment", 
-           "N-3 - Control\nSupplementation"))) |> 
+           "Krill oil - Placebo\nCombined treatment", 
+           "Krill oil - Placebo\nSupplementation"))) |> 
   
   ggplot(aes(term, qbar, color = term)) + 
   geom_errorbar(aes(ymin = lwr, 
@@ -875,7 +882,7 @@ diag_criteria_fig <- est_13 |>
 
 ```{r}
 #| label: fig-metsyn-inference
-#| fig-cap: "A, Observed group means (open symbols, all available observations; geometric means for triglycerides) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CI) for each outcome in the metabolic syndrome score on its natural scale (A). Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (N-3 - Placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively. B, posterior distribution of the average burden score contrast (N-3 - placebo) at post-supplementation and after the combined period. P(benefit) indicates the percentage of the posterior associated with any benefit for N-3. C, the percentage of participants meeting the diagnostic criteria in each group; error bars represent the uncertainty associated with missing-value imputation (95th and 50th percentile intervals). D, treatment contrast for the occurrence of metabolic syndrome diagnosis, baseline-adjusted differences between groups at post-supplementation and after the combined treatment period."
+#| fig-cap: "A, Observed group means (open symbols, all available observations; geometric means for triglycerides) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CI) for each outcome in the metabolic syndrome score on its natural scale (A). Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (krill oil - placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively. B, posterior distribution of the average burden score contrast (krill oil - placebo) at post-supplementation and after the combined period. P(benefit) indicates the percentage of the posterior associated with any benefit for krill oil. C, the percentage of participants meeting the diagnostic criteria in each group; error bars represent the uncertainty associated with missing-value imputation (95th and 50th percentile intervals). D, treatment contrast for the occurrence of metabolic syndrome diagnosis, baseline-adjusted differences between groups at post-supplementation and after the combined treatment period."
 #| fig-width: 3.55
 #| fig-height: 7.1
 
@@ -913,9 +920,9 @@ ggsave(
 
 ```{r}
 #| label: fig-metsyn-related
-#| fig-cap: "Observed group means (open symbols, all available observations; geometric means for HOMA2-IR) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CI) for each outcome on its natural scale. Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (N-3 - Placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively."
+#| fig-cap: "Observed group means (open symbols, all available observations; geometric means for HOMA2-IR and HbA1c) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CI) for each outcome on its natural scale. Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (krill oil - placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively."
 #| fig-width: 3.55
-#| fig-height: 5.12
+#| fig-height: 6.14
 
 
 
@@ -930,7 +937,7 @@ ggsave(
   filename = "figures/preliminary-figures/related-scores-plot.pdf",
   related_plot,
   width = 9,
-  height = 13,
+  height = 15.6,
   units = "cm"
 )
 
@@ -940,7 +947,7 @@ ggsave(
 
 
 ```{r}
-#| eval: false
+#| label: contrast-text
 
 contrast_summary <- contrast_dat |>
   # Add a fix for direction of the effect, HDL and adiponectin are beneficial
@@ -949,7 +956,7 @@ contrast_summary <- contrast_dat |>
          time = if_else(time == 1, "T2", "T4")) |>
   summarise(.by = c(analyte, time, transform),
             # Median posterior w. 95% CrI on the reporting scale (natural
-            # units, or N-3/placebo ratio for log outcomes)
+            # units, or krill oil/placebo ratio for log outcomes)
             med = median(contrast_out),
             lwr95 = quantile(contrast_out, 0.025),
             upr95 = quantile(contrast_out, 0.975),
@@ -972,7 +979,7 @@ ctxt_dat <- contrast_summary |>
       .default = NA_character_),
     digits = if_else(analyte %in% c("sys", "dias", "waist", "fat.rel"), 1, 2),
     # Point estimate and interval bounds, ratios reported as percent
-    # difference (N-3 vs. placebo)
+    # difference (krill oil vs. placebo)
     est = if_else(transform == "log",
                   sprintf("%+.0f%%", 100 * (med - 1)),
                   sprintf("%.*f %s", digits, med, unit_txt)),
@@ -1008,30 +1015,30 @@ waist_prob_t2 <- ctxt_dat |>
 
 
 
-At post-supplementation (T2), baseline- and sex-adjusted differences between groups indicated a reduced waist circumference in N-3 compared to placebo `r waist_est_t2` with the probability of any benefit (proportion of the posterior density indicating benefit for the N-3 group, P(benefit)) being `r waist_prob_t2`. After the combined period (supplementation and resistance training), the between-group contrast for waist circumference indicated no difference, `r ctxt$waist_T4$` (@fig-metsyn-inference). Both diastolic and systolic blood pressure indicated beneficial effects in N-3 compared to placebo at T2 (`r ctxt_simple$dias_T2` and `r ctxt_simple$sys_T2` for diastolic and systolic blood pressure, respectively). Although both the average diastolic and systolic blood pressure were more similar between N-3 and placebo after the second period, the probability distribution indicated a higher probability of benefit in the N-3 group (`r ctxt_simple$dias_T4` and `r ctxt_simple$sys_T4` for diastolic and systolic blood pressure, respectively; @fig-metsyn-inference).
+At post-supplementation (T2), baseline- and sex-adjusted differences between groups indicated a reduced waist circumference in krill oil compared to placebo `r waist_est_t2` with the probability of any benefit (proportion of the posterior density indicating benefit for the krill oil group, P(benefit)) being `r waist_prob_t2`. After the combined period (supplementation and resistance training), the between-group contrast for waist circumference indicated no difference, `r ctxt$waist_T4` (@fig-metsyn-inference). Both diastolic and systolic blood pressure indicated beneficial effects in krill oil compared to placebo at T2 (`r ctxt_simple$dias_T2` and `r ctxt_simple$sys_T2` for diastolic and systolic blood pressure, respectively). Although both the average diastolic and systolic blood pressure were more similar between krill oil and placebo after the second period, the probability distribution indicated a higher probability of benefit in the krill oil group (`r ctxt_simple$dias_T4` and `r ctxt_simple$sys_T4` for diastolic and systolic blood pressure, respectively; @fig-metsyn-inference).
 
-After the supplementation period, the N-3 group displayed similar levels of high-density lipoproteins (HDL) as compared to the placebo group (`r ctxt_simple$HDL_T2`). However, following the combined period, the N-3 group increased HDL levels compared to placebo, indicating a higher probability of beneficial effects of N-3 supplementation (`r ctxt_simple$HDL_T4`). Triglyceride levels were estimated to be similar between intervention protocols, both after the post-supplementation period (`r ctxt_simple$TG_T2`) and after the combined period (`r ctxt_simple$TG_T4`).
+After the supplementation period, the krill oil group displayed similar levels of high-density lipoproteins (HDL) as compared to the placebo group (`r ctxt_simple$HDL_T2`). However, following the combined period, the krill oil group increased HDL levels compared to placebo, indicating a higher probability of beneficial effects of krill oil supplementation (`r ctxt_simple$HDL_T4`). Triglyceride levels were estimated to be similar between intervention protocols, both after the post-supplementation period (`r ctxt_simple$TG_T2`) and after the combined period (`r ctxt_simple$TG_T4`).
 
-A combined score was created by summing the five sub-scores of the metabolic syndrome diagnostic criteria from their continuous, standardized scales, with each score given equal weight (the average blood pressure score was one-fifth of the total score). Comparing the combined scores between treatments indicated a high probability of benefit from N-3 at both post-treatment time points (post-supplementation, `r burden_t2`; post combined treatment, `r burden_t4`; @fig-metsyn-inference B). The differences in the combined score did not yield a significant (95% confidence interval not containing 0) difference in the dichotomous diagnostic criteria (waist circumference above the threshold followed by at least 2 of 4 sub-scores passing the thresholds; @fig-metsyn-inference C and D).      
-
-
-```{r}
-
-ctxt$HOMA2IR_T2
-
-```
+A combined score was created by summing the five sub-scores of the metabolic syndrome diagnostic criteria from their continuous, standardized scales, with each score given equal weight (the average blood pressure score was one-fifth of the total score). Comparing the combined scores between treatments indicated a high probability of benefit from krill oil at both post-treatment time points (post-supplementation, `r burden_t2`; post combined treatment, `r burden_t4`; @fig-metsyn-inference B). The differences in the combined score did not yield a significant (95% confidence interval not containing 0) difference in the dichotomous diagnostic criteria (harmonised definition, at least three of the five criteria passing their thresholds [@alberti2009]; @fig-metsyn-inference C and D).      
 
 
 
-Comparing BMI between treatment groups indicated no clear difference between groups at follow-up time points (`r ctxt_simple$bmi_T2` and `r ctxt_simple$bmi_T2`, for after the supplementation and combined periods, respectively). However, relative fat mass indicated a higher probability of an adverse effect of N-3 compared to placebo after the supplementation period (`r ctxt_simple$fat.rel_T2`). After the combined period, differences were smaller (`r ctxt$fat.rel_T2`). Adjusted differences between groups in low density lipoprotein (LDL) and Adiponectin were indicated similarity between treatments (LDL post-supplementation, `r ctxt_simple$LDL_T2`; LDL post-combined treatment, `r ctxt_simple$LDL_T4`; Adiponectin post-supplementation, `r ctxt_simple$Adiponectin_T2`; Adiponectin post-combined treatment `r ctxt_simple$Adiponectin_T4`). Insulin resistance, estimated using the HOMA2-IR model score, indicated that a grater posterior probability of benefit at post-supplementation after N-3 compared to placebo (`r ctxt_simple$HOMA2IR_T2`), a difference that was not present after the combined time period (`r ctxt_simple$HOMA2IR_T4`).
-
-
-
+Comparing BMI between treatment groups indicated no clear difference between groups at follow-up time points (`r ctxt$bmi_T2` and `r ctxt_simple$bmi_T4`, for after the supplementation and combined periods, respectively). However, relative fat mass indicated a higher probability of an adverse effect of krill oil compared to placebo after the supplementation period (`r ctxt_simple$fat.rel_T2`). After the combined period, differences were smaller (`r ctxt_simple$fat.rel_T4`). Adjusted differences between groups in low density lipoprotein (LDL) and Adiponectin indicated similarity between treatments (LDL post-supplementation, `r ctxt_simple$LDL_T2`; LDL post-combined treatment, `r ctxt_simple$LDL_T4`; Adiponectin post-supplementation, `r ctxt_simple$Adiponectin_T2`; Adiponectin post-combined treatment `r ctxt_simple$Adiponectin_T4`). Insulin resistance, estimated using the HOMA2-IR model score, indicated a greater posterior probability of benefit at post-supplementation after krill oil compared to placebo (`r ctxt_simple$HOMA2IR_T2`), a difference that was not present after the combined time period (`r ctxt_simple$HOMA2IR_T4`). Glycated haemoglobin (HbA1c) was slightly higher in krill oil compared to placebo after the supplementation period, indicating a low probability of benefit (`r ctxt$HbA1c_T2`). After the combined period, the difference was smaller and more uncertain (`r ctxt_simple$HbA1c_T4`).
 
 
 ```{r}
 #| label: between-type-correlations
+#| eval: false
 
+
+# This is still work in progress. The residual correlations are correlations
+# between variables at T2 and T4 and show correlations after accounting for 
+# sex, treatment and pre-values. E.g., a positive correlation between sys and dia
+# indicate that individuals with higher than expected diastolic 
+# bp also tend to have have higher than expected systolic bp
+# after acounting fort sex, pre-value and treatment.
+
+ 
 # Residual correlation matrix Omega from s13 (M = 2K; rows/cols 1:K = T2,
 # (K+1):M = T4). These are correlations conditional on treatment, baseline
 # value and sex, i.e. how participants' deviations from their expected
@@ -1086,16 +1093,45 @@ fit.s13.post$draws("rho_time", format = "df") |>
             upr95 = quantile(value, 0.975)) |>
   left_join(type_lab, by = "type")
 
-# Heatmap of posterior median correlations within each time-point
-omega_sum |>
-  filter(time_i == time_j) |>
+# Heatmap of posterior median correlations within each time-point, T2 in
+# the lower triangle and T4 in the upper triangle. Types are ordered by
+# hierarchical clustering on 1 - |r| (posterior medians averaged over T2 and
+# T4), so that correlated types are placed next to each other.
+omega_within <- omega_sum |>
+  filter(time_i == time_j, type_i != type_j)
+
+r_avg <- omega_within |>
+  summarise(.by = c(type_i, type_j), r = mean(med))
+R_avg <- diag(K)
+R_avg[cbind(r_avg$type_i, r_avg$type_j)] <- r_avg$r
+
+type_ord <- hclust(as.dist(1 - abs(R_avg)), method = "average")$order
+analyte_ord <- type_lab$analyte[type_ord]
+
+omega_heatmap <- omega_within |>
+  # Keep T2 below and T4 above the diagonal (in the clustered order). The
+  # y-axis is reversed, so cells below the diagonal have the column (i)
+  # earlier in the order than the row (j).
+  filter((time_i == "T2") == (match(type_i, type_ord) < match(type_j, type_ord))) |>
+  mutate(credible = lwr95 > 0 | upr95 < 0,
+         analyte_i = factor(analyte_i, levels = analyte_ord),
+         analyte_j = factor(analyte_j, levels = rev(analyte_ord))) |>
   ggplot(aes(analyte_i, analyte_j, fill = med)) +
-  geom_tile() +
-  geom_text(aes(label = sprintf("%.2f", med)), size = 2.5) +
-  scale_fill_gradient2(limits = c(-1, 1)) +
-  facet_wrap(~ time_i) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = sprintf("%.2f", med),
+                fontface = if_else(credible, "bold", "plain")),
+            size = 2.2) +
+  scale_fill_gradient2(limits = c(-1, 1),
+                       low = colscale[2],
+                       high = colscale[4]) +
+  alpha_theme() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.title = element_blank())
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  labs(fill = "r",
+       subtitle = "Lower triangle: T2, upper triangle: T4; bold = 95% CrI excludes 0")
+
+omega_heatmap
 
 
 # What the correlations do for the burden score: the sign-aligned treatment
@@ -1119,11 +1155,25 @@ sapply(comp_eff, function(x)
 ```
 
 
-
-
 ## Model expansion: Baseline-dependent treatment effects
 
-To assess whether the effect of n-3 supplementation depends on the participants' baseline status, two expansions of model s13 are considered. Both keep the full s13 structure (joint imputation of missing pre- and post-intervention values, the multivariate Student's t-likelihood with $\nu = 4$, the time &times; type residual scales and the LKJ correlation matrix) and change only the linear predictor for the expected post-intervention value. In s13, the expected value for participant $p$, measurement type $k$ and post-intervention time-point $t$ is
+```{r}
+#| label: moderation-data
+
+# Baseline (T1) omega-3 index of the randomised participants, the moderator
+# in s22 (the same data as in models-scripts/model-s22.R)
+o3_base <- criteria_dat |>
+  distinct(participant) |>
+  left_join(AOData::omega3 |>
+              filter(time == "T1") |>
+              select(participant, omega3index),
+            by = "participant")
+
+n_o3_miss <- sum(is.na(o3_base$omega3index))
+o3_sd <- sd(o3_base$omega3index, na.rm = TRUE)
+```
+
+To assess whether the effect of krill oil supplementation depends on the participants' baseline status, four expansions of model s13 are considered. All keep the full s13 structure (joint imputation of missing pre- and post-intervention values, the multivariate Student's t-likelihood with $\nu = 4$, the time &times; type residual scales and the LKJ correlation matrix) and change only the linear predictor for the expected post-intervention value. In s13, the expected value for participant $p$, measurement type $k$ and post-intervention time-point $t$ is
 
 $$
 \begin{align}
@@ -1131,7 +1181,7 @@ $$
 \end{align}
 $$
 
-where $x_{p,k}$ is the standardised pre-intervention value (observed or imputed), $s_p \in \{-0.5, 0.5\}$ codes sex, and $\text{tx}[p] \in \{1, 2\}$ indexes placebo and n-3, respectively. The treatment effect is the difference between intercepts, $\alpha_{k,t,2} - \alpha_{k,t,1}$, and does not depend on the baseline value. Let $\omega_p = 1$ for participants in the n-3 group and $\omega_p = 0$ for placebo.
+where $x_{p,k}$ is the standardised pre-intervention value (observed or imputed), $s_p \in \{-0.5, 0.5\}$ codes sex, and $\text{tx}[p] \in \{1, 2\}$ indexes placebo and krill oil, respectively. The treatment effect is the difference between intercepts, $\alpha_{k,t,2} - \alpha_{k,t,1}$, and does not depend on the baseline value. Let $\omega_p = 1$ for participants in the krill oil group and $\omega_p = 0$ for placebo.
 
 **Model s19: treatment &times; own-baseline interaction.** The pre-intervention slope is allowed to differ between treatment groups,
 
@@ -1174,17 +1224,150 @@ $$
 
 with treatment effect $\Delta_{k,t}(\tilde{b}) = \alpha_{k,t,2} - \alpha_{k,t,1} + \gamma_{k,t}\, \tilde{b}$. Centring the burden score on its sample mean keeps the intercept difference interpretable as the effect at average baseline burden.
 
-**Subgroup-averaged treatment effects.** In both models, subgroup contrasts are obtained by marginalising the conditional effect over participants rather than by fitting a dichotomised model. With $D_{p}$ denoting the baseline metabolic syndrome diagnosis derived from the (partly imputed) baseline values using the two-step rule (central obesity and at least two further criteria), the average treatment effects are
+**Model s21: treatment &times; baseline relative fat mass.** s21 has the same structure as s20, but the shared moderator is the participant's baseline relative fat mass. The moderator is taken from the partly imputed baseline matrix and standardised within each posterior draw to mean 0 and SD 1 over participants,
 
 $$
 \begin{align}
-\text{ATE}_{k,t} &= \tfrac{1}{N_P} \textstyle\sum_{p} \Delta_{k,t}(m_p) \\
-\text{ATE}^{\text{MetS}}_{k,t} &= \tfrac{1}{\sum_p D_p} \textstyle\sum_{p : D_p = 1} \Delta_{k,t}(m_p) \\
-\text{ATE}^{\text{no MetS}}_{k,t} &= \tfrac{1}{\sum_p (1 - D_p)} \textstyle\sum_{p : D_p = 0} \Delta_{k,t}(m_p)
+f_p &= \frac{x_{p,\text{fat.rel}} - \bar{x}_{\text{fat.rel}}}{\operatorname{SD}(x_{\text{fat.rel}})} \\
+\mu_{p,k,t} &= \alpha_{k,t,\text{tx}[p]} + \beta_{k,t}\, x_{p,k} + \gamma_{k,t}\, \omega_p\, f_p + \beta^{\text{sex}}_{k,t}\, s_p
 \end{align}
 $$
 
-where $m_p$ is the moderator ($x_{p,k}$ in s19 and $\tilde{b}_p$ in s20). These are computed per posterior draw, so uncertainty from imputation, from the baseline diagnosis and from the interaction parameters propagates into the subgroup estimates. All effects are on the standardised scale; multiplying by the pooled SD of type $k$ gives the difference in natural units, or the log-ratio for the log-transformed outcomes (triglycerides and HOMA2-IR).
+with $\gamma_{k,t}$ given the same partially pooled prior as in s20. The intercept difference is the treatment effect at the average baseline relative fat mass and $\gamma_{k,t}$ is the change in the treatment effect per SD of baseline relative fat mass.
+
+**Model s22: treatment &times; baseline omega-3 index.** In s22 the shared moderator is the baseline red blood cell omega-3 index [@harris2004], which is not one of the modelled outcomes. The index was standardised to mean 0 and SD 1 over participants with an observed baseline value ($o_p$). The baseline index was missing for `r n_o3_miss` participants; these values were imputed in the model with a standard normal prior, $o_p \sim \operatorname{Normal}(0, 1)$, so that all randomised participants are kept. The linear predictor is
+
+$$
+\begin{align}
+\mu_{p,k,t} &= \alpha_{k,t,\text{tx}[p]} + \beta_{k,t}\, x_{p,k} + \gamma_{k,t}\, \omega_p\, o_p + \beta^{\text{sex}}_{k,t}\, s_p
+\end{align}
+$$
+
+with the same partially pooled prior on $\gamma_{k,t}$ as in s20. Here, $\gamma_{k,t}$ is the change in the treatment effect per SD of the baseline omega-3 index (1 SD = `r sprintf("%.2f", o3_sd)` %-points).
+
+**Treatment effects across the moderator.** To show what the interactions imply, treatment effects were predicted from each model at the moderator mean (0) and at &plusmn; 1 SD of the moderator,
+
+$$
+\Delta_{k,t}(m) = \alpha_{k,t,2} - \alpha_{k,t,1} + \gamma_{k,t}\, m, \quad m \in \{-\text{SD}, 0, +\text{SD}\},
+$$
+
+with $\delta_{k,t}$ in place of $\gamma_{k,t}$ for s19. For s21 and s22 the moderator is standardised, so SD = 1. For s19, the SD is the observed baseline SD of each standardised outcome, and for s20 it is the SD of the centred burden score over participants, computed per posterior draw. Effects are computed per posterior draw and shown on the standardised scale (outcome SD units), where a negative value indicates a lower value with krill oil compared to placebo (@fig-moderation-pred).
+
+
+```{r}
+#| label: fig-moderation-pred
+#| fig-cap: "Predicted treatment effects (krill oil - placebo) at the moderator mean and at &plusmn; 1 SD of the moderator in models s19 (each outcome's own baseline value), s20 (baseline metabolic burden score), s21 (baseline relative fat mass) and s22 (baseline omega-3 index), after the supplementation and combined periods. Points and error bars show posterior medians with 50% and 95% CrI on the standardised scale (outcome SD units)."
+#| fig-height: 11
+#| fig-width: 7
+
+# Predicted treatment effects at the moderator mean and +/- 1 SD. Reading the
+# fits takes some time, the summaries are stored in data-derived/ and are
+# re-computed when refit.models == TRUE or the file is missing.
+mod_pred_file <- "data-derived/ch-07-moderation-pred.RDS"
+
+if (!file.exists(mod_pred_file) | refit.models) {
+
+  # Observed baseline SD of each standardised outcome (moderator SD in s19)
+  pre_sd <- dat$dat |>
+    filter(pre_miss == 1) |>
+    distinct(P, type, pre_obs) |>
+    summarise(.by = type, mod_sd = sd(pre_obs))
+
+  # Intercept difference alpha[t, k, 2] - alpha[t, k, 1] and the interaction
+  # coefficient par[k, t] (coef) per draw
+  effect_draws <- function(fit, par) {
+    a <- fit$draws("alpha", format = "df") |>
+      select(.draw, starts_with("alpha")) |>
+      pivot_longer(cols = -.draw, values_to = "alpha") |>
+      mutate(name = gsub("alpha\\[|\\]", "", name)) |>
+      separate(name, into = c("time", "type", "treat"), sep = ",", convert = TRUE) |>
+      pivot_wider(names_from = treat, values_from = alpha, names_prefix = "a") |>
+      mutate(diff = a2 - a1) |>
+      select(.draw, time, type, diff)
+
+    g <- fit$draws(par, format = "df") |>
+      select(.draw, starts_with(par)) |>
+      pivot_longer(cols = -.draw, values_to = "coef") |>
+      mutate(name = gsub(paste0(par, "\\[|\\]"), "", name)) |>
+      separate(name, into = c("type", "time"), sep = ",", convert = TRUE)
+
+    inner_join(a, g, by = c(".draw", "time", "type"))
+  }
+
+  fit <- readRDS("fits/paper1/fit.s19.post.RDS")
+  eff19 <- effect_draws(fit, "delta") |>
+    inner_join(pre_sd, by = "type") |>
+    mutate(model = "s19")
+
+  # s20: SD of the centred burden score over participants, per draw
+  fit <- readRDS("fits/paper1/fit.s20.post.RDS")
+  burden_sd <- fit$draws("burden_c", format = "matrix")
+  burden_sd <- data.frame(.draw = seq_len(nrow(burden_sd)),
+                          mod_sd = apply(burden_sd, 1, sd))
+  eff20 <- effect_draws(fit, "gamma") |>
+    inner_join(burden_sd, by = ".draw") |>
+    mutate(model = "s20")
+
+  # s21 and s22: standardised moderators (SD = 1)
+  fit <- readRDS("fits/paper1/fit.s21.post.RDS")
+  eff21 <- effect_draws(fit, "gamma") |> mutate(mod_sd = 1, model = "s21")
+
+  fit <- readRDS("fits/paper1/fit.s22.post.RDS")
+  eff22 <- effect_draws(fit, "gamma") |> mutate(mod_sd = 1, model = "s22")
+  rm(fit)
+
+  mod_pred <- bind_rows(eff19, eff20, eff21, eff22) |>
+    expand_grid(m = c(-1, 0, 1)) |>
+    mutate(effect = diff + coef * m * mod_sd) |>
+    summarise(.by = c(model, time, type, m),
+              med = median(effect),
+              lwr95 = quantile(effect, 0.025),
+              upr95 = quantile(effect, 0.975),
+              lwr50 = quantile(effect, 0.25),
+              upr50 = quantile(effect, 0.75),
+              p_neg = mean(effect < 0))
+
+  saveRDS(mod_pred, mod_pred_file)
+
+} else {
+  mod_pred <- readRDS(mod_pred_file)
+}
+
+
+mod_pred |>
+  inner_join(labels, by = "type") |>
+  mutate(
+    label = factor(label, levels = labels$label[match(levels(pred_plot_dat$analyte),
+                                                      labels$analyte)]),
+    model = factor(model,
+                   levels = c("s19", "s20", "s21", "s22"),
+                   labels = c("s19: Own baseline", "s20: Metabolic burden",
+                              "s21: Relative fat mass", "s22: Omega-3 index")),
+    m = factor(m, levels = c(-1, 0, 1), labels = c("-1 SD", "Mean", "+1 SD")),
+    time = factor(time, levels = c(1, 2),
+                  labels = c("Supplementation", "Combined"))) |>
+
+  ggplot(aes(m, med, color = time, group = time)) +
+  geom_hline(yintercept = 0, lty = 2, color = "gray50") +
+  geom_errorbar(aes(ymin = lwr95, ymax = upr95),
+                width = 0, linewidth = 0.4,
+                position = position_dodge(width = 0.4)) +
+  geom_errorbar(aes(ymin = lwr50, ymax = upr50),
+                width = 0, linewidth = 1,
+                position = position_dodge(width = 0.4)) +
+  geom_line(position = position_dodge(width = 0.4), linewidth = 0.3) +
+  geom_point(size = 1.2, position = position_dodge(width = 0.4)) +
+  facet_grid(label ~ model, scales = "free_y",
+             labeller = labeller(label = label_wrap_gen(14),
+                                 model = label_wrap_gen(14))) +
+  scale_color_manual(values = colscale[c(3, 6)]) +
+  alpha_theme(text_base_size = 7) +
+  theme(legend.position = "top",
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        strip.text.y = element_text(angle = 0, hjust = 0)) +
+  labs(y = "Treatment effect, krill oil - placebo (outcome SD units)")
+```
 
 
 ```{r}
@@ -1325,9 +1508,10 @@ labs <- dat$scale |>
            analyte == "HOMA2IR" ~ "Insulin resistance index", 
            analyte == "bmi" ~ "Body mass index", 
            analyte == "Adiponectin" ~ "Adiponectin",
-           analyte == "LDL" ~ "Low density lipoprotein", 
+           analyte == "LDL" ~ "Low density lipoprotein",
+           analyte == "HbA1c" ~ "Glycated haemoglobin",
            .default = analyte
-           
+
          )) |> 
   arrange(type)
 

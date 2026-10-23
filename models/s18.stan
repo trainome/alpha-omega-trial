@@ -16,8 +16,8 @@ of the correlation structure under the t likelihood.
 
 Complete-case log_lik is exported for loo comparison against S7-S17.
 Metabolic syndrome diagnosis is derived in generated quantities from the
-continuous biomarker model (central obesity [waist] required AND >= 2 of the
-4 remaining criteria: HDL, TG, BP, glucose).
+continuous biomarker model (harmonised definition: >= 3 of the 5 criteria waist,
+HDL, TG, BP, glucose; central obesity is not required).
 */
 data {
   int<lower=0> N;                           // Number of obs
@@ -175,8 +175,8 @@ generated quantities {
   vector[N] y_rep;
   vector[N_P] log_lik_part;
 
-  // Per-participant, per-time diagnosis: 1 if central obesity (waist)
-  // AND >= 2 of the 4 remaining criteria (HDL, TG, BP, glucose)
+  // Per-participant, per-time diagnosis: 1 if >= 3 of the 5 criteria
+  // (waist, HDL, TG, BP, glucose) are met (harmonised definition)
   matrix[N_P, 3] diagnosed;
   // Per-participant, per-time count of criteria met (0-5)
   matrix[N_P, 3] n_criteria;
@@ -246,8 +246,8 @@ generated quantities {
         count += bp_pass;
         // n_criteria keeps the total count (0-5) incl. waist for reference
         n_criteria[p, t] = count + waist_pass;
-        // Two-step rule: central obesity required, plus >= 2 of the other 4
-        diagnosed[p, t] = (waist_pass == 1 && count >= 2) ? 1.0 : 0.0;
+        // Harmonised definition: any 3 of the 5 criteria (waist not required)
+        diagnosed[p, t] = (n_criteria[p, t] >= 3) ? 1.0 : 0.0;
       }
     }
   }

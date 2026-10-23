@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8' ?>
-<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='510.24pt' height='680.31pt' viewBox='0 0 510.24 680.31'>
+<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='510.24pt' height='396.85pt' viewBox='0 0 510.24 396.85'>
 <g class='svglite'>
 <defs>
   <style type='text/css'><![CDATA[
@@ -21,93 +21,93 @@
 </defs>
 <rect width='100%' height='100%' style='stroke: none; fill: none;'/>
 <defs>
-  <clipPath id='cpMC4wMHw1MTAuMjR8MC4wMHw2ODAuMzE='>
-    <rect x='0.00' y='0.00' width='510.24' height='680.31' />
+  <clipPath id='cpMC4wMHw1MTAuMjR8MC4wMHwzOTYuODU='>
+    <rect x='0.00' y='0.00' width='510.24' height='396.85' />
   </clipPath>
 </defs>
-<g clip-path='url(#cpMC4wMHw1MTAuMjR8MC4wMHw2ODAuMzE=)'>
-<rect x='0.00' y='0.00000000000011' width='510.24' height='680.31' style='stroke-width: 0.00; stroke: none;' />
-<rect x='5.10' y='7.56' width='71.43' height='24.67' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #D6E6F5;' />
-<rect x='219.40' y='202.70' width='71.43' height='24.67' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #D6E6F5;' />
-<rect x='219.40' y='303.56' width='71.43' height='24.67' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #D6E6F5;' />
-<rect x='219.40' y='567.72' width='71.43' height='24.67' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #D6E6F5;' />
-<text x='40.82' y='22.34' text-anchor='middle' style='font-size: 6.83px; font-weight: bold; font-family: "Arial";' textLength='35.66px' lengthAdjust='spacingAndGlyphs'>Enrollment</text>
-<text x='255.12' y='217.48' text-anchor='middle' style='font-size: 6.83px; font-weight: bold; font-family: "Arial";' textLength='33.00px' lengthAdjust='spacingAndGlyphs'>Allocation</text>
-<text x='255.12' y='318.33' text-anchor='middle' style='font-size: 6.83px; font-weight: bold; font-family: "Arial";' textLength='32.23px' lengthAdjust='spacingAndGlyphs'>Follow-up</text>
-<text x='255.12' y='582.50' text-anchor='middle' style='font-size: 6.83px; font-weight: bold; font-family: "Arial";' textLength='28.08px' lengthAdjust='spacingAndGlyphs'>Analysis</text>
-<line x1='255.12' y1='159.54' x2='255.12' y2='196.54' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<line x1='122.46' y1='196.54' x2='387.78' y2='196.54' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<line x1='76.54' y1='19.89' x2='163.28' y2='19.89' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<line x1='255.12' y1='32.23' x2='255.12' y2='134.87' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<polygon points='252.99,131.19 255.12,134.87 257.24,131.19 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
-<line x1='255.12' y1='83.55' x2='336.76' y2='83.55' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<polygon points='333.07,85.67 336.76,83.55 333.07,81.42 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
-<line x1='122.46' y1='196.54' x2='122.46' y2='233.54' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<polygon points='120.33,229.85 122.46,233.54 124.58,229.85 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
-<line x1='387.78' y1='196.54' x2='387.78' y2='233.54' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<polygon points='385.65,229.85 387.78,233.54 389.91,229.85 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
-<line x1='122.46' y1='283.66' x2='122.46' y2='354.48' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<polygon points='120.33,350.80 122.46,354.48 124.58,350.80 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
-<line x1='122.46' y1='417.34' x2='122.46' y2='475.42' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<polygon points='120.33,471.74 122.46,475.42 124.58,471.74 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
-<line x1='122.46' y1='551.02' x2='122.46' y2='609.10' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<polygon points='120.33,605.42 122.46,609.10 124.58,605.42 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
-<line x1='387.78' y1='283.66' x2='387.78' y2='348.11' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<polygon points='385.65,344.43 387.78,348.11 389.91,344.43 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
-<line x1='387.78' y1='423.70' x2='387.78' y2='475.42' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<polygon points='385.65,471.74 387.78,475.42 389.91,471.74 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
-<line x1='387.78' y1='551.02' x2='387.78' y2='609.10' style='stroke-width: 0.64; stroke-linecap: butt;' />
-<polygon points='385.65,605.42 387.78,609.10 389.91,605.42 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
-<rect x='163.28' y='7.56' width='183.69' height='24.67' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<rect x='336.76' y='52.12' width='163.28' height='62.86' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<rect x='178.58' y='134.87' width='153.07' height='24.67' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<rect x='5.10' y='233.54' width='234.71' height='50.13' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<rect x='5.10' y='354.48' width='234.71' height='62.86' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<rect x='5.10' y='475.42' width='234.71' height='75.59' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<rect x='5.10' y='609.10' width='234.71' height='62.86' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<rect x='270.43' y='233.54' width='234.71' height='50.13' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<rect x='270.43' y='348.11' width='234.71' height='75.59' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<rect x='270.43' y='475.42' width='234.71' height='75.59' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<rect x='270.43' y='609.10' width='234.71' height='62.86' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<text x='255.12' y='22.34' text-anchor='middle' style='font-size: 6.83px; font-family: "Arial";' textLength='96.58px' lengthAdjust='spacingAndGlyphs'>Assessed for eligibility (n = 319)</text>
-<text x='344.41' y='73.70' style='font-size: 6.83px; font-family: "Arial";' textLength='57.50px' lengthAdjust='spacingAndGlyphs'>Excluded (n = 172)</text>
-<text x='344.41' y='81.89' style='font-size: 6.83px; font-family: "Arial";' textLength='117.05px' lengthAdjust='spacingAndGlyphs'>  Not meeting inclusion criteria (n = 40)</text>
-<text x='344.41' y='90.09' style='font-size: 6.83px; font-family: "Arial";' textLength='100.73px' lengthAdjust='spacingAndGlyphs'>  Declined to participate (n = 132)</text>
-<text x='344.41' y='98.28' style='font-size: 6.83px; font-family: "Arial";' textLength='68.88px' lengthAdjust='spacingAndGlyphs'>  Other reasons (n = 0)</text>
-<text x='255.12' y='149.65' text-anchor='middle' style='font-size: 6.83px; font-family: "Arial";' textLength='67.75px' lengthAdjust='spacingAndGlyphs'>Randomised (n = 147)</text>
-<text x='12.76' y='252.85' style='font-size: 6.83px; font-family: "Arial";' textLength='87.83px' lengthAdjust='spacingAndGlyphs'>Allocated to Placebo (n = 73)</text>
-<text x='12.76' y='261.04' style='font-size: 6.83px; font-family: "Arial";' textLength='124.28px' lengthAdjust='spacingAndGlyphs'>  Received allocated intervention (n = 73)</text>
-<text x='12.76' y='269.24' style='font-size: 6.83px; font-family: "Arial";' textLength='137.55px' lengthAdjust='spacingAndGlyphs'>  Did not receive allocated intervention (n = 0)</text>
-<text x='12.76' y='376.06' style='font-size: 6.83px; font-family: "Arial";' textLength='132.67px' lengthAdjust='spacingAndGlyphs'>Supplementation period (Week 1 to week 7)</text>
-<text x='12.76' y='384.26' style='font-size: 6.83px; font-family: "Arial";' textLength='127.67px' lengthAdjust='spacingAndGlyphs'>  Discontinued and lost to follow-up (n = 7)</text>
-<text x='12.76' y='392.45' style='font-size: 6.83px; font-family: "Arial";' textLength='123.88px' lengthAdjust='spacingAndGlyphs'>    Reasons not related to the study (n=3)</text>
-<text x='12.76' y='400.65' style='font-size: 6.83px; font-family: "Arial";' textLength='80.61px' lengthAdjust='spacingAndGlyphs'>    Fear of COVID-19 (n=6)</text>
-<text x='12.76' y='499.28' style='font-size: 6.83px; font-family: "Arial";' textLength='166.62px' lengthAdjust='spacingAndGlyphs'>Supplementation + training period (Week 8 to week 23)</text>
-<text x='12.76' y='507.47' style='font-size: 6.83px; font-family: "Arial";' textLength='131.47px' lengthAdjust='spacingAndGlyphs'>  Discontinued and lost to follow-up (n = 22)</text>
-<text x='12.76' y='515.66' style='font-size: 6.83px; font-family: "Arial";' textLength='56.36px' lengthAdjust='spacingAndGlyphs'>    Lockdown (n=9)</text>
-<text x='12.76' y='523.86' style='font-size: 6.83px; font-family: "Arial";' textLength='83.91px' lengthAdjust='spacingAndGlyphs'>    Fear of COVID-19 (n=11)</text>
-<text x='12.76' y='532.05' style='font-size: 6.83px; font-family: "Arial";' textLength='96.58px' lengthAdjust='spacingAndGlyphs'>    Low training adherence (n=2)</text>
-<text x='12.76' y='630.68' style='font-size: 6.83px; font-family: "Arial";' textLength='53.70px' lengthAdjust='spacingAndGlyphs'>Analysed (n = 73)</text>
-<text x='12.76' y='638.88' style='font-size: 6.83px; font-family: "Arial";' textLength='110.22px' lengthAdjust='spacingAndGlyphs'>  Observed at final follow-up (n = 44)</text>
-<text x='12.76' y='647.07' style='font-size: 6.83px; font-family: "Arial";' textLength='123.11px' lengthAdjust='spacingAndGlyphs'>  Missing follow-up data imputed (n = 29)</text>
-<text x='12.76' y='655.27' style='font-size: 6.83px; font-family: "Arial";' textLength='95.81px' lengthAdjust='spacingAndGlyphs'>  Excluded from analysis (n = 0)</text>
-<text x='278.08' y='252.85' style='font-size: 6.83px; font-family: "Arial";' textLength='83.64px' lengthAdjust='spacingAndGlyphs'>Allocated to Krill-oil (n = 74)</text>
-<text x='278.08' y='261.04' style='font-size: 6.83px; font-family: "Arial";' textLength='124.28px' lengthAdjust='spacingAndGlyphs'>  Received allocated intervention (n = 74)</text>
-<text x='278.08' y='269.24' style='font-size: 6.83px; font-family: "Arial";' textLength='137.55px' lengthAdjust='spacingAndGlyphs'>  Did not receive allocated intervention (n = 0)</text>
-<text x='278.08' y='371.97' style='font-size: 6.83px; font-family: "Arial";' textLength='132.67px' lengthAdjust='spacingAndGlyphs'>Supplementation period (Week 1 to week 7)</text>
-<text x='278.08' y='380.16' style='font-size: 6.83px; font-family: "Arial";' textLength='131.47px' lengthAdjust='spacingAndGlyphs'>  Discontinued and lost to follow-up (n = 10)</text>
-<text x='278.08' y='388.35' style='font-size: 6.83px; font-family: "Arial";' textLength='123.88px' lengthAdjust='spacingAndGlyphs'>    Reasons not related to the study (n=3)</text>
-<text x='278.08' y='396.55' style='font-size: 6.83px; font-family: "Arial";' textLength='80.61px' lengthAdjust='spacingAndGlyphs'>    Fear of COVID-19 (n=7)</text>
-<text x='278.08' y='404.74' style='font-size: 6.83px; font-family: "Arial";' textLength='75.67px' lengthAdjust='spacingAndGlyphs'>    Not enough time (n=2)</text>
-<text x='278.08' y='499.28' style='font-size: 6.83px; font-family: "Arial";' textLength='166.62px' lengthAdjust='spacingAndGlyphs'>Supplementation + training period (Week 8 to week 23)</text>
-<text x='278.08' y='507.47' style='font-size: 6.83px; font-family: "Arial";' textLength='131.47px' lengthAdjust='spacingAndGlyphs'>  Discontinued and lost to follow-up (n = 13)</text>
-<text x='278.08' y='515.66' style='font-size: 6.83px; font-family: "Arial";' textLength='56.36px' lengthAdjust='spacingAndGlyphs'>    Lockdown (n=7)</text>
-<text x='278.08' y='523.86' style='font-size: 6.83px; font-family: "Arial";' textLength='80.61px' lengthAdjust='spacingAndGlyphs'>    Fear of COVID-19 (n=5)</text>
-<text x='278.08' y='532.05' style='font-size: 6.83px; font-family: "Arial";' textLength='96.58px' lengthAdjust='spacingAndGlyphs'>    Low training adherence (n=1)</text>
-<text x='278.08' y='630.68' style='font-size: 6.83px; font-family: "Arial";' textLength='53.70px' lengthAdjust='spacingAndGlyphs'>Analysed (n = 74)</text>
-<text x='278.08' y='638.88' style='font-size: 6.83px; font-family: "Arial";' textLength='110.22px' lengthAdjust='spacingAndGlyphs'>  Observed at final follow-up (n = 51)</text>
-<text x='278.08' y='647.07' style='font-size: 6.83px; font-family: "Arial";' textLength='123.11px' lengthAdjust='spacingAndGlyphs'>  Missing follow-up data imputed (n = 23)</text>
-<text x='278.08' y='655.27' style='font-size: 6.83px; font-family: "Arial";' textLength='95.81px' lengthAdjust='spacingAndGlyphs'>  Excluded from analysis (n = 0)</text>
+<g clip-path='url(#cpMC4wMHw1MTAuMjR8MC4wMHwzOTYuODU=)'>
+<rect x='0.00' y='0.00' width='510.24' height='396.85' style='stroke-width: 0.00; stroke: none;' />
+<rect x='5.10' y='4.41' width='71.43' height='14.39' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #D6E6F5;' />
+<rect x='219.40' y='118.24' width='71.43' height='14.39' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #D6E6F5;' />
+<rect x='219.40' y='177.07' width='71.43' height='14.39' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #D6E6F5;' />
+<rect x='219.40' y='331.17' width='71.43' height='14.39' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #D6E6F5;' />
+<text x='40.82' y='14.05' text-anchor='middle' style='font-size: 6.83px; font-weight: bold; font-family: "Arial";' textLength='35.66px' lengthAdjust='spacingAndGlyphs'>Enrollment</text>
+<text x='255.12' y='127.88' text-anchor='middle' style='font-size: 6.83px; font-weight: bold; font-family: "Arial";' textLength='33.00px' lengthAdjust='spacingAndGlyphs'>Allocation</text>
+<text x='255.12' y='186.71' text-anchor='middle' style='font-size: 6.83px; font-weight: bold; font-family: "Arial";' textLength='32.23px' lengthAdjust='spacingAndGlyphs'>Follow-up</text>
+<text x='255.12' y='340.81' text-anchor='middle' style='font-size: 6.83px; font-weight: bold; font-family: "Arial";' textLength='28.08px' lengthAdjust='spacingAndGlyphs'>Analysis</text>
+<line x1='255.12' y1='93.06' x2='255.12' y2='114.65' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<line x1='122.46' y1='114.65' x2='387.78' y2='114.65' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<line x1='76.54' y1='11.60' x2='163.28' y2='11.60' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<line x1='255.12' y1='18.80' x2='255.12' y2='78.67' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<polygon points='252.99,74.99 255.12,78.67 257.24,74.99 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
+<line x1='255.12' y1='48.74' x2='336.76' y2='48.74' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<polygon points='333.07,50.86 336.76,48.74 333.07,46.61 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
+<line x1='122.46' y1='114.65' x2='122.46' y2='136.23' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<polygon points='120.33,132.55 122.46,136.23 124.58,132.55 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
+<line x1='387.78' y1='114.65' x2='387.78' y2='136.23' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<polygon points='385.65,132.55 387.78,136.23 389.91,132.55 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
+<line x1='122.46' y1='165.47' x2='122.46' y2='206.78' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<polygon points='120.33,203.10 122.46,206.78 124.58,203.10 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
+<line x1='122.46' y1='243.45' x2='122.46' y2='277.33' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<polygon points='120.33,273.65 122.46,277.33 124.58,273.65 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
+<line x1='122.46' y1='321.43' x2='122.46' y2='355.31' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<polygon points='120.33,351.63 122.46,355.31 124.58,351.63 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
+<line x1='387.78' y1='165.47' x2='387.78' y2='203.07' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<polygon points='385.65,199.38 387.78,203.07 389.91,199.38 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
+<line x1='387.78' y1='247.16' x2='387.78' y2='277.33' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<polygon points='385.65,273.65 387.78,277.33 389.91,273.65 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
+<line x1='387.78' y1='321.43' x2='387.78' y2='355.31' style='stroke-width: 0.64; stroke-linecap: butt;' />
+<polygon points='385.65,351.63 387.78,355.31 389.91,351.63 ' style='stroke-width: 0.64; stroke-linecap: butt; fill: #000000;' />
+<rect x='163.28' y='4.41' width='183.69' height='14.39' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<rect x='336.76' y='30.40' width='163.28' height='36.67' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<rect x='178.58' y='78.67' width='153.07' height='14.39' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<rect x='5.10' y='136.23' width='234.71' height='29.24' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<rect x='5.10' y='206.78' width='234.71' height='36.67' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<rect x='5.10' y='277.33' width='234.71' height='44.09' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<rect x='5.10' y='355.31' width='234.71' height='36.67' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<rect x='270.43' y='136.23' width='234.71' height='29.24' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<rect x='270.43' y='203.07' width='234.71' height='44.09' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<rect x='270.43' y='277.33' width='234.71' height='44.09' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<rect x='270.43' y='355.31' width='234.71' height='36.67' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<text x='255.12' y='14.05' text-anchor='middle' style='font-size: 6.83px; font-family: "Arial";' textLength='96.58px' lengthAdjust='spacingAndGlyphs'>Assessed for eligibility (n = 319)</text>
+<text x='344.41' y='38.89' style='font-size: 6.83px; font-family: "Arial";' textLength='57.50px' lengthAdjust='spacingAndGlyphs'>Excluded (n = 172)</text>
+<text x='344.41' y='47.08' style='font-size: 6.83px; font-family: "Arial";' textLength='117.05px' lengthAdjust='spacingAndGlyphs'>  Not meeting inclusion criteria (n = 40)</text>
+<text x='344.41' y='55.28' style='font-size: 6.83px; font-family: "Arial";' textLength='100.73px' lengthAdjust='spacingAndGlyphs'>  Declined to participate (n = 132)</text>
+<text x='344.41' y='63.47' style='font-size: 6.83px; font-family: "Arial";' textLength='68.88px' lengthAdjust='spacingAndGlyphs'>  Other reasons (n = 0)</text>
+<text x='255.12' y='88.31' text-anchor='middle' style='font-size: 6.83px; font-family: "Arial";' textLength='67.75px' lengthAdjust='spacingAndGlyphs'>Randomised (n = 147)</text>
+<text x='12.76' y='145.10' style='font-size: 6.83px; font-family: "Arial";' textLength='87.83px' lengthAdjust='spacingAndGlyphs'>Allocated to Placebo (n = 73)</text>
+<text x='12.76' y='153.29' style='font-size: 6.83px; font-family: "Arial";' textLength='124.28px' lengthAdjust='spacingAndGlyphs'>  Received allocated intervention (n = 73)</text>
+<text x='12.76' y='161.49' style='font-size: 6.83px; font-family: "Arial";' textLength='137.55px' lengthAdjust='spacingAndGlyphs'>  Did not receive allocated intervention (n = 0)</text>
+<text x='12.76' y='215.27' style='font-size: 6.83px; font-family: "Arial";' textLength='132.67px' lengthAdjust='spacingAndGlyphs'>Supplementation period (Week 1 to week 7)</text>
+<text x='12.76' y='223.46' style='font-size: 6.83px; font-family: "Arial";' textLength='127.67px' lengthAdjust='spacingAndGlyphs'>  Discontinued and lost to follow-up (n = 7)</text>
+<text x='12.76' y='231.66' style='font-size: 6.83px; font-family: "Arial";' textLength='123.88px' lengthAdjust='spacingAndGlyphs'>    Reasons not related to the study (n=3)</text>
+<text x='12.76' y='239.85' style='font-size: 6.83px; font-family: "Arial";' textLength='80.61px' lengthAdjust='spacingAndGlyphs'>    Fear of COVID-19 (n=6)</text>
+<text x='12.76' y='285.43' style='font-size: 6.83px; font-family: "Arial";' textLength='166.62px' lengthAdjust='spacingAndGlyphs'>Supplementation + training period (Week 8 to week 23)</text>
+<text x='12.76' y='293.63' style='font-size: 6.83px; font-family: "Arial";' textLength='131.47px' lengthAdjust='spacingAndGlyphs'>  Discontinued and lost to follow-up (n = 22)</text>
+<text x='12.76' y='301.82' style='font-size: 6.83px; font-family: "Arial";' textLength='56.36px' lengthAdjust='spacingAndGlyphs'>    Lockdown (n=9)</text>
+<text x='12.76' y='310.02' style='font-size: 6.83px; font-family: "Arial";' textLength='83.91px' lengthAdjust='spacingAndGlyphs'>    Fear of COVID-19 (n=11)</text>
+<text x='12.76' y='318.21' style='font-size: 6.83px; font-family: "Arial";' textLength='96.58px' lengthAdjust='spacingAndGlyphs'>    Low training adherence (n=2)</text>
+<text x='12.76' y='363.80' style='font-size: 6.83px; font-family: "Arial";' textLength='53.70px' lengthAdjust='spacingAndGlyphs'>Analysed (n = 73)</text>
+<text x='12.76' y='371.99' style='font-size: 6.83px; font-family: "Arial";' textLength='110.22px' lengthAdjust='spacingAndGlyphs'>  Observed at final follow-up (n = 44)</text>
+<text x='12.76' y='380.18' style='font-size: 6.83px; font-family: "Arial";' textLength='123.11px' lengthAdjust='spacingAndGlyphs'>  Missing follow-up data imputed (n = 29)</text>
+<text x='12.76' y='388.38' style='font-size: 6.83px; font-family: "Arial";' textLength='95.81px' lengthAdjust='spacingAndGlyphs'>  Excluded from analysis (n = 0)</text>
+<text x='278.08' y='145.10' style='font-size: 6.83px; font-family: "Arial";' textLength='83.25px' lengthAdjust='spacingAndGlyphs'>Allocated to Krill oil (n = 74)</text>
+<text x='278.08' y='153.29' style='font-size: 6.83px; font-family: "Arial";' textLength='124.28px' lengthAdjust='spacingAndGlyphs'>  Received allocated intervention (n = 74)</text>
+<text x='278.08' y='161.49' style='font-size: 6.83px; font-family: "Arial";' textLength='137.55px' lengthAdjust='spacingAndGlyphs'>  Did not receive allocated intervention (n = 0)</text>
+<text x='278.08' y='211.17' style='font-size: 6.83px; font-family: "Arial";' textLength='132.67px' lengthAdjust='spacingAndGlyphs'>Supplementation period (Week 1 to week 7)</text>
+<text x='278.08' y='219.36' style='font-size: 6.83px; font-family: "Arial";' textLength='131.47px' lengthAdjust='spacingAndGlyphs'>  Discontinued and lost to follow-up (n = 10)</text>
+<text x='278.08' y='227.56' style='font-size: 6.83px; font-family: "Arial";' textLength='123.88px' lengthAdjust='spacingAndGlyphs'>    Reasons not related to the study (n=3)</text>
+<text x='278.08' y='235.75' style='font-size: 6.83px; font-family: "Arial";' textLength='80.61px' lengthAdjust='spacingAndGlyphs'>    Fear of COVID-19 (n=7)</text>
+<text x='278.08' y='243.95' style='font-size: 6.83px; font-family: "Arial";' textLength='75.67px' lengthAdjust='spacingAndGlyphs'>    Not enough time (n=2)</text>
+<text x='278.08' y='285.43' style='font-size: 6.83px; font-family: "Arial";' textLength='166.62px' lengthAdjust='spacingAndGlyphs'>Supplementation + training period (Week 8 to week 23)</text>
+<text x='278.08' y='293.63' style='font-size: 6.83px; font-family: "Arial";' textLength='131.47px' lengthAdjust='spacingAndGlyphs'>  Discontinued and lost to follow-up (n = 13)</text>
+<text x='278.08' y='301.82' style='font-size: 6.83px; font-family: "Arial";' textLength='56.36px' lengthAdjust='spacingAndGlyphs'>    Lockdown (n=7)</text>
+<text x='278.08' y='310.02' style='font-size: 6.83px; font-family: "Arial";' textLength='80.61px' lengthAdjust='spacingAndGlyphs'>    Fear of COVID-19 (n=5)</text>
+<text x='278.08' y='318.21' style='font-size: 6.83px; font-family: "Arial";' textLength='96.58px' lengthAdjust='spacingAndGlyphs'>    Low training adherence (n=1)</text>
+<text x='278.08' y='363.80' style='font-size: 6.83px; font-family: "Arial";' textLength='53.70px' lengthAdjust='spacingAndGlyphs'>Analysed (n = 74)</text>
+<text x='278.08' y='371.99' style='font-size: 6.83px; font-family: "Arial";' textLength='110.22px' lengthAdjust='spacingAndGlyphs'>  Observed at final follow-up (n = 51)</text>
+<text x='278.08' y='380.18' style='font-size: 6.83px; font-family: "Arial";' textLength='123.11px' lengthAdjust='spacingAndGlyphs'>  Missing follow-up data imputed (n = 23)</text>
+<text x='278.08' y='388.38' style='font-size: 6.83px; font-family: "Arial";' textLength='95.81px' lengthAdjust='spacingAndGlyphs'>  Excluded from analysis (n = 0)</text>
 </g>
 </g>
 </svg>

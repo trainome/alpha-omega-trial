@@ -20,9 +20,9 @@ source("./R/sim-fun.R")
 
 ```
 
-To compare the multivariate Student's t models to the univariate counterpart (S13 vs. S18) we will use a more realistic simulation inducing correlations between variables and a larger data set (k = 12). Data are generated as homoskedastic variance, including equal variance between groups (`sigma_ratio = 1` in `sim_wrap3`, see `R/sim-fun.R`), and added outlier noise. For comparisons data included participant-level drop-out and values missing at random corresponding to about 10, 28 and 40% of the follow-up values with baseline values having about 8% missing values. Correlations were set to weak (independece between variables and time-points) and strong, about |r|=0.25 between measurement types and |r|=35 between time-points.  
+To compare the multivariate Student's t models to the univariate counterpart (S13 vs. S18) we will use a more realistic simulation inducing correlations between variables and a larger data set (k = 12). Data are generated as having homoscedastic variance, including equal variance between groups (`sigma_ratio = 1` in `sim_wrap3`, see `R/sim-fun.R`), and added outlier noise. For comparisons, data included participant-level drop-out and values missing at random corresponding to about 10, 28 and 40% of the follow-up values with baseline values having about 8% missing values. Correlations were set to weak (independence between variables and time-points) and strong, about |r|=0.25 between measurement types and |r|=35 between time-points.  
 
-As an example, the following synthetic data set was simulated using the 
+As an example, the following synthetic data set was simulated using the simulation routine used in `R/model-comp3.R` (@fig-var-cor-synth). 
 
 ```{r}
 #| label: sim-example
@@ -84,8 +84,7 @@ ps <- cor_plot(simd)
 
 ```
 
-The missing data patterns from the medim sized missingness scenario
-
+The missing data patterns from the medium sized missingness scenario corresponds approximately to the observed data (@fig-missing-synth, see also @sec-smodels-intro).
 
 ```{r}
 #| label: fig-missing-synth
@@ -165,7 +164,9 @@ p1 <- bind_rows(ls) |>
   dplyr::select(name, m, model, variant, sim, miss, corr) |> 
   pivot_wider(names_from = name, values_from = m) |>
   mutate(flag = if_else(rhat > 1.1, as.character(sim), ""), 
-         colflag = if_else(rhat > 1.1, "flag", "")) |> 
+         colflag = if_else(rhat > 1.1, "flag", ""), 
+         corr = factor(corr, levels = c("weak", "strong")), 
+         miss = factor(miss, levels = c("low", "mid", "high"))) |> 
   ggplot(aes(ess_bulk, rhat)) + 
   geom_point(alpha = 0.3, 
              aes(color = colflag), 
@@ -197,7 +198,7 @@ n_excl_ds <- length(excl_datasets)
 ```
 
 
-Using `r ndatasets` simulated data sets we are comparing models S13 to s18 for modelling performance using a three by two cell setup. @fig-chain-diag shows chain diagnostics from the fits, no simulated data sets (n = `r n_excl_ds`) were excluded from comparisons due unsatisfactory chain convergence or effective sample sizes. 
+Using `r ndatasets` simulated data sets we are comparing models S13 to s18 for modelling performance using two scenarios of correlations (strong vs. weak) and three levels of missingness (low, mid, high). @fig-chain-diag shows chain diagnostics from the fits, no simulated data sets (n = `r n_excl_ds`) were excluded from comparisons due unsatisfactory chain convergence or effective sample sizes. 
 
 ```{r}
 #| label: fig-chain-diag
@@ -209,10 +210,16 @@ Using `r ndatasets` simulated data sets we are comparing models S13 to s18 for m
 p1
 
 
+
+
+
+
+
+
 ```
 
 
-For each estimate (treatment contrasts, 2 &times; 12 per data set), coverage of a 90% percentile interval was determined and averaged within each model, variant (full data and missing values) and simulation cell (missingness &times; correlation strength). With weak correlations, coverage of S13 was close to the nominal level (about 90-91%) while S18 had slightly lower coverage (about 88-89%). With strong correlations, both models had similar coverage, slightly below nominal at low missingness and close to nominal at mid and high missingness (@fig-sim-cred-int A). Credible intervals were wider in the missing data variant and widened with increasing proportions of missing values, while interval widths in the full data variant were similar across cells (@fig-sim-cred-int B). With weak correlations, S13 had slightly wider intervals than S18 (median difference about 0.02) in both variants, consistent with its higher coverage. With strong correlations, interval widths were similar in the full data variant, but S13 tended to have narrower intervals than S18 in the missing data variant, a difference that increased with the proportion of missing values (@fig-sim-cred-int C).
+For each estimate (treatment contrasts, 2 &times; 12 per data set), coverage of a 90% percentile interval was determined and averaged within each model, variant (full data and missing values) and simulation cell (missingness &times; correlation strength). With weak correlations, coverage of S13 was on avergae closer to the nominal level while S18 had slightly lower coverage. With strong correlations, both models had similar coverage, slightly below nominal at low missingness and close to nominal at mid and high missingness (@fig-sim-cred-int A). Credible intervals were wider in the missing data variant and widened with increasing proportions of missing values, while interval widths in the full data variant were similar across conditions (@fig-sim-cred-int B). With weak correlations, S13 had slightly wider intervals than S18 in both variants, consistent with its higher coverage. With strong correlations, interval widths were similar in the full data variant, but S13 tended to have narrower intervals than S18 in the missing data variant, a difference that increased with the proportion of missing values (@fig-sim-cred-int C).
 
 
 
@@ -350,9 +357,8 @@ p1 / p2 / p3 + plot_annotation(tag_levels = 'A')
 
 
 
-Accuracy was assessed as the error of the posterior mean of each treatment contrast (Estimate - Simulated). In the full data variant, the root mean squared error (RMSE) was practically identical between S13 and S18 (about 0.14 in all cells). Missing values increased the RMSE for both models, and the increase was smaller for S13 when correlations were strong (@fig-sim-error A). The paired differences in absolute error per estimate were centred close to zero in all cells and in both zero and non-zero effects, with wide distributions (@fig-sim-error B). S13 had the lower absolute error in a small majority of estimates in most cells (overall about 50-54%), with the largest proportions in the missing data variant with strong correlations (@fig-sim-error C).
+Accuracy was assessed as the error of the posterior mean of each treatment contrast (Estimate - Simulated). In the full data variant, the root mean squared error (RMSE) was practically identical between S13 and S18. Missing values increased the RMSE for both models, and the increase was smaller for S13 when correlations were strong (@fig-sim-error A). The paired differences in absolute error per estimate were centered close to zero in all comparisons and in both zero and non-zero effects, with wide distributions (@fig-sim-error B). S13 had the lower absolute error in a small majority of estimates in most comparisons (overall about 50-54%), with the largest proportions in the missing data variant with strong correlations (@fig-sim-error C).
 
-Together, although differences are small, these results indicate that S13 is at least as accurate as S18, with a modest gain in accuracy when correlations between variables and time-points are strong and data are missing.
 
 
 
@@ -470,4 +476,114 @@ p1 / p2 / p3 + plot_layout(heights = c(1, 1.5, 1)) + plot_annotation(tag_levels 
 ```
 
 
+Finally, we compared the error associated with data imputation. Overall, the RMSE was lower in s13 compared to s18 with larger benefit of s13 in imputation of pre-values and follow-up values under stronger correlations (@fig-sim-impute).
+
+```{r}
+#| label: fig-sim-impute
+#| fig-cap: "(A) Root mean squared error (RMSE) of posterior mean imputed values, (B) paired differences in absolute imputation error between models (S13 - S18) for baseline (pre) and post-intervention (y) values, and (C) proportion of imputed values where S13 had lower absolute error than S18."
+#| eval: true
+#| fig-height: 12
+#| fig-width: 18
+
+# Extract imputation error (error of the posterior mean per imputed value)
+files <- list.files("data-sim3/impute_error")
+ls <- list()
+for(i in seq_along(files)) {
+  ls[[i]] <- readRDS(paste0("data-sim3/impute_error/", files[i]))
+}
+
+# One row per imputed value and model
+imp <- bind_rows(ls) |>
+  filter(!(sim %in% excl_datasets)) |>
+  dplyr::select(var, row, time, type, model, sim, miss, corr, error, coverage) |>
+  mutate(model = factor(model, levels = c("s13", "s18")),
+         var = factor(var, levels = c("pre", "y")),
+         miss = factor(miss, levels = c("low", "mid", "high")),
+         corr = factor(corr, levels = c("weak", "strong")))
+
+
+# RMSE per model, grid cell and variable
+p1 <- imp |>
+  summarise(.by = c(model, var, miss, corr),
+            rmse = sqrt(mean(error^2))) |>
+
+  ggplot(aes(miss, rmse, color = model, shape = var)) +
+  geom_point(position = position_dodge(width = 0.4),
+             size = 3) +
+  scale_color_manual(values = c(colscale[2], colscale[4])) +
+  scale_shape_manual(values = c(16, 17)) +
+  labs(x = "Missing values",
+       y = "RMSE",
+       color = "Model",
+       shape = "Variable") +
+  alpha_theme() +
+  facet_wrap(~ corr, labeller = label_both)
+
+
+# Paired difference in absolute error (s13 - s18) per imputed value
+imp_diff <- imp |>
+  mutate(abs_dev = abs(error)) |>
+  dplyr::select(var, row, time, type, sim, miss, corr, model, abs_dev) |>
+  pivot_wider(names_from = model,
+              values_from = abs_dev) |>
+  mutate(diff = s13 - s18)
+
+p2 <- imp_diff |>
+  summarise(.by = c(var, miss, corr),
+            m = median(diff),
+            q5 = quantile(diff, 0.05),
+            q25 = quantile(diff, 0.25),
+            q75 = quantile(diff, 0.75),
+            q95 = quantile(diff, 0.95)) |>
+
+  ggplot(aes(miss, m, group = var)) +
+  geom_errorbar(
+    aes(ymin = q5, ymax = q95),
+    position = position_dodge(width = 0.4),
+    width = 0) +
+
+  geom_errorbar(
+    aes(ymin = q25, ymax = q75),
+    width = 0,
+    position = position_dodge(width = 0.4),
+    linewidth = 1.2) +
+
+  geom_point(aes(shape = var),
+             size = 4,
+             position = position_dodge(width = 0.4),
+             fill = colscale[3]) +
+  geom_hline(yintercept = 0,
+             lty = 2, color = "gray") +
+
+  scale_shape_manual(values = c(21, 22)) +
+  labs(y = "Absolute imputation error difference<br>s13 - s18<br>(Median 5-25-75-95% PI)",
+       x = "Missing values",
+       shape = "Variable") +
+  alpha_theme() +
+  facet_wrap(~ corr, labeller = label_both)
+
+
+# Proportion of imputed values where s13 is closer to the true value
+p3 <- imp_diff |>
+  summarise(.by = c(var, miss, corr),
+            prop = mean(diff < 0)) |>
+
+  ggplot(aes(miss, prop, shape = var)) +
+  geom_point(position = position_dodge(width = 0.4),
+             size = 3) +
+  geom_hline(yintercept = 0.5, lty = 2, color = "gray") +
+  scale_shape_manual(values = c(16, 15)) +
+  labs(x = "Missing values",
+       y = "Proportion of imputed values with<br>lower absolute error in s13",
+       shape = "Variable") +
+  alpha_theme() +
+  facet_wrap(~ corr, labeller = label_both)
+
+
+p1 / p2 / p3 + plot_annotation(tag_levels = 'A')
+
+```
+
+
+Together, although differences are small, these results indicate that S13 is at least as accurate as S18, with a modest gain in accuracy when correlations between variables and time-points are strong and data are missing.
 

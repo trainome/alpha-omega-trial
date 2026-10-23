@@ -1,5 +1,4 @@
 ---
-title: "Effects of krill oil supplementation on indications of metabolic syndrome - Introduction"
 execute:
   echo: false
   warning: false
@@ -23,9 +22,9 @@ refit.models <- FALSE # Should fit_wrap refit models.
 ```
 
 
-## Effects of N-3 supplementation on indicies of metabolic syndrome 
+# Effects of krill oil supplementation on indications of metabolic syndrome - Introduction {#sec-smodels-intro}
 
-Here we aim to model the components of the metabolic syndrome definition [@alberti2006], along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting metabolic syndrome definition thresholds in each group while accounting for uncertainty associated with missing observations. The metabolic syndrome definition requires a minimum waist circumference (central obesity) and two more threshold values among the set of criteria markers [@alberti2006].
+Here we aim to model the components of the metabolic syndrome definition [@alberti2006], along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting metabolic syndrome definition thresholds in each group while accounting for uncertainty associated with missing observations. We use the harmonised metabolic syndrome definition, where any three of the five criteria (waist circumference, triglycerides, HDL-cholesterol, blood pressure and fasting glucose) beyond their threshold values are sufficient for a diagnosis, and central obesity is not required [@alberti2009].
 
 @fig-descriptive-data shows distributions of the variables selected for joint modeling, including variables used to define metabolic syndrome (waist circumference, raised triglycerisdes, reduced HDL-cholesterol, raised blood pressure, raised fasting glucose). 
 
@@ -35,11 +34,8 @@ Here we aim to model the components of the metabolic syndrome definition [@alber
 #| fig-width: 6
 #| fig-cap: "Observed data distributions of main outcomes."
 
-d_full <- criteria_dat |> 
-  # The criteria we are using is a two step algorithm. First a participant must 
-  # have central obesity (waist circumference >  threshold) plus at least 2
-  # of the other criteria 
-  # First determine central obesity
+d_full <- criteria_dat |>
+  # Central obesity (waist circumference > threshold) per participant and time
   mutate(.by = c(participant, time),
          central_obesity = if_else(analyte == "waist" & threshold, 1, 0), 
          central_obesity = max(central_obesity)) |> 
@@ -131,11 +127,10 @@ bp <- criteria_dat |>
 d <- criteria_dat |> 
   filter(!(analyte %in% c("sys", "dias"))) |> 
   filter(participant %in% participant_complete_T4) |> 
-  bind_rows(bp) |> 
-  # The criteria we are using is a two step algorithm. First a participant must 
-  # have central obesity (waist circumference >  threshold) plus at least 2
-  # of the other criteria 
-  # First determine central obesity
+  bind_rows(bp) |>
+  # Harmonised definition: at least 3 of the 5 criteria (waist, HDL, TG, BP,
+  # glucose), central obesity is not required. Central obesity is kept as a
+  # separate column and added to the count of the other criteria.
   mutate(.by = c(participant, time),
          central_obesity = if_else(analyte == "waist" & threshold, 1, 0), 
          central_obesity = max(central_obesity)) |> 
@@ -147,7 +142,7 @@ d <- criteria_dat |>
             n = n(),
             n_threshold = sum(threshold, na.rm = TRUE) ) |> 
 
-  mutate(met_syn = if_else(central_obesity == 1 & n_threshold >= 2, 1, 0), 
+  mutate(met_syn = if_else(central_obesity + n_threshold >= 3, 1, 0),
          age = (age - mean(age)) / sd(age)) 
 
 
@@ -220,7 +215,7 @@ d |>
             rel = crit / n ) |> 
   
       mutate(treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3"))) |> 
+                        labels = c("Placebo", "Krill oil"))) |> 
   
   ggplot(aes(time, rel * 100, fill = treat)) + 
   geom_bar(stat = "identity", 
@@ -256,9 +251,7 @@ d |>
 #| label: tbl-metsyn-scores
 #| tbl-cap: "Components of the metabolic syndrome diagnostic criteria and related measurements used in modelling."
 
-  # The criteria we are using is a two step algorithm. First a participant must 
-  # have central obesity (waist circumference >  threshold) plus at least 2
-  # of the other criteria 
+  # Harmonised definition: at least 3 of the 5 criteria below
 
   # HDL Cholesterol: <40 mg/dL for men, <50 mg/dL for women, or taking medication for it.
   # Fasting Glucose: 100 mg/dL or higher, or taking medication for it.
@@ -269,7 +262,7 @@ d |>
 
 data.frame(
   Subscore = c(
-     "Waist circumference*", 
+     "Waist circumference",
     "HDL Cholesterol", 
                "Fasting glucose", 
                "Triglycerides", 
@@ -295,7 +288,7 @@ data.frame(
                 "NA", 
     "NA")) |> 
   gt() |> 
-  gt::tab_footnote(footnote = "*, required for metabolic syndrome diagnosis")
+  gt::tab_footnote(footnote = "Metabolic syndrome is defined as at least three of the five criteria with thresholds (harmonised definition)")
 
 
 
@@ -418,7 +411,7 @@ d_full |>
                        labels = c("Observed data", 
                                   "Missing data")), 
          treat = factor(treat, levels = c("ctrl", "omega"), 
-                        labels = c("Placebo", "N-3")), 
+                        labels = c("Placebo", "Krill oil")), 
          met_sym_crit = if_else(met_sym_crit == 1, 
                                 "Metabolic syndrome criteria", 
                                 "Body composition")) |> 
@@ -581,7 +574,7 @@ draws.m1 |>
   
   mutate(log_odds = alpha2 + beta2_x * x + beta2_tx * TX + beta2_xtx * TX * x, 
          prob = plogis(log_odds)) |> 
-  mutate(Treatment = if_else(TX == -0.5, "Placebo", "N-3"), 
+  mutate(Treatment = if_else(TX == -0.5, "Placebo", "Krill oil"), 
          A = factor(A, levels = seq(1:13))) |> 
   ggplot(aes(prob, color = Treatment)) + 
   geom_line(stat = "density") +
@@ -628,7 +621,7 @@ a <- draws.m1 |>
   
   mutate(log_odds = alpha2 + beta2_x * x + beta2_tx * TX + beta2_xtx * TX * x, 
          prob = plogis(log_odds), 
-         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+         Treatment = if_else(TX == -0.5, "Placebo", "Krill oil")) |> 
   
 
   summarise(.by = c(A, Treatment, x), 
@@ -693,7 +686,7 @@ b <- draws.m1 |>
   
   mutate(log_odds = alpha4 + beta4_x * x + beta4_tx * TX + beta4_xtx * TX * x, 
          prob = plogis(log_odds), 
-         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+         Treatment = if_else(TX == -0.5, "Placebo", "Krill oil")) |> 
   
 
   summarise(.by = c(A, Treatment, x), 
@@ -863,7 +856,7 @@ draws.m1 |>
   
   mutate(log_odds = beta_x + beta_xtx * TX , 
          prob = plogis(log_odds), 
-         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+         Treatment = if_else(TX == -0.5, "Placebo", "Krill oil")) |> 
   
   summarise(.by = c(A, Treatment, time), 
             mprob = mean(log_odds), 
@@ -928,7 +921,7 @@ draws.m1 |>
                 TX = c(-0.5, 0.5)) |>
   
   mutate(log_odds = beta_xtx, 
-         Treatment = if_else(TX == -0.5, "Placebo", "N-3")) |> 
+         Treatment = if_else(TX == -0.5, "Placebo", "Krill oil")) |> 
   
   summarise(.by = c(A, Treatment, time), 
             mprob = mean(log_odds), 
@@ -963,7 +956,7 @@ draws.m1 |>
              ymin = lwr, ymax = upr)) + 
   geom_pointrange(position = position_dodge(width = 0.1)) + 
   labs(x = "", 
-       y = "Log-odds (N-3 - Placebo, 90% PI)", 
+       y = "Log-odds (Krill oil - Placebo, 90% PI)", 
        color = "Time-point") +
   coord_flip() + 
   theme(axis.text.y = element_markdown())
