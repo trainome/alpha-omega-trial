@@ -63,52 +63,52 @@ Running MCMC with 4 parallel chains...
 
 Chain 1 Iteration:    1 / 3000 [  0%]  (Warmup) 
 Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: normal_lpdf: Scale parameter[5] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpgZTtqN/model-5d1c7a9e3996.stan', line 155, column 4 to column 24)
+Chain 1 Exception: normal_lpdf: Scale parameter[1] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpKSIHp0/model-14bc137f6d7.stan', line 155, column 4 to column 24)
 Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 1 
 Chain 2 Iteration:    1 / 3000 [  0%]  (Warmup) 
 Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: normal_lpdf: Scale parameter[5] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpgZTtqN/model-5d1c7a9e3996.stan', line 155, column 4 to column 24)
+Chain 2 Exception: normal_lpdf: Scale parameter[12] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpKSIHp0/model-14bc137f6d7.stan', line 155, column 4 to column 24)
 Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 2 
 Chain 3 Iteration:    1 / 3000 [  0%]  (Warmup) 
 Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: normal_lpdf: Scale parameter[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpgZTtqN/model-5d1c7a9e3996.stan', line 155, column 4 to column 24)
+Chain 3 Exception: normal_lpdf: Scale parameter[1] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpKSIHp0/model-14bc137f6d7.stan', line 155, column 4 to column 24)
 Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 3 
 Chain 4 Iteration:    1 / 3000 [  0%]  (Warmup) 
 Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: normal_lpdf: Scale parameter[8] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpgZTtqN/model-5d1c7a9e3996.stan', line 155, column 4 to column 24)
+Chain 4 Exception: normal_lpdf: Scale parameter[7] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpKSIHp0/model-14bc137f6d7.stan', line 155, column 4 to column 24)
 Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 4 
+Chain 4 Iteration: 1000 / 3000 [ 33%]  (Warmup) 
+Chain 4 Iteration: 1001 / 3000 [ 33%]  (Sampling) 
+Chain 3 Iteration: 1000 / 3000 [ 33%]  (Warmup) 
+Chain 3 Iteration: 1001 / 3000 [ 33%]  (Sampling) 
 Chain 1 Iteration: 1000 / 3000 [ 33%]  (Warmup) 
 Chain 1 Iteration: 1001 / 3000 [ 33%]  (Sampling) 
 Chain 2 Iteration: 1000 / 3000 [ 33%]  (Warmup) 
 Chain 2 Iteration: 1001 / 3000 [ 33%]  (Sampling) 
-Chain 3 Iteration: 1000 / 3000 [ 33%]  (Warmup) 
-Chain 3 Iteration: 1001 / 3000 [ 33%]  (Sampling) 
-Chain 4 Iteration: 1000 / 3000 [ 33%]  (Warmup) 
-Chain 4 Iteration: 1001 / 3000 [ 33%]  (Sampling) 
-Chain 1 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
-Chain 2 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
-Chain 3 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
 Chain 4 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
-Chain 1 Iteration: 3000 / 3000 [100%]  (Sampling) 
-Chain 1 finished in 203.9 seconds.
-Chain 2 Iteration: 3000 / 3000 [100%]  (Sampling) 
-Chain 2 finished in 208.3 seconds.
-Chain 3 Iteration: 3000 / 3000 [100%]  (Sampling) 
-Chain 3 finished in 209.7 seconds.
+Chain 3 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
+Chain 2 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
+Chain 1 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
 Chain 4 Iteration: 3000 / 3000 [100%]  (Sampling) 
-Chain 4 finished in 210.6 seconds.
+Chain 4 finished in 148.2 seconds.
+Chain 3 Iteration: 3000 / 3000 [100%]  (Sampling) 
+Chain 3 finished in 149.2 seconds.
+Chain 2 Iteration: 3000 / 3000 [100%]  (Sampling) 
+Chain 2 finished in 151.0 seconds.
+Chain 1 Iteration: 3000 / 3000 [100%]  (Sampling) 
+Chain 1 finished in 151.3 seconds.
 
 All 4 chains finished successfully.
-Mean chain execution time: 208.1 seconds.
-Total execution time: 210.9 seconds.
+Mean chain execution time: 149.9 seconds.
+Total execution time: 151.4 seconds.
 
 Warning message:
 Some Pareto k diagnostic values are too high. See help('pareto-k-diagnostic') for details.

@@ -63,862 +63,152 @@ Running MCMC with 4 parallel chains...
 
 Chain 1 Iteration:    1 / 3000 [  0%]  (Warmup) 
 Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 1 
 Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 1 
 Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[6] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 1 
 Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[12] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 1 
 Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 1 
 Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[6] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[13] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[7] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 1 
 Chain 2 Iteration:    1 / 3000 [  0%]  (Warmup) 
 Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 2 
 Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 2 
 Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[6] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 2 
 Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[16] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 2 
 Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 2 
 Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[11] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 2 
-Chain 2 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 2 Exception: lkj_corr_cholesky_lpdf: Random variable[8] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 2 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 2 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 2 
 Chain 3 Iteration:    1 / 3000 [  0%]  (Warmup) 
 Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 3 
 Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 3 
 Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 3 
 Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[7] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
+Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
+Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
+Chain 3 
+Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
+Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
+Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
+Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
+Chain 4 
+Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
+Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
+Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
+Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
+Chain 4 
+Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
+Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[3] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
+Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
+Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
+Chain 4 
+Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
+Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[24] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
+Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
+Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
+Chain 4 
+Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
+Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 3 
 Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[4] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[4] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 3 
-Chain 3 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 3 Exception: lkj_corr_cholesky_lpdf: Random variable[4] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 3 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 3 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 3 
 Chain 4 Iteration:    1 / 3000 [  0%]  (Warmup) 
 Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 4 
 Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
+Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[10] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/RtmpwpTcwg/model-2f7c4b73431c.stan', line 227, column 2 to column 33)
 Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
 Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
 Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[4] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[2] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 4 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 4 Exception: lkj_corr_cholesky_lpdf: Random variable[5] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 4 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 4 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 4 
-Chain 1 Informational Message: The current Metropolis proposal is about to be rejected because of the following issue:
-Chain 1 Exception: lkj_corr_cholesky_lpdf: Random variable[17] is 0, but must be positive! (in 'C:/Users/706194/AppData/Local/Temp/Rtmp0ERlO4/model-6b4c204c4444.stan', line 227, column 2 to column 33)
-Chain 1 If this warning occurs sporadically, such as for highly constrained variable types like covariance matrices, then the sampler is fine,
-Chain 1 but if this warning occurs often then your model may be either severely ill-conditioned or misspecified.
-Chain 1 
 Chain 3 Iteration: 1000 / 3000 [ 33%]  (Warmup) 
 Chain 3 Iteration: 1001 / 3000 [ 33%]  (Sampling) 
 Chain 2 Iteration: 1000 / 3000 [ 33%]  (Warmup) 
 Chain 2 Iteration: 1001 / 3000 [ 33%]  (Sampling) 
+Chain 1 Iteration: 1000 / 3000 [ 33%]  (Warmup) 
+Chain 1 Iteration: 1001 / 3000 [ 33%]  (Sampling) 
 Chain 4 Iteration: 1000 / 3000 [ 33%]  (Warmup) 
 Chain 4 Iteration: 1001 / 3000 [ 33%]  (Sampling) 
 Chain 3 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
-Chain 1 Iteration: 1000 / 3000 [ 33%]  (Warmup) 
-Chain 1 Iteration: 1001 / 3000 [ 33%]  (Sampling) 
 Chain 2 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
+Chain 1 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
 Chain 4 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
 Chain 3 Iteration: 3000 / 3000 [100%]  (Sampling) 
-Chain 3 finished in 545.6 seconds.
-Chain 1 Iteration: 2000 / 3000 [ 66%]  (Sampling) 
+Chain 3 finished in 439.1 seconds.
 Chain 2 Iteration: 3000 / 3000 [100%]  (Sampling) 
-Chain 2 finished in 619.2 seconds.
-Chain 4 Iteration: 3000 / 3000 [100%]  (Sampling) 
-Chain 4 finished in 634.6 seconds.
+Chain 2 finished in 443.0 seconds.
 Chain 1 Iteration: 3000 / 3000 [100%]  (Sampling) 
-Chain 1 finished in 740.8 seconds.
+Chain 1 finished in 447.2 seconds.
+Chain 4 Iteration: 3000 / 3000 [100%]  (Sampling) 
+Chain 4 finished in 454.4 seconds.
 
 All 4 chains finished successfully.
-Mean chain execution time: 635.0 seconds.
-Total execution time: 741.2 seconds.
+Mean chain execution time: 445.9 seconds.
+Total execution time: 454.8 seconds.
 
 Warning message:
 Some Pareto k diagnostic values are too high. See help('pareto-k-diagnostic') for details.

@@ -89,6 +89,7 @@ labels <- d_full |>
            analyte == "bmi" ~ "Body mass index", 
            analyte == "Adiponectin" ~ "Adiponectin",
            analyte == "LDL" ~ "Low density lipoprotein", 
+           analyte == "HbA1c" ~ "Glycated hemoglobin (HbA1c)",
            .default = analyte
            
          )) |> 
@@ -123,8 +124,8 @@ crit_thresholds <- d_full |>
   summarise(.by = c(analyte), 
             m = mean(value, na.rm = TRUE), 
             sd = sd(value, na.rm = TRUE)) |> 
-  mutate(threshold_male = c(1.03, 5.6, log(1.7), 94, 130, 85, NA, NA, NA, NA, NA), 
-         threshold_female = c(1.29, 5.6, log(1.7), 80, 130, 85, NA, NA, NA, NA, NA), 
+  mutate(threshold_male = c(1.03, 5.6, log(1.7), 94, 130, 85, NA, NA, NA, NA, NA, NA), 
+         threshold_female = c(1.29, 5.6, log(1.7), 80, 130, 85, NA, NA, NA, NA, NA, NA), 
          std_threshold_male = (threshold_male - m) / sd, 
          std_threshold_female = (threshold_female - m) / sd, 
          type = dense_rank(analyte)) |> 
@@ -639,22 +640,11 @@ bind_rows(
 
 
 
-
-
-```{r}
-# TODO
-# Correlation-based post-pred-check
-
-```
-
-
-
-
 Next we compute the approximate leave-one-out cross-validation statistics from the models using Pareto smoothed importance sampling [@vehtari2017]. As a first step we only consider the Pareto k diagnostic values as these indirectly indicates observations that are influential for the models. Here, one observation corresponds to a participant, i.e., all values corresponding to a participant contribute to the log-likelihood. The multivariate models have more unstable estimate of the Pareto k statistic indicating that these models are "more surprised" by single observations (@fig-paretok-s7s10). 
 
 Together with the indications from above that suggest that the multivariate models (and more so the heteroscedastic variant, s10) tend to under or overestimate group-specific variation in replicate simulations we will consider a more robust definition of the two model classes (uni- and multivariate models).
 
-Although high Pareto k values indicate unreliable estimates of the Expected log-pointwise predictive density we finally compare models for their out-of-sample predictive performance (@tbl-loo-s7s10). These estimate indicate that multivariate would predict better on new data with no differences between models with different residual variance structures.
+Although high Pareto k values indicate unreliable estimates of the expected log-pointwise predictive density we finally compare models for their out-of-sample predictive performance (@tbl-loo-s7s10). These estimate indicate that multivariate would predict better on new data with no differences between models with different residual variance structures.
 
 
 
@@ -738,7 +728,7 @@ loo_compare(list("s7" = loo.s7,
 
 ### Model expansion: Robust likelihood
 
-As our initial models might suggest that they are "surprised" by specific data point we will consider a heavy-tailed likelihood to allow for inference robust to extreme observations. The Student's t-distribution is available both as a uni-variate and the multivariate definitions. Models s11 and s12 are updated from s9 and s10 to the Student-t versions of these model specifications. In model s11, the relevant change is in the definition of the likelihood ($y_i \sim \operatorname{Student-t}(\mu_i, \sigma_i, \nu)$. The $\nu$ parameter is set to 4. In model s12 the likelihood is updated to a multivariate Student's t-distribution $y_i \sim \operatorname{MVT}(\mu_i, \Sigma, \nu)$, also with $\nu$ set to 4.
+As our initial models might suggest that they are "surprised" by specific data point we will consider a heavy-tailed likelihood to allow for inference robust to extreme observations. The Student's t-distribution is available both as a uni- and multivariate definition. Models s11 and s12 are updated from s9 and s10 to the Student-t versions of these model specifications. In model s11, the relevant change is in the definition of the likelihood ($y_i \sim \operatorname{Student-t}(\mu_i, \sigma_i, \nu)$. The $\nu$ parameter is set to 4 (as pragmatic starting point, separating it from the normal likelihood [@gelman2014 p. 442]). In model s12 the likelihood is updated to a multivariate Student's t-distribution $y_i \sim \operatorname{MVT}(\mu_i, \Sigma, \nu)$, also with $\nu$ set to 4.
 
 
 ```{r}
@@ -837,9 +827,7 @@ bind_rows(diagsums) |>
 ```
 
 
-The chain diagnostics indicate that the HMC algorithm converges (@fig-chain-stats-s11s12-org) and that no divergent transitions were evident along with healthy BFMI (@tbl-diagnostic-summary-s7s10). The plots of y^rep^ distributions against observed data distributions indicate that the model replicate the observed values (@fig-ppcheck-dist-s11, and @fig-ppcheck-dist-s12). 
-
-
+The chain diagnostics indicate that the HMC algorithm converges (@fig-chain-stats-s11s12-org) and that no divergent transitions were evident along with healthy BFMI (@tbl-diagnostic-summary-s7s10; [See here](https://mc-stan.org/learn-stan/diagnostics-warnings.html) for light background on diagnostics). The plots of y^rep^ distributions against observed data distributions indicate that the model replicate the observed values (@fig-ppcheck-dist-s11, and @fig-ppcheck-dist-s12). 
 
 
 ```{r}
@@ -895,7 +883,7 @@ No extreme deviations were seen from posterior predictive checks on the SD of re
 
 ```{r}
 #| label: fig-ppcheck-sd-s11
-#| fig-cap: "Summary chain statistics indicate satisfactory results in models s11 and s12."
+#| fig-cap: "Posterior predictive check, SD from replicated data (y^rep^) compared to observed from SD in the raw data for model s11."
 #| eval: true
 #| fig-height: 6
 #| fig-width: 6
@@ -916,7 +904,7 @@ stat_check_s11$plot_contrast + coord_cartesian(xlim = c(-0.5, 1))
 
 ```{r}
 #| label: fig-ppcheck-sd-s12
-#| fig-cap: "Summary chain statistics indicate satisfactory results in models s11 and s12."
+#| fig-cap: "Posterior predictive check, SD from replicated data (y^rep^) compared to observed from SD in the raw data for model s12.""
 #| eval: true
 #| fig-height: 6
 #| fig-width: 6
@@ -1081,6 +1069,11 @@ ppcheck_dist(yrep.s13, dobs) + labs(subtitle = "Model s13") +
 
 
 ```{r}
+#| label: fig-stat-check-s13
+#| fig-cap: "Posterior predictive check model s13"
+#| eval: true
+#| fig-height: 6
+#| fig-width: 6
 
 stat_check_s13 <- ppcheck_stat(yrep.s13, dobs,
                               group = c("type", "time", "treat"),
@@ -1094,6 +1087,49 @@ stat_check_s13$plot_contrast + coord_cartesian(xlim = c(-0.5, 1))
 ```
 
 
+```{r}
+#| label: fig-dist-check-s18
+#| fig-cap: "Posterior predictive check model s18"
+#| eval: true
+#| fig-height: 6
+#| fig-width: 6
+
+# Compile and run models if not in cache
+if (!file.exists("fits/paper1/fit.s18.post.RDS")) source("models-scripts/model-s18.R")
+
+fit.s18.post <- readRDS("fits/paper1/fit.s18.post.RDS")
+
+yrep.s18 <- fit.s18.post$draws("y_rep", format = "df")
+
+
+ppcheck_dist(yrep.s18, dobs) + labs(subtitle = "Model s18") + 
+  coord_cartesian(xlim = c(-5,5))
+
+
+```
+
+
+```{r}
+#| label: fig-stat-check-s18
+#| fig-cap: "Posterior predictive check model s18"
+#| eval: true
+#| fig-height: 6
+#| fig-width: 6
+
+stat_check_s18 <- ppcheck_stat(yrep.s18, dobs,
+                              group = c("type", "time", "treat"),
+                         fill_color = "treat",
+                         stat = sd)
+
+
+stat_check_s18$plot_contrast + coord_cartesian(xlim = c(-0.5, 1))
+
+
+```
+
+
+
+
 
 ```{r}
 #| label: fig-loo-influential-s13
@@ -1103,13 +1139,23 @@ stat_check_s13$plot_contrast + coord_cartesian(xlim = c(-0.5, 1))
 #| fig-width: 6
 
 loo.s13 <- readRDS("fits/paper1/loo_s13.RDS")
+loo.s18 <- readRDS("fits/paper1/loo_s18.RDS")
+
 
 bind_rows(
   
   loo.s13$pointwise |> 
   data.frame() |> 
   rownames_to_column(var = "id") |> 
-  mutate(model = "s13")) |> 
+  mutate(model = "s13"), 
+  
+  loo.s18$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s18") 
+  
+  
+  ) |> 
   
   mutate(id = gsub("log_lik_part\\[", "", id), 
          id = gsub("\\]", "", id), 
@@ -1131,27 +1177,29 @@ bind_rows(
 ```
 
 
-Adding s13 to the model comparison table 
+Adding s13 to the model comparison table indicate that this slightly simplified model performs better than s12. The difference is robust with regards to the ELPD difference but still uncertain because of unreliable Pareto k values (@tbl-paretok-s8s13).   
 
 
 ```{r}
 #| label: tbl-paretok-s8s13
-#| tbl-cap: "Model structires, Pareto K statistics and ELPD for models s8-s13 ."
+#| tbl-cap: "Model structures, Pareto K statistics and ELPD for models s8-s13 ."
 
 
 # Model structures
 
 model_struct <- data.frame(
-  model = c("s8", "s10", "s11", "s12", "s13"), 
+  model = c("s8", "s10", "s11", "s12", "s13", "s18"), 
   likelihood = c("MVN, full correlation matrix", 
                  "MVN, full correlation matrix",
                  "Univariate t-distribution", 
                  "MVT, full correlation matrix", 
-                  "MVT, full correlation matrix"), 
+                  "MVT, full correlation matrix", 
+                 "Univariate t-distribution"), 
   sigma = c("time &times; type", 
             "time &times; type &times; treat", 
             "time &times; type &times; treat", 
             "time &times; type &times; treat", 
+            "time &times; type", 
             "time &times; type"))
 
 
@@ -1185,7 +1233,12 @@ pareto_k_stats <- bind_rows(
     loo.s13$pointwise |> 
   data.frame() |> 
   rownames_to_column(var = "id") |> 
-  mutate(model = "s13")
+  mutate(model = "s13"), 
+  
+    loo.s18$pointwise |> 
+  data.frame() |> 
+  rownames_to_column(var = "id") |> 
+  mutate(model = "s18")
   
   
   )  |> 
@@ -1197,13 +1250,12 @@ pareto_k_stats <- bind_rows(
             n_pk1 = sum(pk1)) 
 
 
-
-
 loo_compare(list("s8" = loo.s8, 
                  "s10" = loo.s10,
                  "s11" = loo.s11, 
                  "s12" = loo.s12, 
-                 "s13" = loo.s13)) |> 
+                 "s13" = loo.s13, 
+                 "s18" = loo.s18)) |> 
     data.frame() |> 
   rownames_to_column(var = "model") |> 
   
@@ -1227,7 +1279,7 @@ loo_compare(list("s8" = loo.s8,
 
 ### Simplification of the correlation structure 
 
-A new set of models simplifies the correlation structure. Instead of estimating the full $M \times M$ correlation matrix with an LKJ prior (as in models s8-s13, where $M = 2K$ is the number of measurement types stacked over the two post-intervention time points), this set of models relates each outcome to a small number of latent variables, following the factor approach used in the simulations (@sec-synth-data). Each measurement type at each time point is given a loading onto $D$ latent factors, collected in a $M \times D$ loading matrix $\Lambda$, together with a vector $\psi$ of length $M$ containing residual (idiosyncratic) standard deviations. Rows $1$ to $K$ of $\Lambda$ hold the loadings for the first post-intervention time point and rows $K+1$ to $M$ the loadings for the second. Because the two blocks of rows are estimated separately, the within-time correlation structures are free to differ between time points, whereas the between-time correlations are restricted to the rank-$D$ product of the two blocks. The implied correlation matrix is obtained by normalising the factor covariance to unit diagonal, and the covariance matrix is then built from the Cholesky factor of this correlation matrix and the residual scales $\sigma$:
+A new set of models simplifies the correlation structure. Instead of estimating the full $M \times M$ correlation matrix with an LKJ prior (as in models s8-s13, where $M = 2K$ is the number of measurement types stacked over the two post-intervention time points), this set of models relates each outcome to a small number of latent variables, following the factor approach used in the simulations (@sec-synth-data; see also [the Stan User Guide](https://mc-stan.org/docs/stan-users-guide/missing-data.html#loading-matrix-for-factor-analysis)). Each measurement type at each time point is given a loading onto $D$ latent factors, collected in a $M \times D$ loading matrix $\Lambda$, together with a vector $\psi$ of length $M$ containing residual standard deviations (time &times; treat &times; type, or time &times; type). Rows $1$ to $K$ of $\Lambda$ hold the loadings for the first post-intervention time point and rows $K+1$ to $M$ the loadings for the second. Because the two blocks of rows are estimated separately, the within-time correlation structures are free to differ between time points, whereas the between-time correlations are restricted to correlations induced by factor loadings. The implied correlation matrix is obtained by normalising the factor covariance to unit diagonal, and the covariance matrix is then built from the Cholesky factor of this correlation matrix and the residual scales $\sigma$:
 
 $$
 \begin{align}
@@ -1239,7 +1291,7 @@ L_\Sigma &= \operatorname{diag}(\sigma) L_R \\
 \end{align}
 $$
 
-Since $R$ has unit diagonal, $\sigma$ keeps its interpretation as the marginal residual standard deviation for each time $\times$ type (s16 and s17) or time $\times$ type $\times$ treatment (s14 and s15) combination, exactly as in the models with a full correlation matrix. Only the correlation part is constrained to a low-rank structure. The factor model is not identified with respect to rotations of $\Lambda$, as any orthogonal rotation of the factors leaves $\Lambda \Lambda^T$ unchanged. Following @geweke1996 [p. 565], we therefore fix the upper triangle of $\Lambda$ to zero and constrain its diagonal to be positive, which enables identification of the loading parameters. With $D = 4$ latent factors and $K = 12$ measurement types this gives $DM - D(D+1)/2 = 86$ free lower-triangular loadings, $D = 4$ diagonal loadings and $M = 24$ residual standard deviations, compared to $M(M-1)/2 = 276$ free correlation coefficients in the full correlation matrix. Loadings were given standard normal priors and $\psi$ a log-normal prior centred at 0.6 to keep the residual standard deviations positive and away from zero. The models are otherwise identical to s8 (s16, multivariate normal), s10 (s14, multivariate normal), and their multivariate t-distribution counterparts (s17 and s15, respectively).
+Since $R$ has unit diagonal, $\sigma$ keeps its interpretation as the marginal residual standard deviation for each time $\times$ type (s16 and s17) or time $\times$ type $\times$ treatment (s14 and s15) combination, exactly as in the models with a full correlation matrix. Only the correlation part is constrained to a low-rank structure (low-rank in the meaning that the correlation matrix is informed by a smaller number of loadings). The factor model is not identified with respect to rotations of $\Lambda$, as any orthogonal rotation of the factors leaves $\Lambda \Lambda^T$ unchanged. Following @geweke1996 [p. 565], we therefore fix the upper triangle of $\Lambda$ to zero and constrain its diagonal to be positive, which enables identification of the loading parameters. With $D = 4$ latent factors and $K = 12$ measurement types this gives $DM - D(D+1)/2 = 86$ free lower-triangular loadings, $D = 4$ diagonal loadings and $M = 24$ residual standard deviations, compared to $M(M-1)/2 = 276$ free correlation coefficients in the full correlation matrix. Loadings were given standard normal priors and $\psi$ a log-normal prior centred at 0.6 to keep the residual standard deviations positive and away from zero. The models are otherwise identical to s8 (s16, multivariate normal), s10 (s14, multivariate normal), and their multivariate t-distribution counterparts (s17 and s15, respectively).
 
 ```{r}
 #| echo: false
@@ -1253,7 +1305,7 @@ M <- 2 * K
 D * M - D* (D+1) / 2
 ```
 
-Increasing the number of loadings to $D = 6$ gives $DM - D(D+1)/2 = 123$ free parameter and potentially more flexibility. Models s14 to s17 has been run also with $D = 6$ to assess the effect of a larger set of loadings. We include this run in the full comparison table below. Additionaly, for comparison, a univariate t-distribution model is added with the time &times; type structure for the residual variance. Together the full comparison suggest that model s13 (MVT with time &times; type variance structure) has the best predictive accuracy. A small number of participants have Pareto k values larger than 0.7, but none larger than 1 (@tbl-full-model-comp). The multivariate models have better estimated predictive accuracy compared to the univariate counterparts and the robust versions (*t*-distributions) perform better than the normal likelihoods. Finally, the simplified variance structure generally performs better than the more complex structure. Together this suggest that the candidate model s13 is preffered for inference. We will use it together with the univariate version in subseqent steps.   
+Increasing the number of loadings to $D = 6$ gives $DM - D(D+1)/2 = 123$ free parameter and potentially more flexibility. Models s14 to s17 has been run also with $D = 6$ to assess the effect of a larger set of loadings. We include this run in the full comparison table below. Together the full comparison suggest that model s13 (MVT with time &times; type variance structure) has the best predictive accuracy. A small number of participants have Pareto k values larger than 0.7, but none larger than 1 (@tbl-full-model-comp). The multivariate models have better estimated predictive accuracy compared to the univariate counterparts and the robust versions (*t*-distributions) perform better than the normal likelihoods. Finally, the simplified variance structure generally performs better than the more complex structure. Together this suggest that the candidate model s13 is preferred for inference. We will use it together with the univariate version in subsequent steps.   
 
 
 ```{r}
@@ -1426,11 +1478,12 @@ loo_compare(list("s8" = loo.s8,
                  "s14" = loo.s14, 
                  "s15" = loo.s15, 
                  "s16" = loo.s16, 
-                 "s17" = loo.s17,
+                 "s17" = loo.s17 ,
                  "s14-D6" = loo.s14d6, 
                  "s15-D6" = loo.s15d6, 
                  "s16-D6" = loo.s16d6, 
-                 "s17-D6" = loo.s17d6)) |> 
+                 "s17-D6" = loo.s17d6
+                )) |> 
     data.frame() |> 
   rownames_to_column(var = "model") |> 
   
@@ -1451,52 +1504,6 @@ loo_compare(list("s8" = loo.s8,
 
 
 ```
-
-
-
-
-
-
-
-
-
-All multivariate models consider so far has been parameterized using a large covariance structure. 
-
-
-
-
-
-
-
-### Model expansion: Robust 
-
-
-
-
-```{r}
-#| eval: false
-# Check nu parameters for the multivariate-t models 
-nu.s13 <- fit.s13.post$draws("nu", format = "df")
-
-  nu.s13 |> 
-    
-  pivot_longer(cols = starts_with("nu")) |> 
-    
-    mutate(type = gsub("\\[|\\]|nu", "", name)) |> 
-  inner_join(labels |> 
-               mutate(type = as.character(type))) |> 
-
-  ggplot(aes(value, color = label)) + 
-    geom_density(stat = "density") +
-    coord_cartesian(xlim = c(0, 50))
-
-```
-
-
-### Simplification of the correlation structure 
-
-
-
 
 
 

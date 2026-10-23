@@ -70,7 +70,7 @@ book:
     - 02-fa.qmd
     - 03-metsyn-intro.qmd
     - 04-metsyn-models.qmd
-  #  - 05-metsyn-simulations.qmd
+    - 05-metsyn-simulations.qmd
   #  - 06-metsyn-postpred.qmd
   #  - 07-metsyn-inference.qmd
   #  - 08-ogtt.qmd
