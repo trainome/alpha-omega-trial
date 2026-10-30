@@ -64,8 +64,8 @@ Simulating the full data set leads to synthetic data patterns presented in @fig-
 #| label: fig-var-cor-synth
 #| fig-cap: "Residual variation and correlation pattern within and between variables in the synthetic data example."
 #| eval: true
-#| fig-height: 6
-#| fig-width: 12
+#| fig-height: 4.5
+#| fig-width: 5.9
 
 # d, a data set with participant, treat, sex, 
 # age, time, analyte, value.
@@ -90,8 +90,8 @@ The missing data patterns from the medium sized missingness scenario corresponds
 #| label: fig-missing-synth
 #| fig-cap: "Missing data patterns in the exemple simulated data set."
 #| eval: true
-#| fig-height: 10
-#| fig-width: 6
+#| fig-height: 8.5
+#| fig-width: 5.1
 d$miss$raw_df |> 
     arrange(participant, time, type) |>
   mutate(miss = if_else(is.na(y), "miss", "obs"), 
@@ -204,8 +204,8 @@ Using `r ndatasets` simulated data sets we are comparing models S13 to s18 for m
 #| label: fig-chain-diag
 #| fig-cap: "Chain dioagnostics under the full three by two simulated scenarios."
 #| eval: true
-#| fig-height: 4
-#| fig-width: 8
+#| fig-height: 3
+#| fig-width: 5.9
 
 p1
 
@@ -228,8 +228,8 @@ For each estimate (treatment contrasts, 2 &times; 12 per data set), coverage of 
 #| label: fig-sim-cred-int
 #| fig-cap: "(A) Coverage of 90% credible intervals, (B) credible interval widths, and (C) differences in credible interval widths between models. "
 #| eval: true
-#| fig-height: 12
-#| fig-width: 18
+#| fig-height: 7.5
+#| fig-width: 5.9
 
 
 
@@ -367,8 +367,8 @@ Accuracy was assessed as the error of the posterior mean of each treatment contr
 #| label: fig-sim-error
 #| fig-cap: "(A) Root mean squared error (RMSE) of posterior mean treatment contrasts, (B) paired differences in absolute error between models (S13 - S18) in zero and non-zero effects, and (C) proportion of estimates where S13 had lower absolute error than S18."
 #| eval: true
-#| fig-height: 12
-#| fig-width: 18
+#| fig-height: 7.5
+#| fig-width: 5.9
 
 # Extract error comparison (error of the posterior mean per estimate)
 files <- list.files("data-sim3/error_comp")
@@ -482,8 +482,8 @@ Finally, we compared the error associated with data imputation. Overall, the RMS
 #| label: fig-sim-impute
 #| fig-cap: "(A) Root mean squared error (RMSE) of posterior mean imputed values, (B) paired differences in absolute imputation error between models (S13 - S18) for baseline (pre) and post-intervention (y) values, and (C) proportion of imputed values where S13 had lower absolute error than S18."
 #| eval: true
-#| fig-height: 12
-#| fig-width: 18
+#| fig-height: 7.5
+#| fig-width: 5.9
 
 # Extract imputation error (error of the posterior mean per imputed value)
 files <- list.files("data-sim3/impute_error")

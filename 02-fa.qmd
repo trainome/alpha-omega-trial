@@ -174,8 +174,8 @@ draws.m2 |>
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 6
+#| fig-width: 5.9
+#| fig-height: 5.9
 #| fig-cap: "Model performance metrics from Model 2."
 #| label: fig-m2-modelperformance
 
@@ -258,8 +258,8 @@ Posterior predictive checks showed satisfactory patterns between replicated data
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 8
+#| fig-width: 5.9
+#| fig-height: 7.9
 #| fig-cap: "Posterior predictive check of Model 2."
 #| echo: false
 #| label: fig-m2-postpred
@@ -313,8 +313,8 @@ Krill oil supplementation robustly increased whole blood fatty acid composition 
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 8
+#| fig-width: 5.9
+#| fig-height: 7.9
 #| fig-cap: "Predictions of fatty acid concentration in response to treatment. Pre-intervention values are means per treatment group, post-intervention means are predicted from the model with 99% PI."
 #| label: fig-m2-meanpred
 
@@ -474,8 +474,8 @@ AOData::omega3  |>
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 6
+#| fig-width: 5.9
+#| fig-height: 5.9
 #| fig-cap: "Posterior densities for differences between treatment groups in fatty acid concentrations."
 #| echo: false
 #| label: fig-m2-contrast
@@ -655,8 +655,8 @@ Prior predictive simulations confirm the general structure of the model (@fig-m3
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 8
+#| fig-width: 5.9
+#| fig-height: 7.9
 #| fig-cap: "Prior predictive check model 3 (data imputation)."
 #| echo: false
 #| label: fig-m3-prior
@@ -768,8 +768,8 @@ draws.m3 |>
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 6
+#| fig-width: 5.9
+#| fig-height: 5.9
 #| fig-cap: "Model performance metrics model 3."
 #| echo: false
 #| label: fig-m3-performance
@@ -861,8 +861,8 @@ p1 / p2
 Posterior predictive checks indicated that the model capture general patterns in the data (@fig-m3-postpred). 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 8
+#| fig-width: 5.9
+#| fig-height: 7.9
 #| fig-cap: "Posterior predictive check of Model 3. Thin lines represent model simulations (n = 50), thick lines represent observed data."
 #| echo: false
 #| label: fig-m3-postpred
@@ -919,8 +919,8 @@ The imputation model generally agreed with the complete-case analysis on the eff
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 7
+#| fig-width: 5.9
+#| fig-height: 6.9
 #| fig-cap: "Model predictions. Pre-intervention values are observed means, post-treatment (T2, T4) values are model predictions conditional on pre-intervention value with 99% percentile intervals. The omega-3 index is EPA and DHA content of erythrocytes expressed as a percent of total identified fatty acids."
 #| echo: false
 #| label: fig-m3-predictions
@@ -1088,8 +1088,8 @@ AOData::omega3  |>
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 6
+#| fig-width: 5.9
+#| fig-height: 5.9
 #| fig-cap: "Posterior densities for differences between treatment groups in fatty acid concentrations (data imputation model)."
 #| echo: false
 #| label: fig-m3-contrast
@@ -1183,8 +1183,8 @@ draws.m3 |>
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 6
+#| fig-width: 5.9
+#| fig-height: 5.9
 #| fig-cap: "Posterior predictions for fatty acid concentrations in complete-case analysis (model m2) and data imputation model (model m3)."
 #| echo: false
 #| label: fig-m3m2-predictions
@@ -1247,8 +1247,8 @@ m3_sum |>
 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 6
+#| fig-width: 5.9
+#| fig-height: 5.9
 #| fig-cap: "Comparing inference from complete-case and imputation models."
 #| echo: false
 #| label: fig-m2m3-comp
@@ -1411,8 +1411,8 @@ bind_rows(
 Model `m3` does not enable treatment- and time-wise heterogeneous variation. In model `m4` we therefore add $\sigma_{\text{[FA, TX]}} \sim \operatorname{Exponential}(1)$, in model `m5` we add  $\sigma_{\text{[FA, TI]}} \sim \operatorname{Exponential}(1)$, and model `m6` adds $\sigma_{\text{[FA, TI, TX]}} \sim \operatorname{Exponential}(1)$. Model performance metrics confirmed that all three extended models provided reliable chain convergence characteristics (@fig-m4-performance). 
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 6
+#| fig-width: 5.9
+#| fig-height: 5.9
 #| fig-cap: "Prior predictive check of Models 4-6."
 #| echo: false
 #| label: fig-m4-priorpred
@@ -1489,8 +1489,8 @@ draws.m4 |>
 
 
 ```{r}
-#| fig-width: 8
-#| fig-height: 10
+#| fig-width: 5.9
+#| fig-height: 7.4
 #| fig-cap: "Model performance metrics models 4, 5, and 6."
 #| echo: false
 #| label: fig-m4-performance
@@ -1808,8 +1808,8 @@ fa_labels <- data.frame(
 #| eval: true
 #| label: fig-fa-infer
 #| fig-cap: "Adjusted group means and treatment contrasts of fatty acids concentrations and the omega-3 index in whole blood. Error bars in treatment-group means represents 95% CrI, posterior contrasts are displayed as the full posterior distribution ratio between krill oil and placebo estimates at time-point T2 and T4 (1 indicating equivalent concentrations)."
-#| fig-width: 3.543
-#| fig-height: 9
+#| fig-width: 3.3
+#| fig-height: 8.5
 
 
 

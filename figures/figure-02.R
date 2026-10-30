@@ -30,7 +30,14 @@ training_volume_fig <- traindat |>
   labs(x = "Session", y = "Change in training volume<br>(% from session 1)") +
   scale_y_continuous(limits = c(-5, 50), expand = c(0, 0)) +
   scale_x_continuous(limits = c(1, 20), expand = c(0, 0)) +
-  theme(axis.title.y = element_markdown(angle = 0))
+  theme(
+    axis.title.y = element_markdown(
+      angle = 0,
+      margin = margin(t = 20, r = 10),
+      lineheight = 1.4,
+      hjust = 1
+    )
+  )
 
 
 # Map study week to x position (week 0 at 0.14, week 20 at 0.9)
@@ -208,7 +215,7 @@ study_design <- data.frame(x = c(0, 1), y = c(0, 1)) |>
     "text",
     x = wk(meas_wk) + 0.01,
     y = (y_bend + 0.73) / 2,
-    label = c("Baseline", "Supplementation", "Combined"),
+    label = c("Baseline", "Supplementation-only", "Combined"),
     hjust = 0,
     size = 7 / .pt
   )

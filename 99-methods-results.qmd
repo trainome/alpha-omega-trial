@@ -19,6 +19,510 @@ editor_options:
 ```
 
 
+```{r}
+#| label: results-n-participants
+#| echo: false
+#| message: false
+#| warning: false
+
+source("./R/packages.R")
+source("./R/data-prep.R") # criteria_dat, total_participants, data_load_s7s10()
+
+# Import data set for the metabolic syndrome analysis
+# (as in figures/figure-05.R, model s13). ms_dat$dat is in long format with
+# one row per participant (P), follow-up time (1 = T2, 2 = T4) and outcome
+# (type), y_miss/pre_miss = 1 when observed and treat = 1/2.
+ms_dat <- data_load_s7s10()
+
+# Import data set for the OGTT analysis
+# (as in 08-ogtt.qmd, model mo4). One row per participant, time-point (T1, T2,
+# T4) and sampling minute, glucose = NA when missing.
+ogtt_dat <- AOData::glucose |>
+  select(participant, time, min, glucose) |>
+  inner_join(AOData::idkeys |> select(participant, treat)) |>
+  filter(participant %in% unique(criteria_dat$participant)) |>
+  pivot_wider(values_from = glucose, names_from = time) |>
+  pivot_longer(cols = T1:T4, values_to = "glucose", names_to = "time")
+
+# Import data set for the FA analysis
+# (as in figures/figure-02.R). One row per participant, time-point and fatty
+# acid (incl. the omega-3 index), value = NA when missing. Participants without
+# baseline data are excluded, as in the model.
+fa_dat <- AOData::omega3 |>
+  inner_join(AOData::idkeys) |>
+  filter(time %in% c("T1", "T2", "T4"), participant %in% total_participants) |>
+  select(participant, time, treat, C16:C226n3, omega3index) |>
+  pivot_longer(cols = c(C16:C226n3, omega3index), names_to = "fa", values_to = "value") |>
+  pivot_wider(names_from = time, values_from = value) |>
+  filter(!is.na(T1)) |>
+  pivot_longer(cols = T1:T4, names_to = "time", values_to = "value")
+
+# Participants included in the analyses
+tab_ids <- unique(ogtt_dat$participant)
+
+# Calculate number of participants
+n_part <- ogtt_dat |>
+  distinct(participant, treat) |>
+  summarise(.by = treat,
+            n = n())
+
+total_n <- sum(n_part$n)
+n_part_ls <- with(n_part, setNames(as.list(n), treat))
+
+# Number completed the intervention
+completers_ls <- AOData::idkeys |>
+  filter(completed == "t4") |>
+  distinct(participant, treat) |>
+  summarise(.by = treat,
+            n = n()) |>
+  with(setNames(as.list(n), treat))
+
+
+
+
+```
+
+
+```{r}
+#| label: results-fa
+#| echo: false
+#| message: false
+#| warning: false
+
+# Estimates from the fatty acid model (m4, as in figures/figure-02.R). The model
+# is fitted to log-transformed, standardized values, with FA indexed
+# alphabetically (dense_rank(fa)), TI = 1 (T2), 2 (T4) and TX = 1 (ctrl),
+# 2 (omega).
+fit.m4p <- readRDS("fits/paper1/fit.m4p.RDS")
+
+# Scale parameters used for standardization (log scale, all time-points)
+fa_scale <- fa_dat |>
+  summarise(.by = fa,
+            m = mean(log(value), na.rm = TRUE),
+            s = sd(log(value), na.rm = TRUE)) |>
+  mutate(FA = dense_rank(fa))
+
+# Mean standardized baseline value per FA (predictions at average baseline)
+fa_pre <- fa_dat |>
+  filter(time == "T1") |>
+  inner_join(fa_scale, by = "fa") |>
+  summarise(.by = FA, pre = mean((log(value) - m) / s))
+
+# Posterior predicted means (natural scale) per FA, time-point and treatment
+fa_beta <- fit.m4p$draws("beta", format = "df") |>
+  as_tibble() |>
+  pivot_longer(starts_with("beta"), names_to = "par", values_to = "beta") |>
+  mutate(FA = as.integer(gsub("beta\\[(\\d+)\\]", "\\1", par))) |>
+  select(.draw, FA, beta)
+
+fa_draws <- fit.m4p$draws("alpha", format = "df") |>
+  as_tibble() |>
+  pivot_longer(starts_with("alpha"), names_to = "par", values_to = "alpha") |>
+  mutate(FA = as.integer(gsub("alpha\\[(\\d+),(\\d+),(\\d+)\\]", "\\1", par)),
+         TI = as.integer(gsub("alpha\\[(\\d+),(\\d+),(\\d+)\\]", "\\2", par)),
+         TX = as.integer(gsub("alpha\\[(\\d+),(\\d+),(\\d+)\\]", "\\3", par))) |>
+  select(.draw, FA, TI, TX, alpha) |>
+  inner_join(fa_beta, by = c(".draw", "FA")) |>
+  inner_join(fa_pre, by = "FA") |>
+  inner_join(fa_scale, by = "FA") |>
+  mutate(mu = exp(m + s * (alpha + beta * pre)),
+         treat = if_else(TX == 1, "ctrl", "omega"),
+         time = if_else(TI == 1, "T2", "T4")) |>
+  select(.draw, fa, time, treat, mu) |>
+  pivot_wider(names_from = treat, values_from = mu) |>
+  # Relative (%) and absolute differences, krill oil vs. placebo
+  mutate(rel = 100 * (omega / ctrl - 1),
+         abs = omega - ctrl)
+
+# Summaries: posterior mean and 95% credible interval
+fa_est <- fa_draws |>
+  pivot_longer(c(ctrl, omega, rel, abs)) |>
+  summarise(.by = c(fa, time, name),
+            est = mean(value),
+            lwr = quantile(value, 0.025),
+            upr = quantile(value, 0.975))
+
+# Observed baseline geometric means per group (as in figures/figure-02.R)
+fa_base <- fa_dat |>
+  filter(time == "T1", !is.na(value)) |>
+  summarise(.by = c(fa, treat), est = exp(mean(log(value))))
+
+# Text helpers. fa_txt("C205n3", "T2") -> "+103 % (95% CrI: 80, 128)"
+# what = "rel" (% difference) or "abs" (difference on the natural scale)
+fmt_num <- function(x, digits) sub("^-", "−", sprintf(paste0("%.", digits, "f"), round(x, digits) + 0))
+
+fa_txt <- function(fa_name, tp, what = "rel", digits = 0) {
+  e <- fa_est |> filter(fa == fa_name, time == tp, name == what)
+  est <- fmt_num(e$est, digits)
+  if (what == "rel" && e$est > 0) est <- paste0("+", est)
+  unit <- if (what == "rel") " %" else ""
+  paste0(est, unit, " (95% CrI: ", fmt_num(e$lwr, digits), ", ", fmt_num(e$upr, digits), ")")
+}
+
+fa_mean <- function(fa_name, tp, tx, digits = 1) {
+  if (tp == "T1") {
+    v <- fa_base |> filter(fa == fa_name, treat == tx) |> pull(est)
+  } else {
+    v <- fa_est |> filter(fa == fa_name, time == tp, name == tx) |> pull(est)
+  }
+  sprintf(paste0("%.", digits, "f"), v)
+}
+```
+
+
+```{r}
+#| label: results-ogtt
+#| echo: false
+#| message: false
+#| warning: false
+
+# Estimates from the OGTT model (mo4, see 08-ogtt.qmd). Population-level curves
+# per cell g (1-6 = T1ctrl, T1omega, T2ctrl, T2omega, T4ctrl, T4omega) are
+# a_g[g] + B %*% b_g[, g] on the standardized scale. Posterior draws of the
+# population-level parameters are cached, as the full fit is large (~1 GB).
+library(splines)
+
+ogtt_pop_file <- "data-derived/ogtt-mo4-pop-draws.RDS"
+
+# Re-create the cache when it is missing or older than the fit
+if (!file.exists(ogtt_pop_file) ||
+    file.mtime("fits/paper1/fit.mo4.RDS") > file.mtime(ogtt_pop_file)) {
+  readRDS("fits/paper1/fit.mo4.RDS")$draws(c("a_g", "b_g"), format = "df") |>
+    as_tibble() |>
+    saveRDS(ogtt_pop_file)
+}
+ogtt_pop <- readRDS(ogtt_pop_file)
+
+# Basis and standardization as in the model (same rows as the model data)
+ogtt_B <- bs(ogtt_dat$min, df = 5)
+ogtt_m <- mean(ogtt_dat$glucose, na.rm = TRUE)
+ogtt_s <- sd(ogtt_dat$glucose, na.rm = TRUE)
+
+ogtt_cells <- data.frame(g = 1:6,
+                         time  = rep(c("T1", "T2", "T4"), each = 2),
+                         treat = rep(c("ctrl", "omega"), times = 3))
+
+# Predicted population-level glucose (mmol L^-1^) on a 1-min grid, per draw and cell
+min_grid <- 0:120
+B_grid <- predict(ogtt_B, min_grid)
+
+ogtt_pred <- lapply(1:6, function(g) {
+  a <- ogtt_pop[[sprintf("a_g[%d]", g)]]
+  b <- as.matrix(ogtt_pop[, sprintf("b_g[%d,%d]", 1:5, g)])
+  mu <- (matrix(a, nrow = length(a), ncol = length(min_grid)) + b %*% t(B_grid)) *
+    ogtt_s + ogtt_m
+  data.frame(.draw = rep(seq_along(a), times = length(min_grid)),
+             min = rep(min_grid, each = length(a)),
+             g = g,
+             mu = as.vector(mu))
+}) |>
+  bind_rows() |>
+  inner_join(ogtt_cells, by = "g") |>
+  select(-g) |>
+  pivot_wider(names_from = c(time, treat), values_from = mu)
+
+# Within-group changes and between-group differences in change
+ogtt_contr <- ogtt_pred |>
+  mutate(
+    # Within-group changes
+    ctrl_T1_T2  = T2_ctrl - T1_ctrl,  omega_T1_T2 = T2_omega - T1_omega,
+    ctrl_T2_T4  = T4_ctrl - T2_ctrl,  omega_T2_T4 = T4_omega - T2_omega,
+    ctrl_T1_T4  = T4_ctrl - T1_ctrl,  omega_T1_T4 = T4_omega - T1_omega,
+    # Krill oil - placebo, difference in change
+    diff_T1_T2 = omega_T1_T2 - ctrl_T1_T2,
+    diff_T2_T4 = omega_T2_T4 - ctrl_T2_T4,
+    diff_T1_T4 = omega_T1_T4 - ctrl_T1_T4
+  ) |>
+  select(.draw, min, ctrl_T1_T2:diff_T1_T4)
+
+# Average contrast (mmol L^-1^) over a window of the OGTT, i.e. the difference in
+# area under the curve divided by the window length. Returns
+# "-0.12 mmol L^-1^ (95% CrI: -0.40, 0.15)".
+ogtt_txt <- function(contrast, from = 0, to = 120, digits = 2) {
+  v <- ogtt_contr |>
+    filter(min >= from, min <= to) |>
+    summarise(.by = .draw, val = mean(.data[[contrast]])) |>
+    pull(val)
+  fmt <- function(x) sub("^-", "−", sprintf(paste0("%.", digits, "f"), round(x, digits) + 0))
+  paste0(fmt(mean(v)), " mmol L^-1^ (95% CrI: ",
+         fmt(quantile(v, 0.025)), ", ", fmt(quantile(v, 0.975)), ")")
+}
+
+
+
+```
+
+
+```{r}
+#| label: results-ms
+#| echo: false
+#| message: false
+#| warning: false
+
+# Estimates from the multivariate model (s13, as in figures/figure-05.R).
+# alpha[time, type, treat] (time 1 = T2, 2 = T4; treat 1 = ctrl, 2 = omega)
+# and beta[type, time] are on the standardized scale (log scale for TG and
+# HOMA2IR). Posterior draws are cached, as the full fit is large (~0.9 GB).
+ms_draws_file <- "data-derived/ms-s13-alpha-beta-draws.RDS"
+
+# Re-create the cache when it is missing or older than the fit
+if (!file.exists(ms_draws_file) ||
+    file.mtime("fits/paper1/fit.s13.post.RDS") > file.mtime(ms_draws_file)) {
+  readRDS("fits/paper1/fit.s13.post.RDS")$draws(c("alpha", "beta"), format = "df") |>
+    as_tibble() |>
+    saveRDS(ms_draws_file)
+}
+ms_draws <- readRDS(ms_draws_file)
+
+# Mean standardized pre-intervention value per outcome (observed)
+ms_pre <- ms_dat$dat |>
+  filter(pre_miss == 1) |>
+  distinct(P, type, pre_obs) |>
+  summarise(.by = type, pre = mean(pre_obs))
+
+ms_alpha <- ms_draws |>
+  select(.draw, starts_with("alpha")) |>
+  pivot_longer(-.draw, values_to = "alpha") |>
+  mutate(name = gsub("alpha\\[|\\]", "", name)) |>
+  separate(name, into = c("time", "type", "treat"), sep = ",", convert = TRUE)
+
+ms_beta <- ms_draws |>
+  select(.draw, starts_with("beta")) |>
+  pivot_longer(-.draw, values_to = "beta") |>
+  mutate(name = gsub("beta\\[|\\]", "", name)) |>
+  separate(name, into = c("type", "time"), sep = ",", convert = TRUE)
+
+# Adjusted means (natural scale) at the average baseline value, per draw
+ms_pred <- ms_alpha |>
+  inner_join(ms_beta, by = c(".draw", "time", "type")) |>
+  inner_join(ms_pre, by = "type") |>
+  inner_join(ms_dat$scale, by = "type") |>
+  mutate(z = alpha + beta * pre,
+         mu = if_else(transform == "log", exp(mean + sd * z), mean + sd * z),
+         time = if_else(time == 1, "T2", "T4"),
+         treat = if_else(treat == 1, "ctrl", "omega")) |>
+  select(.draw, analyte, transform, time, treat, z, mu)
+
+# Krill oil - placebo contrasts: difference in natural units (identity
+# outcomes) or % difference (log outcomes; 100 * (ratio - 1))
+ms_contr <- ms_pred |>
+  select(-mu) |>
+  pivot_wider(names_from = treat, values_from = z) |>
+  inner_join(ms_dat$scale |> select(analyte, sd), by = "analyte") |>
+  mutate(est = if_else(transform == "log",
+                       100 * (exp(sd * (omega - ctrl)) - 1),
+                       sd * (omega - ctrl)))
+
+# Observed baseline means (natural scale; geometric means for log outcomes)
+ms_base <- criteria_dat |>
+  filter(time == "T1", !is.na(value), participant %in% tab_ids) |>
+  summarise(.by = c(analyte, treat),
+            arith = mean(value), geo = exp(mean(log(value))))
+
+# Text helpers. ms_txt("glucose", "T2") -> "−0.08 mmol L^-1^ (95% CrI: −0.24, 0.07)";
+# log outcomes are reported as % difference.
+ms_txt <- function(analyte_name, tp, digits = 2, unit = "") {
+  e <- ms_contr |> filter(analyte == analyte_name, time == tp)
+  is_log <- e$transform[1] == "log"
+  if (is_log) { digits <- 0; unit <- " %" }
+  fmt <- function(x) sub("^-", "−", sprintf(paste0("%.", digits, "f"), round(x, digits) + 0))
+  est <- fmt(mean(e$est))
+  if (is_log && mean(e$est) > 0) est <- paste0("+", est)
+  paste0(est, unit, " (95% CrI: ", fmt(quantile(e$est, 0.025)), ", ",
+         fmt(quantile(e$est, 0.975)), ")")
+}
+
+# Probability that krill oil is lower than placebo
+ms_p_lower <- function(analyte_name, tp) {
+  e <- ms_contr |> filter(analyte == analyte_name, time == tp)
+  sprintf("%.0f %%", 100 * mean(e$est < 0))
+}
+```
+
+
+```{r}
+#| label: results-metsyn
+#| echo: false
+#| message: false
+#| warning: false
+
+# Metabolic syndrome estimates. Component contrasts use ms_contr / ms_txt()
+# from the results-ms chunk (s13). Below: the burden score (s13), the
+# diagnosis (logistic models pooled with Rubin's rules, s13) and the effect
+# modification models (s19, own baseline; s20, baseline burden score).
+
+## Burden score (s13) ----------------------------------------------------------
+# Average krill oil - placebo contrast (standardized scale) over the five
+# criteria: (-HDL + TG + (dias + sys) / 2 + glucose + waist) / 5
+burden_w <- c(HDL = -1, TG = 1, dias = 0.5, sys = 0.5, glucose = 1, waist = 1) / 5
+
+burden_draws <- ms_contr |>
+  filter(analyte %in% names(burden_w)) |>
+  mutate(w = burden_w[analyte]) |>
+  summarise(.by = c(.draw, time), est = sum(w * (omega - ctrl)))
+
+burden_txt <- function(tp) {
+  v <- burden_draws |> filter(time == tp) |> pull(est)
+  fmt <- function(x) sub("^-", "−", sprintf("%.2f", round(x, 2) + 0))
+  paste0(fmt(mean(v)), " SD (95% CrI: ", fmt(quantile(v, 0.025)), ", ",
+         fmt(quantile(v, 0.975)), ")")
+}
+burden_p <- function(tp) {
+  v <- burden_draws |> filter(time == tp) |> pull(est)
+  sprintf("%.0f %%", 100 * mean(v < 0))
+}
+
+## Diagnosis (s13, Rubin's rules) ----------------------------------------------
+# Same pooling as in figures/figure-05.R; estimates are log odds ratios
+# (time x treatment interaction), reported as odds ratios.
+diag_pooled <- readRDS("data-derived/ch-07-diag-crit-rubin-s13.RDS")$summaries |>
+  filter(term %in% c("timetime2:treattreat2", "timetime3:treattreat2")) |>
+  summarise(.by = term,
+            m = n(),
+            qbar = mean(estimate),
+            ubar = mean(std.error^2),
+            b = var(estimate)) |>
+  mutate(t = ubar + (1 + 1 / m) * b,
+         lambda = (1 + 1 / m) * b / t,
+         df = (m - 1) / lambda^2,
+         lwr = qbar - qt(0.975, df) * sqrt(t),
+         upr = qbar + qt(0.975, df) * sqrt(t),
+         time = if_else(term == "timetime2:treattreat2", "T2", "T4"))
+
+diag_txt <- function(tp) {
+  d <- diag_pooled |> filter(time == tp)
+  sprintf("OR %.2f (95%% CI: %.2f, %.2f)", exp(d$qbar), exp(d$lwr), exp(d$upr))
+}
+
+## Effect modification (s19, s20) ----------------------------------------------
+# Posterior draws are cached, as the full fits are large (~0.9 GB each).
+mod_draws_file <- "data-derived/ms-s19-s20-draws.RDS"
+
+# Re-create the cache when it is missing or older than the fits
+if (!file.exists(mod_draws_file) ||
+    any(file.mtime(c("fits/paper1/fit.s19.post.RDS", "fits/paper1/fit.s20.post.RDS")) >
+          file.mtime(mod_draws_file))) {
+  list(
+    s19 = readRDS("fits/paper1/fit.s19.post.RDS")$draws("tau_delta", format = "df") |>
+      as_tibble(),
+    s20 = readRDS("fits/paper1/fit.s20.post.RDS")$draws(
+      c("tau_gamma", "gamma", "burden_c", "ate_mets", "ate_nomets"), format = "df") |>
+      as_tibble()
+  ) |>
+    saveRDS(mod_draws_file)
+}
+mod_draws <- readRDS(mod_draws_file)
+
+# Stan type index of the burden criteria (diag_idx in models/s20.stan),
+# looked up from the data
+burden_idx <- setNames(ms_dat$scale$type, ms_dat$scale$analyte)[
+  c("HDL", "TG", "dias", "glucose", "sys", "waist")
+]
+
+# Weighted sum over the burden criteria of a [K, 2] parameter, per draw
+burden_sum <- function(d, par, t) {
+  rowSums(sapply(names(burden_idx), function(a)
+    burden_w[a] * d[[sprintf("%s[%d,%d]", par, burden_idx[a], t)]]))
+}
+
+s20_sd_burden <- apply(as.matrix(select(mod_draws$s20, starts_with("burden_c"))), 1, sd)
+
+# Change in the burden score contrast per SD of baseline burden, and burden
+# score contrasts in participants with and without metabolic syndrome at
+# baseline (and their difference)
+s20_burden <- lapply(1:2, function(t) {
+  d <- mod_draws$s20
+  data.frame(time = c("T2", "T4")[t],
+             .draw = seq_len(nrow(d)),
+             slope = burden_sum(d, "gamma", t) * s20_sd_burden,
+             mets = burden_sum(d, "ate_mets", t),
+             nomets = burden_sum(d, "ate_nomets", t)) |>
+    mutate(diff = mets - nomets)
+}) |>
+  bind_rows()
+
+s20_txt <- function(what, tp) {
+  v <- s20_burden |> filter(time == tp) |> pull(all_of(what))
+  fmt <- function(x) sub("^-", "−", sprintf("%.2f", round(x, 2) + 0))
+  paste0(fmt(mean(v)), " SD (95% CrI: ", fmt(quantile(v, 0.025)), ", ",
+         fmt(quantile(v, 0.975)), ")")
+}
+
+# Common scale of the interactions (prior Half-Normal(0, 0.25))
+tau_txt <- function(v) {
+  sprintf("%.2f (95%% CrI: %.2f, %.2f)", mean(v), quantile(v, 0.025), quantile(v, 0.975))
+}
+tau_delta_txt <- tau_txt(mod_draws$s19$tau_delta)
+tau_gamma_txt <- tau_txt(mod_draws$s20$tau_gamma)
+
+# LOO comparison with the main model (complete-case, participant-level log_lik)
+loo_mod <- loo_compare(list(
+  s13 = readRDS("fits/paper1/loo_s13.RDS"),
+  s19 = readRDS("fits/paper1/loo_s19.RDS"),
+  s20 = readRDS("fits/paper1/loo_s20.RDS")
+))
+loo_mod_txt <- function(m) {
+  sprintf("%s (SE %.1f)", sub("^-", "−", sprintf("%.1f", loo_mod[m, "elpd_diff"])),
+          loo_mod[m, "se_diff"])
+}
+```
+
+
+```{r}
+#| label: abstract-values
+#| echo: false
+#| message: false
+#| warning: false
+
+# Values for the abstract, from the same posterior draws as the results below.
+# ci_vals() returns the posterior mean and 95% CrI as formatted text
+# (list(est, lwr, upr)); plus = TRUE adds "+" to positive estimates.
+ci_vals <- function(v, digits = 2, plus = FALSE) {
+  fmt <- function(x) sub("^-", "−", sprintf(paste0("%.", digits, "f"), round(x, digits) + 0))
+  est <- fmt(mean(v))
+  if (plus && mean(v) > 0) est <- paste0("+", est)
+  list(est = est, lwr = fmt(quantile(v, 0.025)), upr = fmt(quantile(v, 0.975)))
+}
+
+# Average OGTT contrast per draw over a window (as in ogtt_txt())
+ogtt_avg <- function(contrast, from = 0, to = 120) {
+  ogtt_contr |>
+    filter(min >= from, min <= to) |>
+    summarise(.by = .draw, val = mean(.data[[contrast]])) |>
+    pull(val)
+}
+
+abs_est <- list(
+  n_completed = sum(unlist(completers_ls)),
+  # Omega-3 index (%), krill oil group at baseline and week 20, and krill oil -
+  # placebo differences (percentage points)
+  o3_base = fa_mean("omega3index", "T1", "omega", digits = 0),
+  o3_post = fa_mean("omega3index", "T4", "omega", digits = 0),
+  o3_T2 = ci_vals(filter(fa_draws, fa == "omega3index", time == "T2")$abs, 1),
+  o3_T4 = ci_vals(filter(fa_draws, fa == "omega3index", time == "T4")$abs, 1),
+  # OGTT, difference in change across the OGTT (mmol/L)
+  ogtt_T2T4 = ci_vals(ogtt_avg("diff_T2_T4")),
+  ogtt_T1T2 = ci_vals(ogtt_avg("diff_T1_T2")),
+  # Burden score (SD)
+  burden_T2 = ci_vals(filter(burden_draws, time == "T2")$est),
+  burden_T4 = ci_vals(filter(burden_draws, time == "T4")$est),
+  # Components
+  sys_T2 = ci_vals(filter(ms_contr, analyte == "sys", time == "T2")$est, 1),
+  hdl_T4 = ci_vals(filter(ms_contr, analyte == "HDL", time == "T4")$est, 2, plus = TRUE),
+  # Posterior probability of benefit (lower systolic blood pressure, higher HDL)
+  sys_T2_p = sprintf("%.0f %%", 100 * mean(filter(ms_contr, analyte == "sys", time == "T2")$est < 0)),
+  hdl_T4_p = sprintf("%.0f %%", 100 * mean(filter(ms_contr, analyte == "HDL", time == "T4")$est > 0))
+)
+```
+
+
+## Abstract
+
+Results: `r str_to_sentence(xfun::numbers_to_words(abs_est$n_completed))` participants completed the trial, attrition being mainly due to the COVID-19 pandemic. Krill oil raised the Omega-3 Index from `r abs_est$o3_base` % to `r abs_est$o3_post` % (`r abs_est$o3_T2$est` and `r abs_est$o3_T4$est` percentage points above placebo at weeks 7 and 20). Krill oil did not reliably affect glucose tolerance at week 7 (difference in within-group changes across the OGTT, `r ogtt_txt("diff_T1_T2")`), or week 20 (`r ogtt_txt("diff_T1_T4")`), nor fasting glucose, HOMA2-IR, HbA1c, adiponectin or LDL cholesterol. Krill oil lowered the composite burden score during supplementation alone (probability of reduction, `r burden_p("T2")`; `r abs_est$burden_T2$est` SD; 95 % CrI `r abs_est$burden_T2$lwr`, `r abs_est$burden_T2$upr`) and during the combined period ( `r burden_p("T4")`; `r abs_est$burden_T4$est` SD; `r abs_est$burden_T4$lwr`, `r abs_est$burden_T4$upr`), with lower systolic blood pressure at week 7 (`r abs_est$sys_T2$est` mmHg; probability of reduction, `r abs_est$sys_T2_p`) and higher HDL cholesterol at week 20 (`r abs_est$hdl_T4$est` mmol/L; probability of increase, `r abs_est$hdl_T4_p`) but did not credibly reduce the prevalence of the syndrome.
+
+
+
+
 
 ## Data analysis and statistics
 
@@ -138,76 +642,14 @@ Predictive performance of the extended models was compared with the main model u
 
 
 ```{r}
-#| label: results-n-participants
-#| echo: false
-#| message: false
-#| warning: false
-
-source("./R/packages.R")
-source("./R/data-prep.R") # criteria_dat, total_participants, data_load_s7s10()
-
-# Import data set for the metabolic syndrome analysis
-# (as in figures/figure-05.R, model s13). ms_dat$dat is in long format with
-# one row per participant (P), follow-up time (1 = T2, 2 = T4) and outcome
-# (type), y_miss/pre_miss = 1 when observed and treat = 1/2.
-ms_dat <- data_load_s7s10()
-
-# Import data set for the OGTT analysis
-# (as in 08-ogtt.qmd, model mo4). One row per participant, time-point (T1, T2,
-# T4) and sampling minute, glucose = NA when missing.
-ogtt_dat <- AOData::glucose |>
-  select(participant, time, min, glucose) |>
-  inner_join(AOData::idkeys |> select(participant, treat)) |>
-  filter(participant %in% unique(criteria_dat$participant)) |>
-  pivot_wider(values_from = glucose, names_from = time) |>
-  pivot_longer(cols = T1:T4, values_to = "glucose", names_to = "time")
-
-# Import data set for the FA analysis
-# (as in figures/figure-02.R). One row per participant, time-point and fatty
-# acid (incl. the omega-3 index), value = NA when missing. Participants without
-# baseline data are excluded, as in the model.
-fa_dat <- AOData::omega3 |>
-  inner_join(AOData::idkeys) |>
-  filter(time %in% c("T1", "T2", "T4"), participant %in% total_participants) |>
-  select(participant, time, treat, C16:C226n3, omega3index) |>
-  pivot_longer(cols = c(C16:C226n3, omega3index), names_to = "fa", values_to = "value") |>
-  pivot_wider(names_from = time, values_from = value) |>
-  filter(!is.na(T1)) |>
-  pivot_longer(cols = T1:T4, names_to = "time", values_to = "value")
-
-# Calculate number of participants
-n_part <- ogtt_dat |> 
-  distinct(participant, treat) |> 
-  summarise(.by = treat, 
-            n = n())
-
-total_n <- sum(n_part$n)
-n_part_ls <- with(n_part, setNames(as.list(n), treat))
-
-# Number completed the intervention
-completers_ls <- AOData::idkeys |> 
-  filter(completed == "t4") |> 
-  distinct(participant, treat) |> 
-  summarise(.by = treat, 
-            n = n()) |> 
-  with(setNames(as.list(n), treat))
-
-
-
-
-```
-
-
-
-```{r}
 #| label: tbl-table-01
 #| tbl-cap: "Baseline characteristics of participants. Data are mean (SD) or n (%)."
 #| echo: false
 #| message: false
 #| warning: false
 
-# Participants included in the analyses (as above)
-tab_ids <- unique(ogtt_dat$participant)
+# Participants included in the analyses (tab_ids, defined in the
+# results-n-participants chunk above the abstract)
 
 # Baseline (T1) values in natural units, one row per participant and variable
 base_long <- bind_rows(
@@ -236,7 +678,7 @@ base_metsyn <- criteria_dat |>
   pivot_wider(names_from = analyte, values_from = crit) |>
   filter(complete.cases(pick(waist, HDL, TG, glucose, sys, dias))) |>
   mutate(bp = pmax(sys, dias),
-         metsyn = as.numeric(waist == 1 & (HDL + TG + glucose + bp) >= 2))
+         metsyn = as.numeric(waist + HDL + TG + glucose + bp) >= 3)
 
 # Binary characteristics per participant
 base_bin <- base_long |>
@@ -321,6 +763,12 @@ bmi_range <- base_long |>
   filter(name == "bmi") |>
   summarise(min = min(value), max = max(value))
 
+age_range <- base_long |>
+  filter(name == "age") |>
+  summarise(min = min(value), max = max(value))
+
+
+
 pct_by <- function(d, var) {
   out <- d |>
     filter(!is.na(.data[[var]])) |>
@@ -329,9 +777,14 @@ pct_by <- function(d, var) {
     total = sprintf("%.0f", 100 * mean(d[[var]], na.rm = TRUE)))
 }
 
+
+
 obesity_pct <- pct_by(base_bin, "obesity")
 metsyn_pct  <- pct_by(base_bin, "metsyn")
 metsyn_n    <- sum(!is.na(base_bin$metsyn))
+
+
+
 ```
 
 
@@ -345,393 +798,18 @@ Of the `r total_n` randomized participants (placebo, n = `r n_part_ls$ctrl`; kri
 
 ### Intervention efficacy
 
-```{r}
-#| label: results-fa
-#| echo: false
-#| message: false
-#| warning: false
-
-# Estimates from the fatty acid model (m4, as in figures/figure-02.R). The model
-# is fitted to log-transformed, standardized values, with FA indexed
-# alphabetically (dense_rank(fa)), TI = 1 (T2), 2 (T4) and TX = 1 (ctrl),
-# 2 (omega).
-fit.m4p <- readRDS("fits/paper1/fit.m4p.RDS")
-
-# Scale parameters used for standardization (log scale, all time-points)
-fa_scale <- fa_dat |>
-  summarise(.by = fa,
-            m = mean(log(value), na.rm = TRUE),
-            s = sd(log(value), na.rm = TRUE)) |>
-  mutate(FA = dense_rank(fa))
-
-# Mean standardized baseline value per FA (predictions at average baseline)
-fa_pre <- fa_dat |>
-  filter(time == "T1") |>
-  inner_join(fa_scale, by = "fa") |>
-  summarise(.by = FA, pre = mean((log(value) - m) / s))
-
-# Posterior predicted means (natural scale) per FA, time-point and treatment
-fa_beta <- fit.m4p$draws("beta", format = "df") |>
-  as_tibble() |>
-  pivot_longer(starts_with("beta"), names_to = "par", values_to = "beta") |>
-  mutate(FA = as.integer(gsub("beta\\[(\\d+)\\]", "\\1", par))) |>
-  select(.draw, FA, beta)
-
-fa_draws <- fit.m4p$draws("alpha", format = "df") |>
-  as_tibble() |>
-  pivot_longer(starts_with("alpha"), names_to = "par", values_to = "alpha") |>
-  mutate(FA = as.integer(gsub("alpha\\[(\\d+),(\\d+),(\\d+)\\]", "\\1", par)),
-         TI = as.integer(gsub("alpha\\[(\\d+),(\\d+),(\\d+)\\]", "\\2", par)),
-         TX = as.integer(gsub("alpha\\[(\\d+),(\\d+),(\\d+)\\]", "\\3", par))) |>
-  select(.draw, FA, TI, TX, alpha) |>
-  inner_join(fa_beta, by = c(".draw", "FA")) |>
-  inner_join(fa_pre, by = "FA") |>
-  inner_join(fa_scale, by = "FA") |>
-  mutate(mu = exp(m + s * (alpha + beta * pre)),
-         treat = if_else(TX == 1, "ctrl", "omega"),
-         time = if_else(TI == 1, "T2", "T4")) |>
-  select(.draw, fa, time, treat, mu) |>
-  pivot_wider(names_from = treat, values_from = mu) |>
-  # Relative (%) and absolute differences, krill oil vs. placebo
-  mutate(rel = 100 * (omega / ctrl - 1),
-         abs = omega - ctrl)
-
-# Summaries: posterior mean and 95% credible interval
-fa_est <- fa_draws |>
-  pivot_longer(c(ctrl, omega, rel, abs)) |>
-  summarise(.by = c(fa, time, name),
-            est = mean(value),
-            lwr = quantile(value, 0.025),
-            upr = quantile(value, 0.975))
-
-# Observed baseline geometric means per group (as in figures/figure-02.R)
-fa_base <- fa_dat |>
-  filter(time == "T1", !is.na(value)) |>
-  summarise(.by = c(fa, treat), est = exp(mean(log(value))))
-
-# Text helpers. fa_txt("C205n3", "T2") -> "+103 % (95% CrI: 80, 128)"
-# what = "rel" (% difference) or "abs" (difference on the natural scale)
-fmt_num <- function(x, digits) sub("^-", "−", sprintf(paste0("%.", digits, "f"), round(x, digits) + 0))
-
-fa_txt <- function(fa_name, tp, what = "rel", digits = 0) {
-  e <- fa_est |> filter(fa == fa_name, time == tp, name == what)
-  est <- fmt_num(e$est, digits)
-  if (what == "rel" && e$est > 0) est <- paste0("+", est)
-  unit <- if (what == "rel") " %" else ""
-  paste0(est, unit, " (95% CrI: ", fmt_num(e$lwr, digits), ", ", fmt_num(e$upr, digits), ")")
-}
-
-fa_mean <- function(fa_name, tp, tx, digits = 1) {
-  if (tp == "T1") {
-    v <- fa_base |> filter(fa == fa_name, treat == tx) |> pull(est)
-  } else {
-    v <- fa_est |> filter(fa == fa_name, time == tp, name == tx) |> pull(est)
-  }
-  sprintf(paste0("%.", digits, "f"), v)
-}
-```
-
-
 Krill oil substantially raised whole-blood n-3 PUFAs compared with placebo from week 0 to week 7 (supplementation alone), and the increase was sustained to week 20 (combined supplementation and resistance training; Figs. 3 and 4). EPA more than doubled (`r fa_txt("C205n3", "T2")` at week 7 and `r fa_txt("C205n3", "T4")` at week 20), and DHA increased by `r fa_txt("C226n3", "T2")` and `r fa_txt("C226n3", "T4")`, respectively (Fig. 3). This was accompanied by reductions in the n-6 PUFAs arachidonic acid (`r fa_txt("C204n6", "T2")` and `r fa_txt("C204n6", "T4")`) and dihomo-γ-linolenic acid (`r fa_txt("C203n6", "T2")` and `r fa_txt("C203n6", "T4")`). Consequently, the Omega-3 Index increased from `r fa_mean("omega3index", "T1", "omega")` % at week 0 to `r fa_mean("omega3index", "T2", "omega")` % and `r fa_mean("omega3index", "T4", "omega")` % at weeks 7 and 20 in the krill oil group, whereas it remained at `r fa_mean("omega3index", "T2", "ctrl")` % and `r fa_mean("omega3index", "T4", "ctrl")` % in the placebo group (baseline, `r fa_mean("omega3index", "T1", "ctrl")` %; difference, `r fa_txt("omega3index", "T2", "abs", 1)` and `r fa_txt("omega3index", "T4", "abs", 1)` percentage points; Fig. 4). Krill oil supplementation thus effectively increased n-3 PUFA status, with observed changes in line with or above those expected for this dose of EPA and DHA {Walker, 2019 #1476} and consistent with a previous trial of the same krill oil product {Rundblad, 2018 #114}.
 
 
 
-### Glucose regulation 
+### Glucose regulation
 
-```{r}
-#| label: results-ogtt
-#| echo: false
-#| message: false
-#| warning: false
-
-# Estimates from the OGTT model (mo4, see 08-ogtt.qmd). Population-level curves
-# per cell g (1-6 = T1ctrl, T1omega, T2ctrl, T2omega, T4ctrl, T4omega) are
-# a_g[g] + B %*% b_g[, g] on the standardized scale. Posterior draws of the
-# population-level parameters are cached, as the full fit is large (~1 GB).
-library(splines)
-
-ogtt_pop_file <- "data-derived/ogtt-mo4-pop-draws.RDS"
-
-if (!file.exists(ogtt_pop_file)) {
-  readRDS("fits/paper1/fit.mo4.RDS")$draws(c("a_g", "b_g"), format = "df") |>
-    as_tibble() |>
-    saveRDS(ogtt_pop_file)
-}
-ogtt_pop <- readRDS(ogtt_pop_file)
-
-# Basis and standardization as in the model (same rows as the model data)
-ogtt_B <- bs(ogtt_dat$min, df = 5)
-ogtt_m <- mean(ogtt_dat$glucose, na.rm = TRUE)
-ogtt_s <- sd(ogtt_dat$glucose, na.rm = TRUE)
-
-ogtt_cells <- data.frame(g = 1:6,
-                         time  = rep(c("T1", "T2", "T4"), each = 2),
-                         treat = rep(c("ctrl", "omega"), times = 3))
-
-# Predicted population-level glucose (mmol L^-1^) on a 1-min grid, per draw and cell
-min_grid <- 0:120
-B_grid <- predict(ogtt_B, min_grid)
-
-ogtt_pred <- lapply(1:6, function(g) {
-  a <- ogtt_pop[[sprintf("a_g[%d]", g)]]
-  b <- as.matrix(ogtt_pop[, sprintf("b_g[%d,%d]", 1:5, g)])
-  mu <- (matrix(a, nrow = length(a), ncol = length(min_grid)) + b %*% t(B_grid)) *
-    ogtt_s + ogtt_m
-  data.frame(.draw = rep(seq_along(a), times = length(min_grid)),
-             min = rep(min_grid, each = length(a)),
-             g = g,
-             mu = as.vector(mu))
-}) |>
-  bind_rows() |>
-  inner_join(ogtt_cells, by = "g") |>
-  select(-g) |>
-  pivot_wider(names_from = c(time, treat), values_from = mu)
-
-# Within-group changes and between-group differences in change
-ogtt_contr <- ogtt_pred |>
-  mutate(
-    # Within-group changes
-    ctrl_T1_T2  = T2_ctrl - T1_ctrl,  omega_T1_T2 = T2_omega - T1_omega,
-    ctrl_T2_T4  = T4_ctrl - T2_ctrl,  omega_T2_T4 = T4_omega - T2_omega,
-    ctrl_T1_T4  = T4_ctrl - T1_ctrl,  omega_T1_T4 = T4_omega - T1_omega,
-    # Krill oil - placebo, difference in change
-    diff_T1_T2 = omega_T1_T2 - ctrl_T1_T2,
-    diff_T2_T4 = omega_T2_T4 - ctrl_T2_T4,
-    diff_T1_T4 = omega_T1_T4 - ctrl_T1_T4
-  ) |>
-  select(.draw, min, ctrl_T1_T2:diff_T1_T4)
-
-# Average contrast (mmol L^-1^) over a window of the OGTT, i.e. the difference in
-# area under the curve divided by the window length. Returns
-# "-0.12 mmol L^-1^ (95% CrI: -0.40, 0.15)".
-ogtt_txt <- function(contrast, from = 0, to = 120, digits = 2) {
-  v <- ogtt_contr |>
-    filter(min >= from, min <= to) |>
-    summarise(.by = .draw, val = mean(.data[[contrast]])) |>
-    pull(val)
-  fmt <- function(x) sub("^-", "−", sprintf(paste0("%.", digits, "f"), round(x, digits) + 0))
-  paste0(fmt(mean(v)), " mmol L^-1^ (95% CrI: ",
-         fmt(quantile(v, 0.025)), ", ", fmt(quantile(v, 0.975)), ")")
-}
-```
-
-
-
-Krill oil did not affect the primary outcome, the change in glucose tolerance from before to after the resistance training intervention (week 7 to week 20), compared with placebo. Throughout the OGTT, the between-group difference in blood glucose was small and uncertain (average difference in change across the OGTT, `r ogtt_txt("diff_T2_T4")`; Fig. 5A). As a secondary outcome, krill oil also did not credibly affect glucose tolerance during supplementation alone (week 0 to week 7); blood glucose between 60 and 100 min tended to be lower with krill oil than with placebo, but the difference was uncertain (average difference in change between 60 and 100 min, `r ogtt_txt("diff_T1_T2", 60, 100)`; across the OGTT, `r ogtt_txt("diff_T1_T2")`; Fig. 5A). In both groups, blood glucose during the OGTT decreased similarly from week 0 to week 20 (average change across the OGTT; placebo, `r ogtt_txt("ctrl_T1_T4")`; krill oil, `r ogtt_txt("omega_T1_T4")`; difference, `r ogtt_txt("diff_T1_T4")`; Fig. 5A, middle panels). 
-
-```{r}
-#| label: results-ms
-#| echo: false
-#| message: false
-#| warning: false
-
-# Estimates from the multivariate model (s13, as in figures/figure-05.R).
-# alpha[time, type, treat] (time 1 = T2, 2 = T4; treat 1 = ctrl, 2 = omega)
-# and beta[type, time] are on the standardized scale (log scale for TG and
-# HOMA2IR). Posterior draws are cached, as the full fit is large (~0.9 GB).
-ms_draws_file <- "data-derived/ms-s13-alpha-beta-draws.RDS"
-
-if (!file.exists(ms_draws_file)) {
-  readRDS("fits/paper1/fit.s13.post.RDS")$draws(c("alpha", "beta"), format = "df") |>
-    as_tibble() |>
-    saveRDS(ms_draws_file)
-}
-ms_draws <- readRDS(ms_draws_file)
-
-# Mean standardized pre-intervention value per outcome (observed)
-ms_pre <- ms_dat$dat |>
-  filter(pre_miss == 1) |>
-  distinct(P, type, pre_obs) |>
-  summarise(.by = type, pre = mean(pre_obs))
-
-ms_alpha <- ms_draws |>
-  select(.draw, starts_with("alpha")) |>
-  pivot_longer(-.draw, values_to = "alpha") |>
-  mutate(name = gsub("alpha\\[|\\]", "", name)) |>
-  separate(name, into = c("time", "type", "treat"), sep = ",", convert = TRUE)
-
-ms_beta <- ms_draws |>
-  select(.draw, starts_with("beta")) |>
-  pivot_longer(-.draw, values_to = "beta") |>
-  mutate(name = gsub("beta\\[|\\]", "", name)) |>
-  separate(name, into = c("type", "time"), sep = ",", convert = TRUE)
-
-# Adjusted means (natural scale) at the average baseline value, per draw
-ms_pred <- ms_alpha |>
-  inner_join(ms_beta, by = c(".draw", "time", "type")) |>
-  inner_join(ms_pre, by = "type") |>
-  inner_join(ms_dat$scale, by = "type") |>
-  mutate(z = alpha + beta * pre,
-         mu = if_else(transform == "log", exp(mean + sd * z), mean + sd * z),
-         time = if_else(time == 1, "T2", "T4"),
-         treat = if_else(treat == 1, "ctrl", "omega")) |>
-  select(.draw, analyte, transform, time, treat, z, mu)
-
-# Krill oil - placebo contrasts: difference in natural units (identity
-# outcomes) or % difference (log outcomes; 100 * (ratio - 1))
-ms_contr <- ms_pred |>
-  select(-mu) |>
-  pivot_wider(names_from = treat, values_from = z) |>
-  inner_join(ms_dat$scale |> select(analyte, sd), by = "analyte") |>
-  mutate(est = if_else(transform == "log",
-                       100 * (exp(sd * (omega - ctrl)) - 1),
-                       sd * (omega - ctrl)))
-
-# Observed baseline means (natural scale; geometric means for log outcomes)
-ms_base <- criteria_dat |>
-  filter(time == "T1", !is.na(value), participant %in% tab_ids) |>
-  summarise(.by = c(analyte, treat),
-            arith = mean(value), geo = exp(mean(log(value))))
-
-# Text helpers. ms_txt("glucose", "T2") -> "−0.08 mmol L^-1^ (95% CrI: −0.24, 0.07)";
-# log outcomes are reported as % difference.
-ms_txt <- function(analyte_name, tp, digits = 2, unit = "") {
-  e <- ms_contr |> filter(analyte == analyte_name, time == tp)
-  is_log <- e$transform[1] == "log"
-  if (is_log) { digits <- 0; unit <- " %" }
-  fmt <- function(x) sub("^-", "−", sprintf(paste0("%.", digits, "f"), round(x, digits) + 0))
-  est <- fmt(mean(e$est))
-  if (is_log && mean(e$est) > 0) est <- paste0("+", est)
-  paste0(est, unit, " (95% CrI: ", fmt(quantile(e$est, 0.025)), ", ",
-         fmt(quantile(e$est, 0.975)), ")")
-}
-
-# Probability that krill oil is lower than placebo
-ms_p_lower <- function(analyte_name, tp) {
-  e <- ms_contr |> filter(analyte == analyte_name, time == tp)
-  sprintf("%.0f %%", 100 * mean(e$est < 0))
-}
-```
+Krill oil did not affect the primary outcome, the change in glucose tolerance from before to after the resistance training intervention (week 7 to week 20), compared with placebo. Throughout the OGTT, the between-group difference in blood glucose was small and uncertain (average difference in change across the OGTT, `r ogtt_txt("diff_T2_T4")`; Fig. 5A). As a secondary outcome, krill oil also did not credibly affect glucose tolerance during supplementation alone (week 0 to week 7); blood glucose between 60 and 100 min tended to be lower with krill oil than with placebo, but the difference was uncertain (average difference in change between 60 and 100 min, `r ogtt_txt("diff_T1_T2", 60, 100)`; across the OGTT, `r ogtt_txt("diff_T1_T2")`; Fig. 5A). In both groups, blood glucose during the OGTT decreased similarly from week 0 to week 20 (average change across the OGTT; placebo, `r ogtt_txt("ctrl_T1_T4")`; krill oil, `r ogtt_txt("omega_T1_T4")`; difference, `r ogtt_txt("diff_T1_T4")`; Fig. 5A, middle panels).
 
 For the other secondary outcomes, krill oil resulted in marginally lower fasting glucose at weeks 7 and 20 (week 7, `r ms_txt("glucose", "T2", unit = " mmol L^-1^")`; week 20, `r ms_txt("glucose", "T4", unit = " mmol L^-1^")`; Fig. 5B), but this difference was uncertain and reflected a smaller increase rather than a decrease, as fasting glucose increased numerically in both groups. Krill oil did not affect HOMA2-IR (week 7, `r ms_txt("HOMA2IR", "T2")`; week 20, `r ms_txt("HOMA2IR", "T4")`; Fig. 5B), HbA1c ([STAT]; Table 3) or adiponectin (week 7, `r ms_txt("Adiponectin", "T2", unit = " mg L^-1^")`; week 20, `r ms_txt("Adiponectin", "T4", unit = " mg L^-1^")`; Table 3).
 
 
 ### Metabolic syndrome
-
-```{r}
-#| label: results-metsyn
-#| echo: false
-#| message: false
-#| warning: false
-
-# Metabolic syndrome estimates. Component contrasts use ms_contr / ms_txt()
-# from the results-ms chunk (s13). Below: the burden score (s13), the
-# diagnosis (logistic models pooled with Rubin's rules, s13) and the effect
-# modification models (s19, own baseline; s20, baseline burden score).
-
-## Burden score (s13) ----------------------------------------------------------
-# Average krill oil - placebo contrast (standardized scale) over the five
-# criteria: (-HDL + TG + (dias + sys) / 2 + glucose + waist) / 5
-burden_w <- c(HDL = -1, TG = 1, dias = 0.5, sys = 0.5, glucose = 1, waist = 1) / 5
-
-burden_draws <- ms_contr |>
-  filter(analyte %in% names(burden_w)) |>
-  mutate(w = burden_w[analyte]) |>
-  summarise(.by = c(.draw, time), est = sum(w * (omega - ctrl)))
-
-burden_txt <- function(tp) {
-  v <- burden_draws |> filter(time == tp) |> pull(est)
-  fmt <- function(x) sub("^-", "−", sprintf("%.2f", round(x, 2) + 0))
-  paste0(fmt(mean(v)), " SD (95% CrI: ", fmt(quantile(v, 0.025)), ", ",
-         fmt(quantile(v, 0.975)), ")")
-}
-burden_p <- function(tp) {
-  v <- burden_draws |> filter(time == tp) |> pull(est)
-  sprintf("%.0f %%", 100 * mean(v < 0))
-}
-
-## Diagnosis (s13, Rubin's rules) ----------------------------------------------
-# Same pooling as in figures/figure-05.R; estimates are log odds ratios
-# (time x treatment interaction), reported as odds ratios.
-diag_pooled <- readRDS("data-derived/ch-07-diag-crit-rubin-s13.RDS")$summaries |>
-  filter(term %in% c("timetime2:treattreat2", "timetime3:treattreat2")) |>
-  summarise(.by = term,
-            m = n(),
-            qbar = mean(estimate),
-            ubar = mean(std.error^2),
-            b = var(estimate)) |>
-  mutate(t = ubar + (1 + 1 / m) * b,
-         lambda = (1 + 1 / m) * b / t,
-         df = (m - 1) / lambda^2,
-         lwr = qbar - qt(0.975, df) * sqrt(t),
-         upr = qbar + qt(0.975, df) * sqrt(t),
-         time = if_else(term == "timetime2:treattreat2", "T2", "T4"))
-
-diag_txt <- function(tp) {
-  d <- diag_pooled |> filter(time == tp)
-  sprintf("OR %.2f (95%% CI: %.2f, %.2f)", exp(d$qbar), exp(d$lwr), exp(d$upr))
-}
-
-## Effect modification (s19, s20) ----------------------------------------------
-# Posterior draws are cached, as the full fits are large (~0.9 GB each).
-mod_draws_file <- "data-derived/ms-s19-s20-draws.RDS"
-
-if (!file.exists(mod_draws_file)) {
-  list(
-    s19 = readRDS("fits/paper1/fit.s19.post.RDS")$draws("tau_delta", format = "df") |>
-      as_tibble(),
-    s20 = readRDS("fits/paper1/fit.s20.post.RDS")$draws(
-      c("tau_gamma", "gamma", "burden_c", "ate_mets", "ate_nomets"), format = "df") |>
-      as_tibble()
-  ) |>
-    saveRDS(mod_draws_file)
-}
-mod_draws <- readRDS(mod_draws_file)
-
-# Stan type index of the burden criteria (diag_idx in models/s20.stan),
-# looked up from the data
-burden_idx <- setNames(ms_dat$scale$type, ms_dat$scale$analyte)[
-  c("HDL", "TG", "dias", "glucose", "sys", "waist")
-]
-
-# Weighted sum over the burden criteria of a [K, 2] parameter, per draw
-burden_sum <- function(d, par, t) {
-  rowSums(sapply(names(burden_idx), function(a)
-    burden_w[a] * d[[sprintf("%s[%d,%d]", par, burden_idx[a], t)]]))
-}
-
-s20_sd_burden <- apply(as.matrix(select(mod_draws$s20, starts_with("burden_c"))), 1, sd)
-
-# Change in the burden score contrast per SD of baseline burden, and burden
-# score contrasts in participants with and without metabolic syndrome at
-# baseline (and their difference)
-s20_burden <- lapply(1:2, function(t) {
-  d <- mod_draws$s20
-  data.frame(time = c("T2", "T4")[t],
-             .draw = seq_len(nrow(d)),
-             slope = burden_sum(d, "gamma", t) * s20_sd_burden,
-             mets = burden_sum(d, "ate_mets", t),
-             nomets = burden_sum(d, "ate_nomets", t)) |>
-    mutate(diff = mets - nomets)
-}) |>
-  bind_rows()
-
-s20_txt <- function(what, tp) {
-  v <- s20_burden |> filter(time == tp) |> pull(all_of(what))
-  fmt <- function(x) sub("^-", "−", sprintf("%.2f", round(x, 2) + 0))
-  paste0(fmt(mean(v)), " SD (95% CrI: ", fmt(quantile(v, 0.025)), ", ",
-         fmt(quantile(v, 0.975)), ")")
-}
-
-# Common scale of the interactions (prior Half-Normal(0, 0.25))
-tau_txt <- function(v) {
-  sprintf("%.2f (95%% CrI: %.2f, %.2f)", mean(v), quantile(v, 0.025), quantile(v, 0.975))
-}
-tau_delta_txt <- tau_txt(mod_draws$s19$tau_delta)
-tau_gamma_txt <- tau_txt(mod_draws$s20$tau_gamma)
-
-# LOO comparison with the main model (complete-case, participant-level log_lik)
-loo_mod <- loo_compare(list(
-  s13 = readRDS("fits/paper1/loo_s13.RDS"),
-  s19 = readRDS("fits/paper1/loo_s19.RDS"),
-  s20 = readRDS("fits/paper1/loo_s20.RDS")
-))
-loo_mod_txt <- function(m) {
-  sprintf("%s (SE %.1f)", sub("^-", "−", sprintf("%.1f", loo_mod[m, "elpd_diff"])),
-          loo_mod[m, "se_diff"])
-}
-```
-
 
 Krill oil lowered the combined burden of metabolic syndrome components compared with placebo, reflecting small and mostly favorable changes across the individual components, most clearly in systolic blood pressure and HDL cholesterol. Among the components, krill oil lowered systolic blood pressure during supplementation alone (`r ms_txt("sys", "T2", 1, " mmHg")`), whereas the reduction during the combined period was smaller and less certain (`r ms_txt("sys", "T4", 1, " mmHg")`). Krill oil did not affect HDL cholesterol during supplementation alone (`r ms_txt("HDL", "T2", 2, " mmol L^-1^")`) but increased it during the combined period (`r ms_txt("HDL", "T4", 2, " mmol L^-1^")`). Krill oil resulted in slightly lower diastolic blood pressure in both periods (`r ms_txt("dias", "T2", 1, " mmHg")` and `r ms_txt("dias", "T4", 1, " mmHg")`), but these differences were uncertain. Krill oil did not affect waist circumference (week 7, `r ms_txt("waist", "T2", 1, " cm")`; week 20, `r ms_txt("waist", "T4", 1, " cm")`) or triglycerides (week 7, `r ms_txt("TG", "T2")`; week 20, `r ms_txt("TG", "T4")`; Fig. 6A).
 

@@ -119,8 +119,8 @@ At enrollment, participants were randomized into two groups, an active treatment
 ```{r}
 #| fig-cap: "Flow of participants through the trial, presented according to the CONSORT 2025 statement. All randomized participants were included in the analysis of outcomes, with missing follow-up data imputed."
 #| label: fig-figure1
-#| fig-width: !expr 180/25.4
-#| fig-height: !expr 140/25.4
+#| fig-width: 5.9
+#| fig-height: 5.6
 
 
 figure_01 <- readRDS("figures/figure-01.RDS")
@@ -195,8 +195,8 @@ Participants were given krill oil or placebo in a supplementation-only period fo
 ```{r}
 #| fig-cap: "Study design. After baseline testing (week 0), participants received krill oil or placebo for 7 weeks, followed by 13 weeks of supervised resistance training, comprising a 3-week familiarization period (weeks 8–10) and 10 weeks of progressive resistance training (weeks 11–20), with supplementation continued throughout. The measurements listed were taken at each of the three time points: baseline (week 0), after supplementation alone (end of week 7) and after the combined period (end of week 20). The lower panel shows the change in training volume across the 20 training sessions, relative to session 1 and summed across all upper- and lower-body exercises. Line and shaded area show the smoothed trend  with 95% confidence interval. BMI, body mass index; DXA, dual-energy X-ray absorptiometry; HDL, high-density lipoprotein cholesterol; HOMA2-IR, updated homeostasis model assessment of insulin resistance; LDL, low-density lipoprotein cholesterol; OGTT, oral glucose tolerance test; TG, triglycerides. "
 #| label: fig-figure2
-#| fig-width: !expr 180/25.4
-#| fig-height: !expr 95/25.4
+#| fig-width: 5.9
+#| fig-height: 3.1
 
 
 figure_02 <- readRDS("figures/figure-02.RDS")
@@ -205,7 +205,6 @@ figure_02
 
 
 ```
-
 
 
 

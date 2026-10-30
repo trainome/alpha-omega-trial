@@ -69,9 +69,9 @@ t4_n <- AOData::idkeys |>
 
 n <- list(
   assessed = 319,
-  excluded = 172,
+  excluded = 171,
   excl_criteria = 40,
-  excl_declined = 132,
+  excl_declined = 131,
   excl_other = 0,
   randomised = totaln_rando,
 

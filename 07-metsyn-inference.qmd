@@ -1255,8 +1255,8 @@ All four models had satisfactory chain convergence statistics and effective samp
 ```{r}
 #| label: fig-chain-stats-s19s22
 #| fig-cap: "Summary chain statistics (Rhat vs. bulk and tail effective sample size) for the moderation models s19 to s22."
-#| fig-height: 6
-#| fig-width: 6
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 # Parameter summaries, leaving out the data-sized transformed parameters and
 # generated quantities (as in the chain diagnostics of previous models)
@@ -1305,8 +1305,8 @@ bind_rows(chain_sums) |>
 ```{r}
 #| label: fig-moderation-pred
 #| fig-cap: "Predicted treatment effects (krill oil - placebo) at the moderator mean and at &plusmn; 1 SD of the moderator in models s19 (each outcome's own baseline value), s20 (baseline metabolic burden score), s21 (baseline relative fat mass) and s22 (baseline omega-3 index), after the supplementation and combined periods. Points and error bars show posterior medians with 50% and 95% CrI on the standardised scale (outcome SD units)."
-#| fig-height: 11
-#| fig-width: 7
+#| fig-height: 8.5
+#| fig-width: 5.4
 
 # Predicted treatment effects at the moderator mean and +/- 1 SD. Reading the
 # fits takes some time, the summaries are stored in data-derived/ and are
@@ -1480,8 +1480,8 @@ Combining the predicted effects on the diagnostic criteria per posterior draw, i
 ```{r}
 #| label: fig-moderation-burden
 #| fig-cap: "Predicted treatment effects (krill oil - placebo) on the metabolic burden score at the moderator mean and at &plusmn; 1 SD of the moderator in models s19 (each outcome's own baseline value), s20 (baseline metabolic burden score), s21 (baseline relative fat mass) and s22 (baseline omega-3 index), after the supplementation and combined periods. The burden score effect is combined per posterior draw from the effects on the diagnostic criteria. Points and error bars show posterior medians with 50% and 95% CrI on the standardised scale (SD units)."
-#| fig-height: 2.5
-#| fig-width: 7
+#| fig-height: 2.1
+#| fig-width: 5.9
 
 mod_burden |>
   mutate(

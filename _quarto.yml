@@ -74,7 +74,7 @@ book:
     - 06-metsyn-simulations.qmd
     - 07-metsyn-inference.qmd
     - 08-metsyn-sensitivity.qmd
-  #  - 08-ogtt.qmd
+    - 09-ogtt.qmd
   #  - 09-results.qmd
 
 # Re-run a chapter's code only when its .qmd has changed; results are stored
@@ -82,10 +82,24 @@ book:
 execute:
   freeze: auto
 
+# Render figures with ragg (better anti-aliasing and fonts than the default
+# png device). The file format is set by fig-format under format: typst.
+knitr:
+  opts_chunk:
+    dev: ragg_png
+
 bibliography: resources/bibliography.bib
 csl: vancouver
 format:
   typst:
+    # Raster figures: the default (svg) embeds every drawn element, and
+    # posterior predictive plots with many draws reach 15-35 MB each.
+    fig-format: png
+    fig-dpi: 300
+    # Text width of the orange-book template (A4, 3 cm side margins) is
+    # 15 cm = 5.9 in. Wider figures are scaled down, shrinking their text.
+    fig-width: 5.9
+    fig-height: 4
     # Adds authors and affiliations on the page after the cover
     template-partials:
       - resources/typst-show.typ

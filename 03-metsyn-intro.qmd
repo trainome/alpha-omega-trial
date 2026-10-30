@@ -24,14 +24,15 @@ refit.models <- FALSE # Should fit_wrap refit models.
 
 # Effects of krill oil supplementation on indications of metabolic syndrome - Introduction {#sec-smodels-intro}
 
-Here we aim to model the components of the metabolic syndrome definition [@alberti2006], along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting metabolic syndrome definition thresholds in each group while accounting for uncertainty associated with missing observations. We use the harmonised metabolic syndrome definition, where any three of the five criteria (waist circumference, triglycerides, HDL-cholesterol, blood pressure and fasting glucose) beyond their threshold values are sufficient for a diagnosis, and central obesity is not required [@alberti2009].
+Here we aim to model the components of the metabolic syndrome definition [@alberti2006], along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting metabolic syndrome definition thresholds in each group while accounting for uncertainty associated with missing observations. The strategy will be to chose a model that will allow for sharing of information between variables to enable more efficient data imputation. We use the harmonised metabolic syndrome definition, where any three of the five criteria (waist circumference, triglycerides, HDL-cholesterol, blood pressure and fasting glucose) beyond their threshold values are sufficient for a diagnosis, and central obesity is not required [@alberti2009].
+
 
 @fig-descriptive-data shows distributions of the variables selected for joint modeling, including variables used to define metabolic syndrome (waist circumference, raised triglycerisdes, reduced HDL-cholesterol, raised blood pressure, raised fasting glucose). 
 
 ```{r}
 #| label: fig-descriptive-data
-#| fig-height: 8
-#| fig-width: 6
+#| fig-height: 7.9
+#| fig-width: 5.9
 #| fig-cap: "Observed data distributions of main outcomes."
 
 d_full <- criteria_dat |>
@@ -103,7 +104,7 @@ d_full |>
   scale_color_manual(values = colscale)
 ```
 
-Descriptive analysis of complete cases indicates variation in the proportion of participants meeting the criteria thresholds across treatment groups and post-intervention time points. @tbl-logregparticipants and  @fig-metsyndrome show the proportions of participants who have three or more diagnostic criteria for metabolic syndrome among complete cases. 
+Descriptive analysis of complete cases indicates variation in the proportion of participants meeting the criteria thresholds across treatment groups and post-intervention time points. @tbl-logregparticipants and  @fig-metsyndrome show the proportions of participants who have three or more diagnostic criteria for metabolic syndrome among complete cases. We will expand this analyses later when incorporating the diagnosis in modelling of subscores in a joint model.  
 
 ```{r}
 #| label: tbl-logregparticipants
@@ -294,14 +295,101 @@ data.frame(
 
 ```
 
+For the joint model we also include measures related to metabolic health. Among these variables, HOMA2-IR is a derived variable based on C-peptide and fasting glucose calculated using the HOMA2 calculator. HOMA2-IR was calculated when C-peptide and glucose was available and any missing data was primarily seen in the C-peptide variable. Based on the strong correlation between C-peptide and HOMA2-IR vs. the more moderate correlation between glucose and HOMA2-IR (@fig-cpeptidehoma) we chose to use the derived variable HOMA2-IR and drop C-peptide from the joint modelling to avoid duplicationg information in the same model.   
+
+
+```{r}
+#| label: fig-cpeptidehoma
+#| fig-cap: "Associations between C-peptide or glucose and HOMA2-IR in samples collected at baseline. These associations indicate that HOMA2-IR more strongly captures variation in C-peptide."
+#| eval: true
+
+
+
+
+# Get c-peptide
+cpeptide <- AOData::glucose |> 
+  filter(min == 0) |> 
+  dplyr::select(participant, time,  cpeptide)
+
+
+homa_dat <- criteria_dat |> 
+  filter(analyte %in% c("HOMA2IR", "glucose")) |> 
+  dplyr::select(participant, time, treat, analyte, value) |> 
+  pivot_wider(names_from = analyte, 
+              values_from = value) |> 
+  
+  
+  inner_join(cpeptide, by = c("participant", "time")) |> 
+  filter(time == "T1")
+
+
+  
+  
+# Calculate correlations
+cpep_homa <- round(cor(homa_dat$cpeptide, homa_dat$HOMA2IR, use = "complete.obs"), 4)
+glucose_homa <- round(cor(homa_dat$glucose, homa_dat$HOMA2IR, use = "complete.obs"), 4)
+
+
+p1 <- homa_dat |> 
+    ggplot(aes(cpeptide, HOMA2IR)) +
+
+  
+  geom_smooth(se = FALSE, color = colscale[3],
+              method = "lm") +
+  
+  annotate("text", x = I(0.1), y = I(0.9), 
+           label = paste0("r = ",cpep_homa)) +
+    geom_point(size = 2.5, shape = 21) + 
+  alpha_theme() + 
+  labs(x = "C-peptide (pmol L<sup>-1</sup>)", 
+       y = "HOMA2-IR")
+
+
+p2 <- homa_dat |> 
+    ggplot(aes(glucose, HOMA2IR)) +
+
+  
+    annotate("text", x = I(0.1), y = I(0.9), 
+           label = paste0("r = ",glucose_homa)) +
+  
+  geom_smooth(se = FALSE, color = colscale[3],
+              method = "lm") +
+    geom_point(size = 2.5, shape = 21) + 
+  alpha_theme() + 
+  labs(x = "Glucose (mmol L<sup>-1</sup>)", 
+       y = "HOMA2-IR")
+
+
+
+homa_dat |> 
+    ggplot(aes((glucose*(cpeptide/6.945))/22.5, HOMA2IR)) +
+
+  
+    annotate("text", x = I(0.1), y = I(0.9), 
+           label = paste0("r = ",glucose_homa)) +
+  
+  geom_smooth(se = FALSE, color = colscale[3],
+              method = "lm") +
+    geom_point(size = 2.5, shape = 21) + 
+  alpha_theme() + 
+  labs(x = "Glucose (mmol L<sup>-1</sup>)", 
+       y = "HOMA2-IR")
+
+
+p1 | p2
+
+
+
+```
+
 Variables in the observed data are correlated within time points within variables and between variables across time points. To describe approximate variation and co-variation patterns, "naive" linear models were fitted with sex as a single predictor at time-point T1, sex, baseline values, and treatment as predictors for values at time-points T2 and T4. Residuals were extracted from the models, and estimates were plotted in @fig-var-cor. 
 
 ```{r}
 #| label: fig-var-cor
 #| fig-cap: "Residual variation and correlation pattern within and between variables in the observed data."
 #| eval: true
-#| fig-height: 6
-#| fig-width: 12
+#| fig-height: 4.5
+#| fig-width: 5.9
 
 
 
@@ -353,8 +441,8 @@ Correlation patterns among variables will be used to inform simulations (see @se
 #| message: false
 #| warning: false
 #| echo: false
-#| fig-height: 12
-#| fig-width: 8
+#| fig-height: 8.5
+#| fig-width: 5.6
 #| fig-cap: "Observed and missing data across treatment groups and time-points. Rows are participants, columns are data points."
 
 
@@ -553,8 +641,8 @@ In addition to measurements included in the metabolic syndrome diagnostic criter
 
 ```{r}
 #| label: fig-dropout-priorpredictive
-#| fig-height: 8
-#| fig-width: 6
+#| fig-height: 7.9
+#| fig-width: 5.9
 #| fig-cap: "Prior predictive simulation for model 1. Columns are values of the predictor (SD-units) rows represents each predictor."
 
 
@@ -604,8 +692,8 @@ draws.m1 <- fit.m1p$draws(format = "df")
 
 ```{r}
 #| label: fig-dropout-across
-#| fig-height: 8
-#| fig-width: 10
+#| fig-height: 4.7
+#| fig-width: 5.9
 #| fig-cap: "Probability of drop-out across values of baseline co-variates on per treatment group to time-point 2 (A) and 4 (B). Estimates are adjusted for sex, intervals are 90% percentile interval."
 
 a <- draws.m1 |> 
@@ -837,8 +925,8 @@ In conclusion, age was negatively associated with probability of drop-out at T2 
 #| label: fig-dropout-treat
 #| include: false
 #| eval: false
-#| fig-height: 8
-#| fig-width: 6
+#| fig-height: 7.9
+#| fig-width: 5.9
 #| fig-cap: "Effects of one SD-uniut change in baseline value on log-odds probability of droup-out per treatment group. Estimates are adjusted for sex, intervals are 90% percentile interval."
 
 draws.m1 |> 
@@ -900,8 +988,8 @@ draws.m1 |>
 
 ```{r}
 #| label: fig-dropout-treatcomp
-#| fig-height: 8
-#| fig-width: 6
+#| fig-height: 7.9
+#| fig-width: 5.9
 #| eval: false
 #| fig-cap: "Differences in the effect of baseline value on drop-out probability between treatments groups. Estimates are adjusted for sex, intervals are 90% percentile interval."
 
@@ -1384,8 +1472,8 @@ set.seed(123)
 #| echo: false
 #| message: false
 #| warning: false
-#| fig-height: 8
-#| fig-width: 6
+#| fig-height: 7.9
+#| fig-width: 5.9
 
 
  simout$miss$raw_df |> 
@@ -1410,8 +1498,8 @@ set.seed(123)
 #| echo: false
 #| message: false
 #| warning: false
-#| fig-height: 12
-#| fig-width: 8
+#| fig-height: 8.5
+#| fig-width: 5.6
 
 
 

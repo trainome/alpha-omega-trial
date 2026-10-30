@@ -633,8 +633,8 @@ pred_dat_1 <- function(draws, fit_type = 1, chains = c(1)) {
 ```{r}
 #| label: fig-s1-4-priorpred
 #| fig-cap: "Prior predictive check of pre- to post-intervention associations in model S1-S4. "
-#| fig-width: 8
-#| fig-height: 12
+#| fig-width: 5.6
+#| fig-height: 8.5
 
 
 
@@ -670,8 +670,8 @@ p1|p2|p3|p4
 ```{r}
 #| label: fig-s5-7-priorpred
 #| fig-cap: "Prior predictive check of pre- to post-intervention associations in model S5-S7. "
-#| fig-width: 8
-#| fig-height: 12
+#| fig-width: 5.6
+#| fig-height: 8.5
 
 p5 <- pred_fig_1(draws.s5, fit_type = 2) + 
   theme(axis.title.x = element_blank(), 
@@ -697,8 +697,8 @@ p5|p6|p7
 ```{r}
 #| label: fig-s1-7-priorpred-treatmeans
 #| fig-cap: "Prior predictive distributions of treatment means in models S1-S7."
-#| fig-width: 8
-#| fig-height: 12
+#| fig-width: 5.6
+#| fig-height: 8.5
 
 
 
@@ -1044,8 +1044,8 @@ draws.s7 <- fit.synth.s7$draws(format="df")
 ```{r}
 #| label: fig-s1-4-postpred-synth
 #| fig-cap: "Posterior predictive check of pre- to post-intervention associations in model S1-S4 on synthetic data. "
-#| fig-width: 8
-#| fig-height: 12
+#| fig-width: 5.6
+#| fig-height: 8.5
 
 
 
@@ -1078,8 +1078,8 @@ p1|p2|p3|p4
 ```{r}
 #| label: fig-s5-7-priorpred-synth
 #| fig-cap: "Prior predictive check of pre- to post-intervention associations in model S5-S7. "
-#| fig-width: 8
-#| fig-height: 12
+#| fig-width: 5.6
+#| fig-height: 8.5
 
 p5 <- pred_fig_1(draws.s5, fit_type = 2) + 
   theme(axis.title.x = element_blank(), 
@@ -1107,8 +1107,8 @@ p5|p6|p7
 ```{r}
 #| label: fig-s1-7-postpred-treatmeans-synth
 #| fig-cap: "Posterior predictive distributions of treatment means in models S1-S7. "
-#| fig-width: 8
-#| fig-height: 12
+#| fig-width: 5.6
+#| fig-height: 8.5
 
 
 

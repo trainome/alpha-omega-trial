@@ -70,16 +70,16 @@
 <rect x='270.43' y='277.33' width='234.71' height='44.09' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
 <rect x='270.43' y='355.31' width='234.71' height='36.67' style='stroke-width: 0.64; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
 <text x='255.12' y='14.05' text-anchor='middle' style='font-size: 6.83px; font-family: "Arial";' textLength='96.58px' lengthAdjust='spacingAndGlyphs'>Assessed for eligibility (n = 319)</text>
-<text x='344.41' y='38.89' style='font-size: 6.83px; font-family: "Arial";' textLength='57.50px' lengthAdjust='spacingAndGlyphs'>Excluded (n = 172)</text>
+<text x='344.41' y='38.89' style='font-size: 6.83px; font-family: "Arial";' textLength='57.50px' lengthAdjust='spacingAndGlyphs'>Excluded (n = 171)</text>
 <text x='344.41' y='47.08' style='font-size: 6.83px; font-family: "Arial";' textLength='117.05px' lengthAdjust='spacingAndGlyphs'>  Not meeting inclusion criteria (n = 40)</text>
-<text x='344.41' y='55.28' style='font-size: 6.83px; font-family: "Arial";' textLength='100.73px' lengthAdjust='spacingAndGlyphs'>  Declined to participate (n = 132)</text>
+<text x='344.41' y='55.28' style='font-size: 6.83px; font-family: "Arial";' textLength='100.73px' lengthAdjust='spacingAndGlyphs'>  Declined to participate (n = 131)</text>
 <text x='344.41' y='63.47' style='font-size: 6.83px; font-family: "Arial";' textLength='68.88px' lengthAdjust='spacingAndGlyphs'>  Other reasons (n = 0)</text>
-<text x='255.12' y='88.31' text-anchor='middle' style='font-size: 6.83px; font-family: "Arial";' textLength='67.75px' lengthAdjust='spacingAndGlyphs'>Randomised (n = 147)</text>
-<text x='12.76' y='145.10' style='font-size: 6.83px; font-family: "Arial";' textLength='87.83px' lengthAdjust='spacingAndGlyphs'>Allocated to Placebo (n = 73)</text>
-<text x='12.76' y='153.29' style='font-size: 6.83px; font-family: "Arial";' textLength='124.28px' lengthAdjust='spacingAndGlyphs'>  Received allocated intervention (n = 73)</text>
+<text x='255.12' y='88.31' text-anchor='middle' style='font-size: 6.83px; font-family: "Arial";' textLength='67.75px' lengthAdjust='spacingAndGlyphs'>Randomised (n = 148)</text>
+<text x='12.76' y='145.10' style='font-size: 6.83px; font-family: "Arial";' textLength='87.83px' lengthAdjust='spacingAndGlyphs'>Allocated to Placebo (n = 74)</text>
+<text x='12.76' y='153.29' style='font-size: 6.83px; font-family: "Arial";' textLength='124.28px' lengthAdjust='spacingAndGlyphs'>  Received allocated intervention (n = 74)</text>
 <text x='12.76' y='161.49' style='font-size: 6.83px; font-family: "Arial";' textLength='137.55px' lengthAdjust='spacingAndGlyphs'>  Did not receive allocated intervention (n = 0)</text>
 <text x='12.76' y='215.27' style='font-size: 6.83px; font-family: "Arial";' textLength='132.67px' lengthAdjust='spacingAndGlyphs'>Supplementation period (Week 1 to week 7)</text>
-<text x='12.76' y='223.46' style='font-size: 6.83px; font-family: "Arial";' textLength='127.67px' lengthAdjust='spacingAndGlyphs'>  Discontinued and lost to follow-up (n = 7)</text>
+<text x='12.76' y='223.46' style='font-size: 6.83px; font-family: "Arial";' textLength='127.67px' lengthAdjust='spacingAndGlyphs'>  Discontinued and lost to follow-up (n = 8)</text>
 <text x='12.76' y='231.66' style='font-size: 6.83px; font-family: "Arial";' textLength='123.88px' lengthAdjust='spacingAndGlyphs'>    Reasons not related to the study (n=3)</text>
 <text x='12.76' y='239.85' style='font-size: 6.83px; font-family: "Arial";' textLength='80.61px' lengthAdjust='spacingAndGlyphs'>    Fear of COVID-19 (n=6)</text>
 <text x='12.76' y='285.43' style='font-size: 6.83px; font-family: "Arial";' textLength='166.62px' lengthAdjust='spacingAndGlyphs'>Supplementation + training period (Week 8 to week 23)</text>
@@ -87,9 +87,9 @@
 <text x='12.76' y='301.82' style='font-size: 6.83px; font-family: "Arial";' textLength='56.36px' lengthAdjust='spacingAndGlyphs'>    Lockdown (n=9)</text>
 <text x='12.76' y='310.02' style='font-size: 6.83px; font-family: "Arial";' textLength='83.91px' lengthAdjust='spacingAndGlyphs'>    Fear of COVID-19 (n=11)</text>
 <text x='12.76' y='318.21' style='font-size: 6.83px; font-family: "Arial";' textLength='96.58px' lengthAdjust='spacingAndGlyphs'>    Low training adherence (n=2)</text>
-<text x='12.76' y='363.80' style='font-size: 6.83px; font-family: "Arial";' textLength='53.70px' lengthAdjust='spacingAndGlyphs'>Analysed (n = 73)</text>
+<text x='12.76' y='363.80' style='font-size: 6.83px; font-family: "Arial";' textLength='53.70px' lengthAdjust='spacingAndGlyphs'>Analysed (n = 74)</text>
 <text x='12.76' y='371.99' style='font-size: 6.83px; font-family: "Arial";' textLength='110.22px' lengthAdjust='spacingAndGlyphs'>  Observed at final follow-up (n = 44)</text>
-<text x='12.76' y='380.18' style='font-size: 6.83px; font-family: "Arial";' textLength='123.11px' lengthAdjust='spacingAndGlyphs'>  Missing follow-up data imputed (n = 29)</text>
+<text x='12.76' y='380.18' style='font-size: 6.83px; font-family: "Arial";' textLength='123.11px' lengthAdjust='spacingAndGlyphs'>  Missing follow-up data imputed (n = 30)</text>
 <text x='12.76' y='388.38' style='font-size: 6.83px; font-family: "Arial";' textLength='95.81px' lengthAdjust='spacingAndGlyphs'>  Excluded from analysis (n = 0)</text>
 <text x='278.08' y='145.10' style='font-size: 6.83px; font-family: "Arial";' textLength='83.25px' lengthAdjust='spacingAndGlyphs'>Allocated to Krill oil (n = 74)</text>
 <text x='278.08' y='153.29' style='font-size: 6.83px; font-family: "Arial";' textLength='124.28px' lengthAdjust='spacingAndGlyphs'>  Received allocated intervention (n = 74)</text>

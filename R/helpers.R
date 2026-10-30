@@ -610,3 +610,368 @@ cor_plot <- function(d) {
 
   return(list(p1 = p1, p2 = p2, p3 = p3))
 }
+
+
+# Gurka-DeBoer MetS severity score ###########################################
+# Adult (20-64 y), waist-based, sex-specific non-Hispanic White equations from
+# Gurka et al. (2014) Metabolism 63(2):218-25:
+#   Z = intercept + b1 * waist + b2 * HDL + b3 * SBP + b4 * ln(TG) + b5 * glucose
+# with waist in cm, SBP in mmHg and HDL, TG and glucose in mg/dL.
+# NOTE: the slopes match Table 1 of DeBoer & Gurka (2017) Diabetes Metab Syndr
+# Obes 10:65-72, but that table lists intercepts -5.4473 (m) and -7.2536 (f).
+# The intercepts are now fixed to exactly match DeBoer/Gurka 2017.
+
+# The intercept shifts the level of the score only, not treatment contrasts.
+gurka_coef <- data.frame(
+  sex = c("m", "f"),
+  intercept = c(-5.4473, -7.2536),
+  waist = c(0.0125, 0.0254),
+  HDL = c(-0.0251, -0.0120),
+  sys = c(0.0047, 0.0075),
+  TG = c(0.8244, 0.5800),
+  glucose = c(0.0106, 0.0203)
+)
+
+# Unit conversion from data units (mmol/L) to score units (mg/dL), see
+# R/data-prep.R. TG enters the score as ln(TG), where the conversion becomes
+# an additive offset log(88.57).
+gurka_conv <- c(
+  waist = 1,
+  HDL = 38.6654,
+  sys = 1,
+  TG = 88.57,
+  glucose = 18.0156
+)
+
+
+# Back-transform standardised values of one analyte to score units.
+#
+# z, values (vector or draws x participants matrix) on the standardised scale
+# sc, one row of dat$scale (data_load_s7s10) for the analyte
+# returns values in score units (ln(mg/dL) for TG)
+gurka_natural <- function(z, sc) {
+  x <- sc$mean + sc$sd * z
+  if (sc$transform == "log") x + log(gurka_conv[[sc$analyte]]) else
+    x * gurka_conv[[sc$analyte]]
+}
+
+
+# Per-participant Gurka-DeBoer score per posterior draw
+#
+# Uses the (observed or imputed) values in pre_wide (T1), y_wide_1 (T2) and
+# y_wide_2 (T4) from models s7-s13, so all participants get a posterior score
+# at all time-points. Scores from observed values are constant over draws.
+#
+# fit, a cmdstanr fit (e.g., fit.s13.post)
+# dat, output of data_load_s7s10()
+# coef, coefficient table (default gurka_coef)
+# returns a long data frame with .draw, P, sex, treat, time and score
+gurka_score <- function(fit, dat, coef = gurka_coef) {
+  an <- names(gurka_conv)
+  sc <- dat$scale[match(an, dat$scale$analyte), ]
+
+  part <- dat$dat |>
+    distinct(P, sex, treat) |>
+    arrange(P) |>
+    mutate(
+      sex = if_else(sex < 0, "m", "f"),
+      treat = dat$treat$treat[match(treat, dat$treat$treat_idx)]
+    )
+  # Participant-specific coefficients (participants x terms)
+  b <- coef[match(part$sex, coef$sex), ]
+
+  vars <- c(pre_wide = "T1", y_wide_1 = "T2", y_wide_2 = "T4")
+  dr <- posterior::as_draws_matrix(fit$draws(names(vars)))
+
+  out <- list()
+  for (v in names(vars)) {
+    # draws x participants; the intercept is added per participant column
+    score <- matrix(b$intercept, nrow(dr), nrow(part), byrow = TRUE)
+    for (j in seq_along(an)) {
+      z <- unclass(dr[, sprintf("%s[%d,%d]", v, part$P, sc$type[j])])
+      score <- score + sweep(gurka_natural(z, sc[j, ]), 2, b[[an[j]]], "*")
+    }
+    out[[v]] <- data.frame(
+      .draw = rep(seq_len(nrow(dr)), times = nrow(part)),
+      P = rep(part$P, each = nrow(dr)),
+      sex = rep(part$sex, each = nrow(dr)),
+      treat = rep(part$treat, each = nrow(dr)),
+      time = vars[[v]],
+      score = as.vector(score)
+    )
+  }
+  bind_rows(out)
+}
+
+
+# Treatment contrast (krill oil - placebo) on the Gurka-DeBoer score
+#
+# The score is linear in waist, HDL, SBP, ln(TG) and glucose, and each of these
+# is a linear back-transform of the standardised model scale. The expected
+# difference in score between treatments (same baseline values and sex) is
+# therefore exactly
+#   sum_k b_k * sd_k * c_k * (alpha[t, k, 2] - alpha[t, k, 1])
+# where c_k is the unit conversion (1 for ln(TG)). Coefficients are
+# sex-specific, so the contrast is returned per sex and as a sample-weighted
+# average over sex.
+#
+# fit, a cmdstanr fit (models s7-s13, alpha[time, type, treat])
+# dat, output of data_load_s7s10()
+# coef, coefficient table (default gurka_coef)
+# by_component, if TRUE the contrast is returned per score component (one term
+#   per analyte, summing exactly to the total contrast)
+# returns a long data frame with .draw, time, sex (and component) and contrast
+gurka_contrast <- function(fit, dat, coef = gurka_coef, by_component = FALSE) {
+  an <- names(gurka_conv)
+  sc <- dat$scale[match(an, dat$scale$analyte), ]
+  a <- posterior::as_draws_matrix(fit$draws("alpha"))
+
+  # Proportion of women in the sample, used for the average over sex
+  p_f <- dat$dat |> distinct(P, sex) |> summarise(p = mean(sex > 0)) |> pull(p)
+
+  out <- list()
+  for (t in 1:2) {
+    d <- sapply(
+      sc$type,
+      function(k)
+        a[, sprintf("alpha[%d,%d,2]", t, k)] -
+          a[, sprintf("alpha[%d,%d,1]", t, k)]
+    )
+    # Contribution of each component (draws x components) per sex
+    eff <- lapply(c(m = "m", f = "f"), function(s) {
+      w <- unlist(coef[coef$sex == s, an]) *
+        sc$sd *
+        if_else(sc$transform == "log", 1, gurka_conv[an])
+      sweep(d, 2, w, "*")
+    })
+    for (j in if (by_component) seq_along(an) else 0) {
+      pick <- function(x) if (j == 0) rowSums(x) else x[, j]
+      out[[paste(t, j)]] <- data.frame(
+        .draw = seq_len(nrow(a)),
+        time = c("T2", "T4")[t],
+        component = if (j == 0) "total" else an[j],
+        m = pick(eff$m),
+        f = pick(eff$f),
+        average = (1 - p_f) * pick(eff$m) + p_f * pick(eff$f)
+      )
+    }
+  }
+  res <- bind_rows(out) |>
+    pivot_longer(c(m, f, average), names_to = "sex", values_to = "contrast")
+  if (!by_component) res <- select(res, -component)
+  res
+}
+
+
+# Continuous MetS score from external reference values #######################
+# Sum of (signed, weighted) z-scores of the MetS criteria relative to sex- and
+# age-specific reference means and SDs, as in Guseman et al. (2018) Acad
+# Pediatr 18(5):589-92. The reference values are supplied by the user, e.g.
+# from a population survey (HUNT4, SCAPIS, ...).
+#
+# ref, a data frame with columns analyte, mean and sd, and optionally sex
+#   ("m"/"f") and age_lwr, age_upr (inclusive age band). Each participant must
+#   match exactly one row per analyte. Values are in data units: waist (cm),
+#   sys/dias/map (mmHg), HDL and glucose (mmol/L), and TG as mean and SD of
+#   ln(TG, mmol/L) (for ln(mg/dL) subtract log(88.57) from the mean).
+# w, named weights incl. sign. Analytes: waist, HDL, TG, glucose, sys, dias and
+#   map (mean arterial pressure, dias + (sys - dias) / 3).
+
+# Reference rows (one per participant) for one analyte
+#
+# part, participant lookup (dat$part from data_load_s7s10())
+# r, the rows of ref for one analyte
+cmets_match_ref <- function(part, r) {
+  if (is.null(part))
+    stop(
+      "dat$part is missing: source R/data-prep.R and re-run data_load_s7s10()"
+    )
+  if (nrow(r) == 0) stop("No reference rows for an analyte in w")
+  i <- sapply(seq_len(nrow(part)), function(p) {
+    ok <- rep(TRUE, nrow(r))
+    if ("sex" %in% names(r)) ok <- ok & r$sex == part$sex[p]
+    if ("age_lwr" %in% names(r))
+      ok <- ok & part$age[p] >= r$age_lwr & part$age[p] <= r$age_upr
+    if (sum(ok) != 1)
+      stop(sprintf(
+        "Participant P = %d matches %d reference rows for %s",
+        part$P[p],
+        sum(ok),
+        r$analyte[1]
+      ))
+    which(ok)
+  })
+  r[i, ]
+}
+
+
+# Natural-scale value (data units) of an analyte, incl. derived map
+#
+# get_z, function(analyte) returning standardised values (vector or matrix)
+# scale, dat$scale
+cmets_natural <- function(a, get_z, scale) {
+  if (a == "map") {
+    dias <- cmets_natural("dias", get_z, scale)
+    return(dias + (cmets_natural("sys", get_z, scale) - dias) / 3)
+  }
+  sc <- scale[scale$analyte == a, ]
+  sc$mean + sc$sd * get_z(a)
+}
+
+
+# Per-participant continuous MetS score per posterior draw
+#
+# Uses the (observed or imputed) values in pre_wide (T1), y_wide_1 (T2) and
+# y_wide_2 (T4) from models s7-s13.
+#
+# fit, a cmdstanr fit (e.g., fit.s13.post)
+# dat, output of data_load_s7s10()
+# ref, reference values (see above)
+# w, named weights incl. sign
+# returns a long data frame with .draw, P, sex, treat, time and score
+cmets_score <- function(
+  fit,
+  dat,
+  ref,
+  w = c(waist = 1, HDL = -1, TG = 1, glucose = 1, map = 1)
+) {
+  part <- dat$part
+  type_idx <- setNames(dat$scale$type, dat$scale$analyte)
+
+  vars <- c(pre_wide = "T1", y_wide_1 = "T2", y_wide_2 = "T4")
+  dr <- posterior::as_draws_matrix(fit$draws(names(vars)))
+
+  out <- list()
+  for (v in names(vars)) {
+    # draws x participants
+    get_z <- function(a)
+      unclass(dr[, sprintf("%s[%d,%d]", v, part$P, type_idx[[a]])])
+    score <- 0
+    for (a in names(w)) {
+      r <- cmets_match_ref(part, ref[ref$analyte == a, ])
+      x <- cmets_natural(a, get_z, dat$scale)
+      z <- sweep(sweep(x, 2, r$mean, "-"), 2, r$sd, "/")
+      score <- score + w[[a]] * z
+    }
+    out[[v]] <- data.frame(
+      .draw = rep(seq_len(nrow(dr)), times = nrow(part)),
+      P = rep(part$P, each = nrow(dr)),
+      sex = rep(part$sex, each = nrow(dr)),
+      treat = rep(part$treat, each = nrow(dr)),
+      time = vars[[v]],
+      score = as.vector(score)
+    )
+  }
+  bind_rows(out)
+}
+
+
+# Treatment contrast (krill oil - placebo) on the continuous MetS score
+#
+# The score is linear in the model scale, so the expected contrast for
+# participant p (same baseline values and sex) is
+#   sum_a w_a * SD_a^marg * (alpha[t, a, 2] - alpha[t, a, 1]) / SD_a,p^ref
+# (map: 2/3 of the dias and 1/3 of the sys contrast). Reference SDs depend on
+# sex and age, so contrasts are averaged over the participants in the sample,
+# per sex and overall. Reference means cancel.
+#
+# fit, a cmdstanr fit (models s7-s13, alpha[time, type, treat])
+# dat, output of data_load_s7s10()
+# ref, reference values (see above)
+# w, named weights incl. sign
+# by_component, if TRUE the contrast is returned per score component (one term
+#   per element of w, summing exactly to the total contrast)
+# returns a long data frame with .draw, time, sex (and component) and contrast
+cmets_contrast <- function(
+  fit,
+  dat,
+  ref,
+  w = c(waist = 1, HDL = -1, TG = 1, glucose = 1, map = 1),
+  by_component = FALSE
+) {
+  part <- dat$part
+  type_idx <- setNames(dat$scale$type, dat$scale$analyte)
+  a_dr <- posterior::as_draws_matrix(fit$draws("alpha"))
+
+  out <- list()
+  for (t in 1:2) {
+    # Contrast on the standardised scale (draws x participants, constant over
+    # participants); scale$mean cancels in the natural-scale difference
+    get_z <- function(a) {
+      d <- unclass(
+        a_dr[, sprintf("alpha[%d,%d,2]", t, type_idx[[a]])] -
+          a_dr[, sprintf("alpha[%d,%d,1]", t, type_idx[[a]])]
+      )
+      matrix(d, nrow(a_dr), nrow(part))
+    }
+    scale0 <- mutate(dat$scale, mean = 0)
+    # Contribution of each component (draws x participants)
+    eff <- lapply(names(w), function(a) {
+      r <- cmets_match_ref(part, ref[ref$analyte == a, ])
+      w[[a]] * sweep(cmets_natural(a, get_z, scale0), 2, r$sd, "/")
+    })
+    names(eff) <- names(w)
+    if (!by_component) eff <- list(total = Reduce(`+`, eff))
+    for (k in names(eff)) {
+      out[[paste(t, k)]] <- data.frame(
+        .draw = seq_len(nrow(a_dr)),
+        time = c("T2", "T4")[t],
+        component = k,
+        m = rowMeans(eff[[k]][, part$sex == "m", drop = FALSE]),
+        f = rowMeans(eff[[k]][, part$sex == "f", drop = FALSE]),
+        average = rowMeans(eff[[k]])
+      )
+    }
+  }
+  res <- bind_rows(out) |>
+    pivot_longer(c(m, f, average), names_to = "sex", values_to = "contrast")
+  if (!by_component) res <- select(res, -component)
+  res
+}
+
+
+# Per-participant values of single analytes per posterior draw
+#
+# Observed or imputed values in pre_wide (T1), y_wide_1 (T2) and y_wide_2
+# (T4) from models s7-s13, back-transformed to the natural scale (exp() for
+# log-transformed analytes, e.g. HOMA2IR).
+#
+# fit, a cmdstanr fit (e.g., fit.s13.post)
+# dat, output of data_load_s7s10()
+# analytes, analyte names as in dat$scale
+# returns a long data frame with .draw, P, time, analyte, value and observed
+#   (1 if the value was observed, 0 if imputed)
+wide_values <- function(fit, dat, analytes) {
+  part <- dat$part
+  sc <- dat$scale[match(analytes, dat$scale$analyte), ]
+
+  vars <- c(pre_wide = "T1", y_wide_1 = "T2", y_wide_2 = "T4")
+  dr <- posterior::as_draws_matrix(fit$draws(names(vars)))
+
+  # Observed indicators per participant, time and type
+  obs <- bind_rows(
+    dat$dat |> distinct(P, type, observed = pre_miss) |> mutate(time = "T1"),
+    dat$dat |>
+      transmute(P, type, observed = y_miss, time = c("T2", "T4")[time])
+  )
+
+  out <- list()
+  for (v in names(vars)) {
+    for (j in seq_len(nrow(sc))) {
+      z <- unclass(dr[, sprintf("%s[%d,%d]", v, part$P, sc$type[j])])
+      x <- sc$mean[j] + sc$sd[j] * z
+      if (sc$transform[j] == "log") x <- exp(x)
+      out[[paste(v, j)]] <- data.frame(
+        .draw = rep(seq_len(nrow(dr)), times = nrow(part)),
+        P = rep(part$P, each = nrow(dr)),
+        time = vars[[v]],
+        analyte = sc$analyte[j],
+        type = sc$type[j],
+        value = as.vector(x)
+      )
+    }
+  }
+  bind_rows(out) |>
+    left_join(obs, by = c("P", "type", "time")) |>
+    select(-type)
+}

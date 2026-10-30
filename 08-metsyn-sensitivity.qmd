@@ -1,11 +1,889 @@
 ---
 title: "Effects of krill oil supplementation on indications of metabolic syndrome - Model sensitivity"
 format: html
+editor_options: 
+  chunk_output_type: console
 ---
 
 
 ## 
 
 The residual correlations modeled in s13 allows us to account for associations between outcome variables when estimating treatment effects. Conceptually this could affect estimates in two ways. First, adding uncertainty associated with the between-variable correlation could increase uncertainty in the treatment effect. However, the correlations will help in estimating missing data, this would reduce uncertainty in estimation of single measurements which propagates into the treatment effect.     
+
+
+## Changing the scale of the burden score
+
+The burden score as calculated from the five criteria measurements for the metabolic syndrome is created using the marginal SD as the denominator for each score. This could be problematic as the marginal SD contains sex differences and variation due to potential treatment effects. First we will recalculate the score using baseline, sex-adjusted standard deviations. 
+
+```{r}
+#| label: burden-baseline-sd
+
+source("./R/packages.R")
+source("./R/data-prep.R")
+source("./R/helpers.R")
+source("./R/fig-opt-fun.R")
+
+dat <- data_load_s7s10()
+fit.s13.post <- readRDS("fits/paper1/fit.s13.post.RDS")
+
+type_idx <- setNames(dat$scale$type, dat$scale$analyte)
+
+# Sign-aligned weights of the burden score components, as in 07
+# (joint-burden-score): (-HDL + TG + 0.5 * (dias + sys) + glucose + waist) / 5
+burden_w <- c(HDL = -1, TG = 1, dias = 0.5, sys = 0.5, glucose = 1, waist = 1) / 5
+
+# Baseline (T1) SD pooled within sex. pre_obs is on the standardised scale
+# (marginal SD = 1), so the within-sex SD computed here is the ratio
+# SD_baseline / SD_marginal for each criterion.
+base_sd <- dat$dat |>
+  filter(pre_miss == 1, type %in% type_idx[names(burden_w)]) |>
+  distinct(P, type, sex, pre_obs) |>
+  summarise(.by = c(type, sex), n = n(), v = var(pre_obs)) |>
+  summarise(.by = type, sd_ratio = sqrt(sum((n - 1) * v) / (sum(n) - 2))) |>
+  mutate(analyte = names(type_idx)[match(type, type_idx)])
+
+sd_ratio <- with(base_sd, setNames(round(sd_ratio,2), analyte))
+
+
+```
+
+The data used in the model, for each measurement type $k$, is mean centered and scaled to the marginal SD:
+
+$$
+z = \frac{x - m_k}{SD_k^{\text{marg}}}
+$$
+
+Using the observed data we calculate a pooled SD using baseline data only where the variance ($v$) for each type is pooled within sex (men, $m$; women, $f$) and combined into a baseline SD.
+
+$$
+SD_{\text{pooled}} = \sqrt{\frac{(n_m-1)\,v_m + (n_f-1)\,v_f}{n_m + n_f - 2}}
+$$
+
+Because the pooled SD is calculated on the standardized data, it equals the ratio $r_k =SD_k^{\text{base}} / SD_k^{\text{marg}}$. Treatment contrasts estimated in marginal SD units ($\Delta_k / SD_k^{\text{marg}}$) are converted to baseline within-sex SD units by dividing by $r_k$, which gives $\Delta_k / SD_k^{\text{base}}$. The ratios indicated a slightly higher baseline SD than marginal SD for systolic and diastolic blood pressure (ratio `r sd_ratio[["sys"]]` and `r sd_ratio[["dias"]]`, respectively). For HDL, triglycerides, glucose and waist circumference the ratios were below 1 (`r sd_ratio[["HDL"]]`, `r sd_ratio[["TG"]]`, `r sd_ratio[["glucose"]]`, and `r sd_ratio[["waist"]]`), indicating a lower baseline within-sex SD than marginal SD.
+
+The transformations can be validated in code as shown below. First we create a two time-point data set (`T1` and `T2`) with slightly different means and standard deviations. The marginal SD is then calculated from the full data set and used as the scale for a Z-score. Additionally, the raw baseline SD is calculated for later reference along with a SD of the Z-score at baseline. The mean difference on the marginal SD scale is calculated (`m_z_marg`) which is then re-scaled using the baseline SD (z-score units). This re-scaled mean difference is compared to the mean difference of a Z-score calculated using the raw baseline SD as the scale (`m_z_base_recalc`). The two numbers are the same.  
+
+```{r}
+#| echo: true
+
+set.seed(1)
+T1 <- rnorm(150, 100, 25)
+T2 <- rnorm(150, 110, 35)
+
+# Calculate the marginal SD
+marg_sd <- sd(c(T1, T2))
+# Calculate the baseline SD
+baseline_sd <- sd(T1)
+
+# Scale the outcome to marginal SD
+z_marg <- (c(T1, T2) - mean(c(T1, T2))) / marg_sd
+
+# Calculate the baseline SD on the standardized scale
+baseline_sd_z <- sd(z_marg[1:150])
+
+# Calculate mean in standardized
+m_z_marg <- mean(z_marg[151:300] - z_marg[1:150])
+
+# Re-scale the mean
+m_z_base <- m_z_marg / baseline_sd_z
+
+# Calculate diff on the baseline_sd scale
+z_base <- (c(T1, T2) - mean(c(T1, T2))) / baseline_sd
+
+# Calculate the contrast on the baseline SD-standardized scale.
+m_z_base_recalc <- mean(z_base[151:300] - z_base[1:150])
+
+# Check if the re-calculated score matches the 
+m_z_base_recalc == m_z_base
+
+```
+
+
+The burden score is recalculated per posterior draw with the same weights as in the main analysis. This gives us a sense of the sensitivity of the scaling procedure to the conclusion of the preliminary joint burden score (@tbl-burden-sensitivity). Scaling the burden score using sex-centered baseline data did not change the conclusion in a meaningful way.
+
+
+```{r}
+#| tbl-cap: "Comparing inference (Krill oil - Placebo) for the joint burden score between different scales. Marginal uses the full data set to calculate the scale for the Z-score component of each score, baseline uses only baseline data to calculate a pooled standard deviation on sex-centered data."
+#| echo: false
+#| label: tbl-burden-sensitivity
+# Treatment contrast (krill oil - placebo) per draw on the standardized scale
+a <- fit.s13.post$draws("alpha", format = "df")
+eff <- function(t, k) a[[sprintf("alpha[%d,%d,2]", t, k)]] - a[[sprintf("alpha[%d,%d,1]", t, k)]]
+
+# Burden score per draw with each contrast rescaled by ratio (1 = marginal SD,
+# i.e. the original score). A contrast in marginal SD units divided by the
+# ratio gives the contrast in baseline within-sex SD units.
+burden <- function(t, ratio) {
+  rowSums(sapply(names(burden_w), function(x)
+    burden_w[[x]] * eff(t, type_idx[[x]]) / ratio[[x]]))
+}
+
+ratio_marg <- setNames(rep(1, length(burden_w)), names(burden_w))
+ratio_base <- setNames(base_sd$sd_ratio, base_sd$analyte)
+
+burden_sens <- bind_rows(lapply(1:2, function(t)
+  data.frame(time = c("T2", "T4")[t],
+             marginal = burden(t, ratio_marg),
+             baseline = burden(t, ratio_base)))) |>
+  pivot_longer(c(marginal, baseline), names_to = "scale") |>
+  summarise(.by = c(scale, time),
+            med = median(value),
+            lwr = quantile(value, 0.025),
+            upr = quantile(value, 0.975),
+            p_benefit = mean(value < 0))
+
+burden_sens |>
+  mutate(time = if_else(time == "T2", "Supplementation-only", "Combined")) |> 
+  gt() |> 
+  fmt_auto() |> 
+  cols_label(scale = "Scale", 
+             time = "Follow-up", 
+             med = "Median", 
+             lwr = "PI 2.5%", 
+             upr = "PI 97.5%", 
+             p_benefit = "P(Benefit)")  
+  
+
+```
+
+
+The burden score presented so far is scaled 
+
+
+## An externally weighted severity score
+
+The burden score weights each criterion equally on the standardized scale. As an alternative, we used the metabolic syndrome severity score from @gurka2014, which weights the criteria according to a confirmatory factor analysis of NHANES data. The score is sex- and race/ethnicity-specific, and we used the equations for non-Hispanic White adults with waist circumference (cm), HDL (mg/dL), systolic blood pressure (mmHg), triglycerides (ln mg/dL) and fasting glucose (mg/dL):
+
+$$
+\begin{aligned}
+Z_{\text{men}} &= -5.4559 + 0.0125\,\text{WC} - 0.0251\,\text{HDL} + 0.0047\,\text{SBP} + 0.8244\,\ln(\text{TG}) + 0.0106\,\text{Glu} \\
+Z_{\text{women}} &= -7.2591 + 0.0254\,\text{WC} - 0.0120\,\text{HDL} + 0.0075\,\text{SBP} + 0.5800\,\ln(\text{TG}) + 0.0203\,\text{Glu}
+\end{aligned}
+$$
+
+Diastolic blood pressure is not part of the score. The score is linear in its inputs, and each input is a linear back-transformation of the standardized model scale ($x = m_k + SD_k^{\text{marg}} z$, with TG on the log scale). The expected treatment contrast on the score, for a given sex and baseline profile, is therefore exactly
+
+$$
+\Delta Z_t = \sum_k b_k \, c_k \, SD_k^{\text{marg}} \left(\alpha_{t,k,\text{KO}} - \alpha_{t,k,\text{PL}}\right)
+$$
+
+where $b_k$ are the sex-specific coefficients and $c_k$ converts mmol/L to mg/dL ($c_k = 1$ for waist, SBP and ln(TG)). Contrasts are calculated per posterior draw for men and women, and as an average weighted by the proportion of men and women in the sample (`gurka_contrast()` in `R/helpers.R`). Per-participant scores at each time-point are calculated from the observed or imputed values in the model (`gurka_score()`).
+
+```{r}
+#| label: gurka-score
+
+g_score <- gurka_score(fit.s13.post, dat)
+g_contrast <- gurka_contrast(fit.s13.post, dat)
+
+# Validation: scores from observed complete profiles calculated directly from
+# raw data should equal the (constant over draws) model-based scores
+g_obs <- criteria_dat |>
+  filter(analyte %in% names(gurka_conv)) |>
+  select(participant, time, sex, analyte, value) |>
+  pivot_wider(names_from = analyte, values_from = value) |>
+  filter(complete.cases(pick(all_of(names(gurka_conv))))) |>
+  left_join(gurka_coef, by = "sex", suffix = c("", "_b")) |>
+  mutate(
+    score_obs = intercept + waist_b * waist + HDL_b * HDL * gurka_conv[["HDL"]] +
+      sys_b * sys + TG_b * log(TG * gurka_conv[["TG"]]) +
+      glucose_b * glucose * gurka_conv[["glucose"]],
+    # Participant index as in data_load_s7s10()
+    P = match(paste0("p", participant),
+              sort(unique(paste0("p", criteria_dat$participant))))
+  )
+
+g_check <- g_score |>
+  summarise(.by = c(P, time), score = mean(score)) |>
+  inner_join(g_obs |> select(P, time, score_obs), by = c("P", "time"))
+
+max_dev <- max(abs(g_check$score - g_check$score_obs))
+```
+
+As a check on the back-transformation, scores calculated directly from observed complete profiles (n = `r nrow(g_check)` participant-time combinations) were compared to the model-based scores for the same participants; the largest absolute difference was `r signif(max_dev, 2)`.
+
+```{r}
+#| label: fig-gurka-score
+#| fig-cap: "Posterior mean metabolic syndrome severity score [@gurka2014] per participant and time-point. Missing measurements are replaced by model-based imputations. Lines connect scores within participants."
+
+g_score |>
+  summarise(.by = c(P, sex, treat, time), score = mean(score)) |>
+  ggplot(aes(time, score, group = P, color = treat)) +
+  geom_line(alpha = 0.3) +
+  geom_point(alpha = 0.6) +
+  facet_grid(sex ~ treat, labeller = labeller(
+    sex = c(m = "Men", f = "Women"),
+    treat = c(ctrl = "Placebo", omega = "Krill oil")
+  )) +
+  scale_color_manual(values = colscale[c(4,2)]) +
+  alpha_theme() +
+  theme(legend.position = "none") +
+  labs(x = "Time-point", y = "MetS severity score (Z)")
+```
+
+```{r}
+#| label: tbl-gurka-contrast
+#| tbl-cap: "Treatment contrast (Krill oil - Placebo) on the metabolic syndrome severity score [@gurka2014]. The score is a Z-score relative to the NHANES reference population; negative values indicate a less severe metabolic profile in the krill oil group."
+#| echo: false
+
+g_contrast |>
+  summarise(.by = c(sex, time),
+            med = median(contrast),
+            lwr = quantile(contrast, 0.025),
+            upr = quantile(contrast, 0.975),
+            p_benefit = mean(contrast < 0)) |>
+  mutate(time = if_else(time == "T2", "Supplementation-only", "Combined"),
+         sex = recode(sex, m = "Men", f = "Women", average = "Average")) |>
+  gt() |>
+  fmt_auto() |>
+  cols_label(sex = "Sex",
+             time = "Follow-up",
+             med = "Median",
+             lwr = "PI 2.5%",
+             upr = "PI 97.5%",
+             p_benefit = "P(Benefit)")
+```
+
+
+## A continuous score from reference values
+
+Following @guseman2018, a continuous metabolic syndrome score (cMetS) was calculated as the sum of z-scores of waist circumference, HDL (reversed sign), ln(TG), fasting glucose and mean arterial pressure (MAP = diastolic + (systolic - diastolic) / 3), relative to sex-specific reference means and SDs. As for the Gurka score, the score is linear in the model scale and the expected treatment contrast for participant $p$ is
+
+$$
+\Delta \text{cMetS}_{t,p} = \sum_k w_k \frac{SD_k^{\text{marg}}}{SD_{k,p}^{\text{ref}}} \left(\alpha_{t,k,\text{KO}} - \alpha_{t,k,\text{PL}}\right)
+$$
+
+with MAP contributing 2/3 of the diastolic and 1/3 of the systolic contrast. Reference means cancel in the contrast, and contrasts are averaged over participants per sex and overall (`cmets_contrast()` in `R/helpers.R`).
+
+Population reference values were retrieved from the literature [@haverinen2021,@nilsen2021] and used to construct population-based scales for each outcome. The standard deviations listed in @tbl-cmets-ref formed the basis of set of SD combinations allowing for rescaling the study-specific burden score and extend the analysis to the metabolic syndrome score proposed by Guseman et al. [@guseman2018].
+
+
+| Study | Description | Sex | Age (y) | Analyte | n | Mean | SD |
+|:------|:------------|:----|:--------|:--------|--:|-----:|---:|
+| Tromsø 7 | Population-based, Tromsø (Norway) 2015--16, ages 40+, non-fasting blood samples [@nilsen2021] | Men | 40--69 | Waist (cm) | | | |
+| | | Men | 40--69 | HDL (mmol/L) |7670 |1.4 |0.4 |
+| | | Men | 40--69 | ln TG (mmol/L) | | | |
+| | | Men | 40--69 | Glucose (mmol/L) | | | |
+| | | Men | 40--69 | MAP (mmHg) | | | |
+| | | Men | 40--69 | Systolic BP (mmHg) | 7670|130.9 |17.1 |
+| | | Men | 40--69 | Diastolic BP (mmHg) | 7670|78.9 |9.6 |
+| | | Women | 40--69 | Waist (cm) | | | |
+| | | Women | 40--69 | HDL (mmol/L) |8896 |1.6 |0.5 |
+| | | Women | 40--69 | ln TG (mmol/L) | | | |
+| | | Women | 40--69 | Glucose (mmol/L) | | | |
+| | | Women | 40--69 | MAP (mmHg) | | | |
+| | | Women | 40--69 | Systolic BP (mmHg) |8896 |126.8 |18.3 |
+| | | Women | 40--69 | Diastolic BP (mmHg) |8896 |75.5 |10.01 |
+| FinHealth 2017 | Nationally representative health examination survey, Finland 2017, ages 25+, fasting plasma glucose after minimum 4 h fasting [@haverinen2021] | Men | 25--93 | Waist (cm) | 2621 | 99.1 | 12.9 |
+| | | Men | 25--93 | HDL (mmol/L) | 2621 | 1.3 | 0.3 |
+| | | Men | 25--93 | TG (mmol/L) | 2621 | 1.5 | 1.1 |
+| | | Men | 25--93 | ln TG (mmol/L)^a^ | 2621 | 0.190 | 0.656 |
+| | | Men | 25--93 | Glucose (mmol/L) | 2621 | 6.0 | 1.4 |
+| | | Men | 25--93 | Systolic BP (mmHg) | 2621 | 135.9 | 17.9 |
+| | | Men | 25--93 | Diastolic BP (mmHg) | 2621 | 81.2 | 11.2 |
+| | | Men | 25--93 | MAP (mmHg)^b^ | 2621 | 99.4 | 12.8 |
+| | | Women | 25--99 | Waist (cm) | 3066 | 89.6 | 14.1 |
+| | | Women | 25--99 | HDL (mmol/L) | 3066 | 1.6 | 0.4 |
+| | | Women | 25--99 | TG (mmol/L) | 3066 | 1.3 | 0.7 |
+| | | Women | 25--99 | ln TG (mmol/L)^a^ | 3066 | 0.135 | 0.505 |
+| | | Women | 25--99 | Glucose (mmol/L) | 3066 | 5.6 | 1.1 |
+| | | Women | 25--99 | Systolic BP (mmHg) | 3066 | 132.8 | 20.4 |
+| | | Women | 25--99 | Diastolic BP (mmHg) | 3066 | 77.8 | 10.6 |
+| | | Women | 25--99 | MAP (mmHg)^b^ | 3066 | 96.1 | 13.2 |
+| SAMINOR 1 | Population-based, rural Northern Norway 2003--04, ages 40--79, non-Sami participants, non-fasting blood samples [@michalsen2019] | Men | 40--79 | Waist (cm) | 1864 | 93.9 | 10.2 |
+| | | Men | 40--79 | HDL (mmol/L) | 1864 | 1.28 | 0.34 |
+| | | Men | 40--79 | ln TG (mmol/L)^c^ | 1864 | 0.457 | 0.524 |
+| | | Men | 40--79 | Glucose (mmol/L)^c^ | 1864 | 5.41 | 0.852 |
+| | | Men | 40--79 | Systolic BP (mmHg) | 1864 | 136.1 | 17.6 |
+| | | Men | 40--79 | Diastolic BP (mmHg) | 1864 | 78.2 | 10.0 |
+| | | Men | 40--79 | MAP (mmHg)^b^ | 1864 | 97.5 | 11.9 |
+| | | Women | 40--79 | Waist (cm) | 2176 | 85.6 | 12.0 |
+| | | Women | 40--79 | HDL (mmol/L) | 2176 | 1.49 | 0.40 |
+| | | Women | 40--79 | ln TG (mmol/L)^c^ | 2176 | 0.300 | 0.496 |
+| | | Women | 40--79 | Glucose (mmol/L)^c^ | 2176 | 5.29 | 0.808 |
+| | | Women | 40--79 | Systolic BP (mmHg) | 2176 | 133.0 | 20.1 |
+| | | Women | 40--79 | Diastolic BP (mmHg) | 2176 | 73.0 | 10.5 |
+| | | Women | 40--79 | MAP (mmHg)^b^ | 2176 | 93.0 | 13.0 |
+| SAMINOR 2 | Population-based, rural Northern Norway 2012--14, ages 40--79, non-Sami participants, non-fasting blood samples [@michalsen2019] | Men | 40--79 | Waist (cm) | 1571 | 100.2 | 10.7 |
+| | | Men | 40--79 | HDL (mmol/L) | 1571 | 1.28 | 0.38 |
+| | | Men | 40--79 | ln TG (mmol/L)^c^ | 1571 | 0.405 | 0.532 |
+| | | Men | 40--79 | Glucose (mmol/L)^c^ | 1571 | 5.40 | 0.815 |
+| | | Men | 40--79 | Systolic BP (mmHg) | 1571 | 135.1 | 17.2 |
+| | | Men | 40--79 | Diastolic BP (mmHg) | 1571 | 77.8 | 9.4 |
+| | | Men | 40--79 | MAP (mmHg)^b^ | 1571 | 96.9 | 11.4 |
+| | | Women | 40--79 | Waist (cm) | 1899 | 92.9 | 12.0 |
+| | | Women | 40--79 | HDL (mmol/L) | 1899 | 1.55 | 0.45 |
+| | | Women | 40--79 | ln TG (mmol/L)^c^ | 1899 | 0.336 | 0.469 |
+| | | Women | 40--79 | Glucose (mmol/L)^c^ | 1899 | 5.20 | 0.741 |
+| | | Women | 40--79 | Systolic BP (mmHg) | 1899 | 131.1 | 18.6 |
+| | | Women | 40--79 | Diastolic BP (mmHg) | 1899 | 72.3 | 9.0 |
+| | | Women | 40--79 | MAP (mmHg)^b^ | 1899 | 91.9 | 11.6 |
+
+: Published reference values (mean, SD and n) for the components of the continuous metabolic syndrome score from Scandinavian populations. TG is summarised on the natural log scale (mmol/L); MAP, mean arterial pressure. ^a^Derived from the reported arithmetic mean ($m$) and SD ($s$) assuming a log-normal distribution: $\sigma^2 = \ln(1 + s^2/m^2)$, $\mu = \ln m - \sigma^2/2$. ^b^Derived as DBP + (SBP - DBP)/3; the SD assumes a correlation of 0.8 between SBP and DBP (SD 12.0--12.8 and 12.4--13.2 for men and women, respectively, for correlations of 0.6--0.8). ^c^Derived from the reported median ($M$) and interquartile range (IQR): glucose assuming a normal distribution (mean = $M$, SD = IQR/1.349) and TG assuming a log-normal distribution ($\mu = \ln M$, $\sigma = \text{asinh}(\text{IQR}/2M)/0.6745$). {#tbl-cmets-ref}
+
+```{r}
+#| label: map-approximation
+#| echo: false
+
+# MAP = DBP + (SBP - DBP) / 3 = (2 * DBP + SBP) / 3, so
+#   mean(MAP) = (2 * mean(DBP) + mean(SBP)) / 3
+#   var(MAP)  = (4 * var(DBP) + var(SBP) + 4 * r * sd(DBP) * sd(SBP)) / 9
+# where r is the SBP-DBP correlation (not reported in published tables).
+map_approx <- function(sbp, sbp_sd, dbp, dbp_sd, r) {
+  data.frame(r = r,
+             mean = (2 * dbp + sbp) / 3,
+             sd = sqrt((4 * dbp_sd^2 + sbp_sd^2 + 4 * r * dbp_sd * sbp_sd) / 9))
+}
+
+# Check the approximation and the correlation in the trial sample at baseline:
+# MAP calculated per participant vs. the approximation from summary statistics
+bp_t1 <- criteria_dat |>
+  filter(time == "T1", analyte %in% c("sys", "dias")) |>
+  select(participant, sex, analyte, value) |>
+  pivot_wider(names_from = analyte, values_from = value) |>
+  filter(complete.cases(sys, dias))
+
+bp_check <- bp_t1 |>
+  summarise(.by = sex,
+            r = cor(sys, dias),
+            sd_observed = sd(dias + (sys - dias) / 3),
+            sd_approx = map_approx(mean(sys), sd(sys), mean(dias), sd(dias), r)$sd)
+
+
+# FinHealth 2017 [@haverinen2021], SD over a range of plausible correlations
+MAP_SD_approx <- bind_rows(
+  map_approx(135.9, 17.9, 81.2, 11.2, r = c(0.6, 0.7, 0.8)) |> mutate(sex = "m"),
+  map_approx(132.8, 20.4, 77.8, 10.6, r = c(0.6, 0.7, 0.8)) |> mutate(sex = "f")
+)
+```
+
+
+
+```{r}
+#| label: cmets-contrast
+
+
+# Calculate (approximate) SD from interquartile range
+iqr_sd <- function(iqr, m) {
+  srange <- qnorm(0.75) - qnorm(0.25)
+  s <- iqr / srange
+  s
+}
+
+# Data from the saminor study
+
+saminor_glucose <- tribble(
+  ~grp,            ~m,   ~iqr, 
+  "saminor1_w",   5.29,   1.09,
+  "saminor2_w",   5.2,    1.0,
+  "saminor1_m",   5.41,   1.15, 
+  "saminor2_m",   5.4,    1.1,
+)
+
+# saminor_glucose |>
+#  mutate(s = iqr_sd(iqr, m))
+
+# TG is reported as median (IQR). Assuming a log-normal distribution,
+# mu = ln(median) and IQR = 2 * median * sinh(qnorm(0.75) * sigma), so
+# sigma = asinh(IQR / (2 * median)) / qnorm(0.75)
+iqr_lnorm <- function(iqr, m) {
+  data.frame(mu = log(m), sigma = asinh(iqr / (2 * m)) / qnorm(0.75))
+}
+
+saminor_tg <- tribble(
+  ~grp,            ~m,   ~iqr,
+  "saminor1_w",   1.35,   0.92,
+  "saminor2_w",   1.40,   0.90,
+  "saminor1_m",   1.58,   1.14,
+  "saminor2_m",   1.50,   1.10
+)
+
+# saminor_tg |>
+#  mutate(iqr_lnorm(iqr, m))
+
+
+
+
+# Population reference values from @tbl-cmets-ref (keep in sync with the
+# table). TG as ln(mmol/L). The FinHealth 2017 blood pressure sample
+# (n = 1159/1307) is drawn from the same survey as Haverinen et al. and is
+# excluded (use = FALSE) to avoid counting participants twice.
+pop_ref <- tribble(
+  ~study,              ~use,  ~sex, ~analyte,  ~n,   ~mean,  ~sd,
+  "Tromso7",           TRUE,  "m",  "HDL",     7670, 1.4,    0.4,
+  "Tromso7",           TRUE,  "m",  "sys",     7670, 130.9,  17.1,
+  "Tromso7",           TRUE,  "m",  "dias",    7670, 78.9,   9.6,
+  "Tromso7",           TRUE,  "f",  "HDL",     8896, 1.6,    0.5,
+  "Tromso7",           TRUE,  "f",  "sys",     8896, 126.8,  18.3,
+  "Tromso7",           TRUE,  "f",  "dias",    8896, 75.5,   10.01,
+  "FinHealth2017",     TRUE,  "m",  "waist",   2621, 99.1,   12.9,
+  "FinHealth2017",     TRUE,  "m",  "HDL",     2621, 1.3,    0.3,
+  "FinHealth2017",     TRUE,  "m",  "TG",      2621, 0.190,  0.656,
+  "FinHealth2017",     FALSE,  "m",  "glucose", 2621, 6.0,    1.4,
+  "FinHealth2017",     TRUE,  "m",  "sys",     2621, 135.9,  17.9,
+  "FinHealth2017",     TRUE,  "m",  "dias",    2621, 81.2,   11.2,
+  "FinHealth2017",     TRUE,  "f",  "waist",   3066, 89.6,   14.1,
+  "FinHealth2017",     TRUE,  "f",  "HDL",     3066, 1.6,    0.4,
+  "FinHealth2017",     TRUE,  "f",  "TG",      3066, 0.135,  0.505,
+  "FinHealth2017",     FALSE,  "f",  "glucose", 3066, 5.6,    1.1,
+  "FinHealth2017",     TRUE,  "f",  "sys",     3066, 132.8,  20.4,
+  "FinHealth2017",     TRUE,  "f",  "dias",    3066, 77.8,   10.6,
+  # SAMINOR 1 and 2, non-Sami participants [@michalsen2019]. Glucose and TG
+  # derived from median (IQR), see above.
+  "SAMINOR1",          FALSE,  "m",  "waist",   1864, 93.9,   10.2,
+  "SAMINOR1",          FALSE,  "m",  "HDL",     1864, 1.28,   0.34,
+  "SAMINOR1",          FALSE,  "m",  "TG",      1864, 0.457,  0.524,
+  "SAMINOR1",          FALSE,  "m",  "glucose", 1864, 5.41,   0.852,
+  "SAMINOR1",          FALSE,  "m",  "sys",     1864, 136.1,  17.6,
+  "SAMINOR1",          FALSE,  "m",  "dias",    1864, 78.2,   10.0,
+  "SAMINOR1",          FALSE,  "f",  "waist",   2176, 85.6,   12.0,
+  "SAMINOR1",          FALSE,  "f",  "HDL",     2176, 1.49,   0.40,
+  "SAMINOR1",          FALSE,  "f",  "TG",      2176, 0.300,  0.496,
+  "SAMINOR1",          FALSE,  "f",  "glucose", 2176, 5.29,   0.808,
+  "SAMINOR1",          FALSE,  "f",  "sys",     2176, 133.0,  20.1,
+  "SAMINOR1",          FALSE,  "f",  "dias",    2176, 73.0,   10.5,
+  "SAMINOR2",          TRUE,  "m",  "waist",   1571, 100.2,  10.7,
+  "SAMINOR2",          TRUE,  "m",  "HDL",     1571, 1.28,   0.38,
+  "SAMINOR2",          TRUE,  "m",  "TG",      1571, 0.405,  0.532,
+  "SAMINOR2",          TRUE,  "m",  "glucose", 1571, 5.4,    0.815,
+  "SAMINOR2",          TRUE,  "m",  "sys",     1571, 135.1,  17.2,
+  "SAMINOR2",          TRUE,  "m",  "dias",    1571, 77.8,   9.4,
+  "SAMINOR2",          TRUE,  "f",  "waist",   1899, 92.9,   12.0,
+  "SAMINOR2",          TRUE,  "f",  "HDL",     1899, 1.55,   0.45,
+  "SAMINOR2",          TRUE,  "f",  "TG",      1899, 0.336,  0.469,
+  "SAMINOR2",          TRUE,  "f",  "glucose", 1899, 5.2,    0.741,
+  "SAMINOR2",          TRUE,  "f",  "sys",     1899, 131.1,  18.6,
+  "SAMINOR2",          TRUE,  "f",  "dias",    1899, 72.3,   9.0
+) |>
+  filter(use)
+
+# MAP per study from SBP and DBP, with SBP-DBP correlation r = 0.8
+pop_map <- pop_ref |>
+  filter(analyte %in% c("sys", "dias")) |>
+  pivot_wider(id_cols = c(study, sex, n), names_from = analyte,
+              values_from = c(mean, sd)) |>
+  mutate(map_approx(mean_sys, sd_sys, mean_dias, sd_dias, r = 0.8),
+         analyte = "map") |>
+  select(study, sex, analyte, n, mean, sd)
+
+# Sex-specific reference values pooled over studies, weighted by study size:
+# mean = sum(n * mean) / sum(n), SD from the pooled within-study variance
+# sum((n - 1) * sd^2) / sum(n - 1)
+cmets_ref_pop <- bind_rows(pop_ref |> select(-use), pop_map) |>
+  summarise(.by = c(sex, analyte),
+            n_studies = n(),
+            mean = sum(n * mean) / sum(n),
+            sd = sqrt(sum((n - 1) * sd^2) / sum(n - 1)),
+            n = sum(n))
+
+# Reference values: sex-specific observed baseline means and SDs (placeholder
+# for population reference values)
+cmets_ref <- criteria_dat |>
+  filter(time == "T1", analyte %in% c("waist", "HDL", "TG", "glucose", "sys", "dias")) |>
+  select(participant, sex, analyte, value) |>
+  pivot_wider(names_from = analyte, values_from = value) |>
+  mutate(TG = log(TG), map = dias + (sys - dias) / 3) |>
+  pivot_longer(c(waist, HDL, TG, glucose, sys, dias, map), names_to = "analyte") |>
+  summarise(.by = c(sex, analyte),
+            mean = mean(value, na.rm = TRUE),
+            sd = sd(value, na.rm = TRUE))
+
+# Marginal (pooled over time, treatment and sex) scale used in the model
+ref_marg <- dat$scale |>
+  filter(analyte %in% c("waist", "HDL", "TG", "glucose", "sys", "dias")) |>
+  select(analyte, mean, sd)
+
+# Burden score weights (mean of five criteria, BP as the average of sys and
+# dias z-scores), and the cMetS weights (sum of five z-scores, BP as MAP)
+w_burden <- c(waist = 1, HDL = -1, TG = 1, glucose = 1, sys = 0.5, dias = 0.5) / 5
+w_cmets <- c(waist = 1, HDL = -1, TG = 1, glucose = 1, map = 1)
+
+c_contrast <- cmets_contrast(fit.s13.post, dat, cmets_ref_pop)
+
+# All scores, contrasts per draw (sex-specific and average)
+score_contrasts <- bind_rows(
+  cmets_contrast(fit.s13.post, dat, ref_marg, w = w_burden) |>
+    mutate(score = "Burden score, marginal SD"),
+  cmets_contrast(fit.s13.post, dat, cmets_ref, w = w_burden) |>
+    mutate(score = "Burden score, trial baseline SD"),
+  cmets_contrast(fit.s13.post, dat, cmets_ref_pop, w = w_burden) |>
+    mutate(score = "Burden score, population SD"),
+  cmets_contrast(fit.s13.post, dat, cmets_ref, w = w_cmets) |>
+    mutate(score = "cMetS, trial baseline SD"),
+  cmets_contrast(fit.s13.post, dat, cmets_ref_pop, w = w_cmets) |>
+    mutate(score = "cMetS, population SD"),
+  g_contrast |>
+    mutate(score = "MetS severity Z-score (Gurka-DeBoer)")
+)
+```
+
+
+
+```{r}
+#| label: tbl-cmets-contrast
+#| tbl-cap: "Treatment contrast (Krill oil - Placebo) on metabolic syndrome scores. Burden score: mean of the z-scores of waist circumference, HDL (reversed sign), ln(TG), glucose and blood pressure (average of systolic and diastolic z-scores), scaled by the marginal SD (as in the main analysis), the sex-specific baseline SD in the trial sample, or sex-specific population SDs (@tbl-cmets-ref). cMetS: sum of the z-scores of the same criteria with blood pressure as mean arterial pressure [@guseman2018]. MetS severity Z-score: sex-specific equations for non-Hispanic White adults [@gurka2014]. Sex-specific contrasts differ only through sex-specific scaling or coefficients; the average is weighted by the proportion of men and women in the sample. Negative values indicate a less severe metabolic profile in the krill oil group."
+#| echo: false
+
+score_contrasts |>
+  summarise(.by = c(score, sex, time),
+            med = median(contrast),
+            lwr = quantile(contrast, 0.025),
+            upr = quantile(contrast, 0.975),
+            p_benefit = mean(contrast < 0)) |>
+  mutate(time = if_else(time == "T2", "Supplementation-only", "Combined"),
+         sex = factor(recode(sex, m = "Men", f = "Women", average = "Average"),
+                      levels = c("Average", "Men", "Women")),
+         score = factor(score, levels = unique(score_contrasts$score))) |>
+  arrange(score, desc(time), sex) |>
+  gt(groupname_col = "score") |>
+  fmt_auto() |>
+  cols_label(sex = "Sex",
+             time = "Follow-up",
+             med = "Median",
+             lwr = "PI 2.5%",
+             upr = "PI 97.5%",
+             p_benefit = "P(Benefit)")
+```
+
+
+### Associations of continuous Metabolic syndrome scores to related scores
+
+DeBoer and Gurka [@deboer2017] examines the correlation between their metabolic syndrome score to HOMA and adiponectine, here we do the same across the burden score with both marginal and baseline SD, and the two continuous scores [@guseman2018,@deboer2017,@gurka2014].
+
+Scores, HOMA2-IR and adiponectin were retrieved per participant and time-point from the posterior, using observed values where available and imputed values otherwise. Rank (Spearman) correlations between each score and HOMA2-IR or adiponectin were calculated per posterior draw, so that the uncertainty in imputed values propagates to the correlations (@fig-assoc-cor). The intervals therefore reflect uncertainty from imputation only, not sampling variation, and imputed values follow the residual correlations estimated in the model. Associations are shown on the participant level using posterior means in @fig-assoc-homa and @fig-assoc-adipo. Together these analyses show general agreement between metabolic syndrome scores in associations with 
+
+```{r}
+#| label: score-associations
+
+# Subset of posterior draws to limit memory use (all draws contain the same
+# observed values; imputed values vary between draws)
+assoc_draws <- round(seq(1, posterior::ndraws(fit.s13.post$draws("alpha")),
+                         length.out = 1000))
+
+# Per-participant scores per draw (observed or imputed values)
+assoc_scores <- bind_rows(
+  cmets_score(fit.s13.post, dat, ref_marg, w = w_burden) |>
+    mutate(score_type = "Burden score, marginal SD"),
+  cmets_score(fit.s13.post, dat, cmets_ref, w = w_burden) |>
+    mutate(score_type = "Burden score, trial baseline SD"),
+  cmets_score(fit.s13.post, dat, cmets_ref_pop, w = w_cmets) |>
+    mutate(score_type = "cMetS, population SD"),
+  g_score |>
+    mutate(score_type = "MetS severity Z-score (Gurka-DeBoer)")
+) |>
+  filter(.draw %in% assoc_draws) |>
+  mutate(score_type = factor(score_type, levels = unique(score_type)))
+
+# HOMA2-IR and adiponectin per draw (natural scale)
+assoc_bio <- wide_values(fit.s13.post, dat, c("HOMA2IR", "Adiponectin")) |>
+  filter(.draw %in% assoc_draws)
+
+assoc <- assoc_scores |>
+  inner_join(assoc_bio, by = c(".draw", "P", "time"),
+             relationship = "many-to-many")
+
+# Spearman correlation per draw, score, analyte and time-point
+assoc_cor <- assoc |>
+  summarise(.by = c(.draw, score_type, analyte, time),
+            r = cor(score, value, method = "spearman")) |>
+  summarise(.by = c(score_type, analyte, time),
+            med = median(r),
+            lwr = quantile(r, 0.025),
+            upr = quantile(r, 0.975))
+
+# Participant-level posterior means. A value is flagged as imputed if the score
+# or the biomarker varies over draws (i.e. includes imputed components).
+assoc_mean <- assoc |>
+  summarise(.by = c(P, sex, treat, time, score_type, analyte),
+            imputed = sd(score) > 1e-8 | sd(value) > 1e-8,
+            score = mean(score),
+            value = mean(value))
+
+# Scatter plot of score vs. biomarker, per score and time-point, with the
+# posterior median (95% CrI) correlation in each panel
+assoc_plot <- function(a, ylab, log_y = FALSE) {
+  d <- assoc_mean |> filter(analyte == a)
+  lab <- assoc_cor |>
+    filter(analyte == a) |>
+    mutate(label = sprintf("r = %.2f [%.2f, %.2f]", med, lwr, upr))
+
+  p <- d |>
+    ggplot(aes(score, value)) +
+    geom_point(aes(color = sex, shape = imputed), alpha = 0.7) +
+    geom_smooth(method = "lm", formula = y ~ x, se = FALSE,
+                color = "gray30", linewidth = 0.5) +
+    geom_text(data = lab, aes(x = -Inf, y = Inf, label = label),
+              hjust = -0.05, vjust = 1.5, size = 2.5) +
+    facet_grid(time ~ score_type, scales = "free_x",
+               labeller = label_wrap_gen(width = 20)) +
+    scale_color_manual(values = colscale[c(4, 2)],
+                       labels = c(f = "Women", m = "Men")) +
+    scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 1),
+                       labels = c(`FALSE` = "Observed", `TRUE` = "Incl. imputed")) +
+    alpha_theme() +
+    labs(x = "Score (posterior mean)", y = ylab, color = "Sex", shape = "")
+
+  if (log_y) p <- p + scale_y_log10()
+  p
+}
+```
+
+```{r}
+#| label: fig-assoc-homa
+#| fig-cap: "Associations between metabolic syndrome scores and HOMA2-IR (log scale) per time-point. Points are participant-level posterior means; open symbols include imputed values. Spearman correlations (median and 95% interval over posterior draws, reflecting imputation uncertainty) are calculated per posterior draw."
+#| fig-height: 7
+#| fig-width: 8
+
+assoc_plot("HOMA2IR", "HOMA2-IR", log_y = TRUE)
+```
+
+```{r}
+#| label: fig-assoc-adipo
+#| fig-cap: "Associations between metabolic syndrome scores and adiponectin per time-point. Points are participant-level posterior means; open symbols include imputed values. Spearman correlations (median and 95% interval over posterior draws, reflecting imputation uncertainty) are calculated per posterior draw."
+#| fig-height: 7
+#| fig-width: 8
+
+assoc_plot("Adiponectin", "Adiponectin")
+```
+
+```{r}
+#| label: fig-assoc-cor
+#| fig-cap: "Spearman correlations (median and 95% interval over posterior draws, reflecting imputation uncertainty) between metabolic syndrome scores and HOMA2-IR or adiponectin at each time-point."
+#| fig-height: 4
+#| fig-width: 8
+
+assoc_cor |>
+  mutate(analyte = recode(analyte, HOMA2IR = "HOMA2-IR")) |>
+  ggplot(aes(med, score_type, color = time)) +
+  geom_vline(xintercept = 0, color = "gray70") +
+  geom_pointrange(aes(xmin = lwr, xmax = upr),
+                  position = position_dodge(width = 0.5)) +
+  facet_wrap(~analyte) +
+  scale_y_discrete(limits = rev, labels = scales::label_wrap(25)) +
+  scale_color_manual(values = colscale[c(1, 2, 4)]) +
+  alpha_theme() +
+  labs(x = "Spearman correlation", y = NULL, color = "Time-point")
+```
+
+```{r}
+#| label: fig-score-cormat
+#| fig-cap: "Spearman correlations between metabolic syndrome scores, HOMA2-IR and adiponectin at each time-point. Correlations are calculated per posterior draw (observed or imputed values) and summarised as the median over draws."
+#| fig-height: 4
+#| fig-width: 10
+
+score_labels <- c(
+  "Burden score, marginal SD" = "Burden (marg. SD)",
+  "Burden score, trial baseline SD" = "Burden (baseline SD)",
+  "cMetS, population SD" = "cMetS (pop. SD)",
+  "MetS severity Z-score (Gurka-DeBoer)" = "Gurka-DeBoer",
+  "HOMA2IR" = "HOMA2-IR",
+  "Adiponectin" = "Adiponectin"
+)
+
+# Scores and biomarkers per draw, participant and time-point in wide format
+cormat_dat <- bind_rows(
+  assoc_scores |>
+    transmute(.draw, P, time, var = as.character(score_type), value = score),
+  assoc_bio |>
+    transmute(.draw, P, time, var = analyte, value)
+) |>
+  pivot_wider(names_from = var, values_from = value)
+
+# Correlation matrix per draw and time-point, summarised by the median
+score_cormat <- cormat_dat |>
+  nest(.by = c(.draw, time)) |>
+  mutate(cm = map(data, function(d) {
+    m <- cor(select(d, all_of(names(score_labels))), method = "spearman")
+    as_tibble(m, rownames = "var1") |>
+      pivot_longer(-var1, names_to = "var2", values_to = "r")
+  })) |>
+  select(.draw, time, cm) |>
+  unnest(cm) |>
+  summarise(.by = c(time, var1, var2), r = median(r)) |>
+  mutate(var1 = factor(score_labels[var1], levels = score_labels),
+         var2 = factor(score_labels[var2], levels = score_labels)) |>
+  # Lower triangle
+  filter(as.integer(var1) > as.integer(var2))
+
+score_cormat |>
+  ggplot(aes(var2, var1, fill = r)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = sprintf("%.2f", r)), size = 2.5) +
+  facet_wrap(~time) +
+  scale_fill_gradient2(low = colscale[1], mid = "white", high = colscale[2],
+                       limits = c(-1, 1)) +
+  scale_y_discrete(limits = rev) +
+  alpha_theme() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = NULL, y = NULL, fill = "Spearman r")
+```
+
+
+### Contribution of subscores in the joint treatment contrasts
+
+All scores are linear in the standardized model scale, and the treatment contrast on a score can therefore be decomposed exactly into one term per criterion,
+
+$$
+\Delta\text{Score}_t = \sum_k w_k \frac{SD_k^{\text{marg}}}{SD_k^{\text{ref}}} \left(\alpha_{t,k,\text{KO}} - \alpha_{t,k,\text{PL}}\right) = \sum_k C_{t,k},
+$$
+
+where the weight of criterion $k$ is the product of the score weight $w_k$ and the scaling (for the Gurka-DeBoer score, $b_k c_k SD_k^{\text{marg}}$). The contributions $C_{t,k}$ are calculated per posterior draw and sum to the total contrast in each draw. Systolic and diastolic blood pressure are combined into a single blood pressure contribution (0.5 each in the burden score, 1/3 and 2/3 in MAP, systolic only in the Gurka-DeBoer score). Contributions are shown in units of each score (@fig-score-contrib).
+
+```{r}
+#| label: score-contributions
+
+# Contrast per component, per draw, for all score types
+score_contrib <- bind_rows(
+  cmets_contrast(fit.s13.post, dat, ref_marg, w = w_burden, by_component = TRUE) |>
+    mutate(score_type = "Burden score, marginal SD"),
+  cmets_contrast(fit.s13.post, dat, cmets_ref, w = w_burden, by_component = TRUE) |>
+    mutate(score_type = "Burden score, trial baseline SD"),
+  cmets_contrast(fit.s13.post, dat, cmets_ref_pop, w = w_burden, by_component = TRUE) |>
+    mutate(score_type = "Burden score, population SD"),
+  cmets_contrast(fit.s13.post, dat, cmets_ref, w = w_cmets, by_component = TRUE) |>
+    mutate(score_type = "cMetS, trial baseline SD"),
+  cmets_contrast(fit.s13.post, dat, cmets_ref_pop, w = w_cmets, by_component = TRUE) |>
+    mutate(score_type = "cMetS, population SD"),
+  gurka_contrast(fit.s13.post, dat, by_component = TRUE) |>
+    mutate(score_type = "MetS severity Z-score (Gurka-DeBoer)")
+) |>
+  # Blood pressure as one component
+  mutate(component = recode(component,
+                            waist = "Waist circumference",
+                            HDL = "HDL",
+                            TG = "Triglycerides",
+                            glucose = "Glucose",
+                            sys = "Blood pressure",
+                            dias = "Blood pressure",
+                            map = "Blood pressure")) |>
+  summarise(.by = c(.draw, time, sex, score_type, component),
+            contrast = sum(contrast))
+
+# Add the total (sum of components) per draw
+score_contrib <- bind_rows(
+  score_contrib,
+  score_contrib |>
+    summarise(.by = c(.draw, time, sex, score_type),
+              contrast = sum(contrast)) |>
+    mutate(component = "Total")
+)
+
+# Check: totals equal the contrasts in score_contrasts
+contrib_check <- score_contrib |>
+  filter(component == "Total") |>
+  inner_join(score_contrasts |> rename(score_type = score),
+             by = c(".draw", "time", "sex", "score_type")) |>
+  summarise(max_dev = max(abs(contrast.x - contrast.y)))
+
+score_contrib_sum <- score_contrib |>
+  summarise(.by = c(time, sex, score_type, component),
+            med = median(contrast),
+            lwr = quantile(contrast, 0.025),
+            upr = quantile(contrast, 0.975)) |>
+  mutate(component = factor(component,
+                            levels = c("Waist circumference", "HDL",
+                                       "Triglycerides", "Glucose",
+                                       "Blood pressure", "Total")),
+         score_type = factor(score_type,
+                             levels = unique(score_contrasts$score)),
+         time = if_else(time == "T2", "Supplementation-only", "Combined"),
+         time = factor(time, levels = c("Supplementation-only", "Combined")))
+```
+
+```{r}
+#| label: fig-score-contrib
+#| fig-cap: "Contribution of each criterion to the treatment contrast (Krill oil - Placebo) on the metabolic syndrome scores (posterior median and 95% credible interval), averaged over men and women. Contributions are in units of each score and sum to the total contrast in each posterior draw. Negative values indicate a contribution towards a less severe metabolic profile in the krill oil group."
+#| fig-height: 7
+#| fig-width: 9
+
+score_contrib_sum |>
+  filter(sex == "average") |>
+  ggplot(aes(med, component, color = time)) +
+  geom_vline(xintercept = 0, color = "gray70") +
+  geom_hline(yintercept = 1.5, color = "gray85") +
+  geom_pointrange(aes(xmin = lwr, xmax = upr),
+                  position = position_dodge(width = 0.5), size = 0.3) +
+  facet_wrap(~score_type, scales = "free_x", ncol = 3,
+             labeller = label_wrap_gen(width = 30)) +
+  scale_y_discrete(limits = rev) +
+  scale_color_manual(values = colscale[c(2, 4)]) +
+  alpha_theme() +
+  theme(legend.position = "bottom") +
+  labs(x = "Contribution to treatment contrast (score units)", y = NULL,
+       color = "Follow-up")
+```
+
+Because contributions are available per posterior draw, criteria can be compared within each score. A criterion was considered to contribute more than another if its contribution was more negative, i.e. towards a less severe metabolic profile in the krill oil group. Pairwise probabilities, $P(C_{t,j} < C_{t,k})$, are shown in @fig-contrib-pairwise, and the probability that each criterion is the largest contributor is shown in @tbl-contrib-rank. As contributions are the product of score weights and treatment effects, comparisons are made within scores; differences between scores reflect the weighting of the criteria.
+
+```{r}
+#| label: contrib-compare
+
+contrib_levels <- c("Waist circumference", "HDL", "Triglycerides", "Glucose",
+                    "Blood pressure")
+
+# Contributions per draw (average over sex), excluding the total
+contrib_draws <- score_contrib |>
+  filter(sex == "average", component != "Total") |>
+  select(.draw, time, score_type, component, contrast)
+
+# Pairwise probability that the row criterion contributes more (more negative
+# contribution) than the column criterion
+contrib_pairwise <- contrib_draws |>
+  inner_join(contrib_draws, by = c(".draw", "time", "score_type"),
+             suffix = c("_row", "_col"),
+             relationship = "many-to-many") |>
+  filter(component_row != component_col) |>
+  summarise(.by = c(time, score_type, component_row, component_col),
+            p = mean(contrast_row < contrast_col)) |>
+  mutate(component_row = factor(component_row, levels = contrib_levels),
+         component_col = factor(component_col, levels = contrib_levels),
+         score_type = factor(score_type, levels = unique(score_contrasts$score)),
+         time = factor(if_else(time == "T2", "Supplementation-only", "Combined"),
+                       levels = c("Supplementation-only", "Combined")))
+
+# Probability that each criterion is the largest contributor (most negative
+# contribution) per draw
+contrib_rank <- contrib_draws |>
+  mutate(.by = c(.draw, time, score_type), rank = rank(contrast)) |>
+  summarise(.by = c(time, score_type, component), p_first = mean(rank == 1)) |>
+  mutate(component = factor(component, levels = contrib_levels),
+         score_type = factor(score_type, levels = unique(score_contrasts$score)),
+         time = factor(if_else(time == "T2", "Supplementation-only", "Combined"),
+                       levels = c("Supplementation-only", "Combined"))) |>
+  arrange(score_type, time, component) |>
+  pivot_wider(names_from = component, values_from = p_first)
+```
+
+```{r}
+#| label: fig-contrib-pairwise
+#| fig-cap: "Pairwise comparisons of criterion contributions to the treatment contrast (Krill oil - Placebo) on each metabolic syndrome score, averaged over men and women. Each cell shows the posterior probability that the row criterion contributes more (more negative contribution, towards a less severe metabolic profile in the krill oil group) than the column criterion."
+#| fig-height: 6
+#| fig-width: 13
+
+contrib_pairwise |>
+  ggplot(aes(component_col, component_row, fill = p)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = sprintf("%.2f", p)), size = 2.2) +
+  facet_grid(time ~ score_type, labeller = label_wrap_gen(width = 20)) +
+  scale_fill_gradient2(low = colscale[1], mid = "white", high = colscale[2],
+                       midpoint = 0.5, limits = c(0, 1)) +
+  scale_x_discrete(labels = scales::label_wrap(12)) +
+  scale_y_discrete(limits = rev) +
+  alpha_theme() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Compared to", y = "Contributes more", fill = "Probability")
+```
+
+```{r}
+#| label: tbl-contrib-rank
+#| tbl-cap: "Posterior probability that each criterion is the largest contributor (most negative contribution) to the treatment contrast (Krill oil - Placebo) on each metabolic syndrome score, averaged over men and women. Probabilities sum to one across criteria within each score and follow-up."
+#| echo: false
+
+contrib_rank |>
+  gt(groupname_col = "score_type") |>
+  fmt_number(columns = all_of(contrib_levels), decimals = 2) |>
+  cols_label(time = "Follow-up")
+```
+
+
 
 

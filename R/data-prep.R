@@ -404,7 +404,274 @@ data_load_s7s10 <- function() {
     mutate(treat_idx = dense_rank(treat)) |>
     arrange(treat_idx)
 
+  # Participant lookup (P = dense_rank(participant), as in dat)
+  part_lookup <- d_full |>
+    distinct(participant, sex, age, treat) |>
+    mutate(P = dense_rank(participant)) |>
+    select(P, participant, sex, age, treat) |>
+    arrange(P)
+
   # d: Stan data list; dat: long data; scale: per-type mean/sd for
-  # back-transformation to the natural scale; treat: treatment index lookup.
-  return(list(d = d, dat = dat, scale = scale_pars, treat = treat_lookup))
+  # back-transformation to the natural scale; treat: treatment index lookup;
+  # part: participant lookup (P, sex, age, treat).
+  return(list(d = d, dat = dat, scale = scale_pars, treat = treat_lookup,
+              part = part_lookup))
+}
+
+
+# Data load functions for models fitted in model-scripts/ ######################
+# Each function mirrors the data preparation in the corresponding qmd chunk
+# and returns the Stan data list (prior_only = 1, set to 0 for the posterior).
+
+
+# Drop-out model m1 (03-metsyn-intro.qmd, chunk missing-data-prep)
+data_load_m1 <- function() {
+  miss_dat <- criteria_dat |>
+    select(-threshold, -crit) |>
+    # Filter for time-point 1
+    filter(time == "T1") |>
+    pivot_wider(names_from = analyte, values_from = value) |>
+    pivot_longer(cols = age:LDL, values_to = "value", names_to = "analyte") |>
+    mutate(
+      .by = analyte,
+      value_std = if_else(analyte %in% c("TG", "HOMA2IR", "HbA1c"), log(value), value),
+      value_std = (value_std - mean(value_std, na.rm = TRUE)) /
+        sd(value_std, na.rm = TRUE)
+    )
+
+  miss_dat2 <- miss_dat |>
+    filter(!is.na(value_std)) |>
+    # Missing at follow-up
+    mutate(
+      miss_t4 = if_else(participant %in% participant_complete_T4, 0, 1),
+      miss_t2 = if_else(participant %in% participant_complete_T2, 0, 1),
+      P = dense_rank(participant),
+      A = dense_rank(analyte),
+      TX = if_else(treat == "ctrl", -0.5, 0.5),
+      S = if_else(sex == "m", -0.5, 0.5),
+    )
+
+  list(
+    N = nrow(miss_dat2),
+    N_A = length(unique(miss_dat2$A)),
+    N_P = length(unique(miss_dat2$P)),
+    N_TX = length(unique(miss_dat2$TX)),
+    N_S = length(unique(miss_dat2$S)),
+    P = miss_dat2$P,
+    A = miss_dat2$A,
+    TX = miss_dat2$TX,
+    S = miss_dat2$S,
+    x = miss_dat2$value_std,
+    do4 = miss_dat2$miss_t4,
+    do2 = miss_dat2$miss_t2,
+    prior_only = 1
+  )
+}
+
+
+# Fatty acid model m2, complete cases (02-fa.qmd, chunk fig-m2-priorpred)
+data_load_m2 <- function() {
+  fat_dat <- AOData::omega3 |>
+    inner_join(AOData::idkeys) |>
+    filter(time %in% c("T1", "T2", "T4"), participant %in% total_participants) |>
+    select(participant, time, treat, C16:C226n3) |>
+    pivot_longer(cols = C16:C226n3, names_to = "fa", values_to = "value") |>
+    mutate(
+      .by = fa,
+      value_std = log(value),
+      value_std = (value_std - mean(value_std)) / sd(value_std)
+    ) |>
+    mutate(FA = dense_rank(fa), TX = dense_rank(treat))
+
+  fat_dat2 <- fat_dat |>
+    select(participant, FA, TX, time, value_std) |>
+    pivot_wider(names_from = time, values_from = value_std) |>
+    filter(complete.cases(pick(T1:T4))) |>
+    pivot_longer(names_to = "TI", values_to = "y", cols = T2:T4) |>
+    mutate(TI = dense_rank(TI), P = dense_rank(participant))
+
+  list(
+    N = nrow(fat_dat2),
+    N_FA = length(unique(fat_dat2$FA)),
+    N_P = length(unique(fat_dat2$P)),
+    N_TX = length(unique(fat_dat2$TX)),
+    N_TI = length(unique(fat_dat2$TI)),
+    P = fat_dat2$P,
+    FA = fat_dat2$FA,
+    TX = fat_dat2$TX,
+    TI = fat_dat2$TI,
+    pre = fat_dat2$T1,
+    y = fat_dat2$y,
+    prior_only = 1
+  )
+}
+
+
+# Fatty acid models m3-m6, imputation of post-treatment values (02-fa.qmd,
+# chunks m3-data-prep and fig-m3-prior)
+data_load_m3m6 <- function() {
+  fat_dat_compl <- AOData::omega3 |>
+    inner_join(AOData::idkeys) |>
+    filter(time %in% c("T1", "T2", "T4"), participant %in% total_participants) |>
+    # The omega-3 index is modelled as an additional "fatty acid" (FA = 12)
+    select(participant, time, treat, C16:C226n3, omega3index) |>
+    pivot_longer(cols = c(C16:C226n3, omega3index), names_to = "fa", values_to = "value") |>
+    pivot_wider(names_from = time, values_from = value) |>
+    # Two participants have no data at T1
+    filter(!is.na(T1)) |>
+    pivot_longer(names_to = "time", values_to = "value", cols = T1:T4) |>
+    mutate(
+      .by = fa,
+      value_std = log(value),
+      value_std = (value_std - mean(value_std, na.rm = TRUE)) /
+        sd(value_std, na.rm = TRUE)
+    ) |>
+    mutate(FA = dense_rank(fa), TX = dense_rank(treat))
+
+  fat_dat_compl2 <- fat_dat_compl |>
+    select(participant, FA, TX, time, value_std) |>
+    pivot_wider(names_from = time, values_from = value_std) |>
+    pivot_longer(names_to = "TI", values_to = "y", cols = T2:T4) |>
+    mutate(
+      TI = dense_rank(TI),
+      P = dense_rank(participant),
+      # Add missing data and fill y
+      obs = if_else(is.na(y), 0, 1),
+      y = if_else(is.na(y), -999, y)
+    )
+
+  list(
+    N = nrow(fat_dat_compl2),
+    N_FA = length(unique(fat_dat_compl2$FA)),
+    N_P = length(unique(fat_dat_compl2$P)),
+    N_TX = length(unique(fat_dat_compl2$TX)),
+    N_TI = length(unique(fat_dat_compl2$TI)),
+    P = fat_dat_compl2$P,
+    FA = fat_dat_compl2$FA,
+    TX = fat_dat_compl2$TX,
+    TI = fat_dat_compl2$TI,
+    pre = fat_dat_compl2$T1,
+    y = fat_dat_compl2$y,
+    obs = fat_dat_compl2$obs,
+    prior_only = 1
+  )
+}
+
+
+# Glucose (OGTT) data with treatment, as defined in 08-ogtt.qmd. Named
+# ogtt_glucose to not overwrite glucose_dat above.
+ogtt_glucose <- function() {
+  AOData::glucose |>
+    select(participant:glucose) |>
+    inner_join(AOData::idkeys |> select(participant, treat))
+}
+
+
+# OGTT model mo1, complete pre-intervention curves (08-ogtt.qmd, chunks
+# baseline-dat-prep and fig-mo1-pp)
+data_load_mo1 <- function() {
+  pre_dat <- ogtt_glucose() |>
+    filter(time == "T1") |>
+    filter(!(is.na(glucose))) |>
+    mutate(
+      stglucose = (glucose - mean(glucose)) / sd(glucose),
+      participant = as.factor(participant)
+    ) |>
+    # Dropping participants with less than 7 measurements
+    mutate(.by = participant, n = n()) |>
+    filter(n == 7) |>
+    mutate(P = dense_rank(participant))
+
+  B <- splines::bs(pre_dat$min, df = 5)
+
+  list(
+    y = pre_dat$stglucose,
+    N = nrow(pre_dat),
+    K = ncol(B),
+    B = B,
+    N_P = max(pre_dat$P),
+    P = pre_dat$P,
+    prior_only = 1
+  )
+}
+
+
+# OGTT model mo2, complete curves at T1, T2 and T4 (08-ogtt.qmd, chunk
+# fig-prior-predictive-mo2)
+data_load_mo2 <- function() {
+  ml_dat <- ogtt_glucose() |>
+    inner_join(AOData::idkeys) |>
+    dplyr::select(participant, time, min, glucose, treat) |>
+    filter(time %in% c("T1", "T2", "T4")) |>
+    filter(!is.na(glucose)) |>
+    mutate(.by = c(participant, time), n = n()) |>
+    filter(n == 7) |>
+    mutate(
+      stglucose = (glucose - mean(glucose)) / sd(glucose),
+      participant = as.factor(participant),
+      tx = paste0(time, treat),
+      tx = factor(tx, levels = c("T1ctrl", "T1omega", "T2ctrl", "T2omega", "T4ctrl", "T4omega"))
+    ) |>
+    mutate(P = dense_rank(participant), G = dense_rank(tx), Tt = dense_rank(time))
+
+  B2 <- splines::bs(ml_dat$min, df = 5)
+
+  list(
+    y = ml_dat$stglucose,
+    N = nrow(ml_dat),
+    K = ncol(B2),
+    B = B2,
+    N_G = max(ml_dat$G),
+    G = ml_dat$G,
+    N_P = max(ml_dat$P),
+    P = ml_dat$P,
+    N_T = max(ml_dat$Tt),
+    Tt = ml_dat$Tt,
+    prior_only = 1
+  )
+}
+
+
+# OGTT models mo3 and mo4, all participants with imputation of missing values
+# (08-ogtt.qmd, chunks fig-prior-mo3 and fig-prior-mo4)
+data_load_mo3mo4 <- function() {
+  part_full <- criteria_dat |>
+    distinct(participant) |>
+    pull(participant)
+
+  full_dat <- ogtt_glucose() |>
+    inner_join(AOData::idkeys) |>
+    filter(participant %in% part_full) |>
+    dplyr::select(participant, time, min, glucose, treat) |>
+    # Wider to find NA -> longer -> complete data set
+    pivot_wider(values_from = glucose, names_from = time) |>
+    pivot_longer(values_to = "glucose", names_to = "time", cols = T1:T4) |>
+    arrange(participant, time, min) |>
+    mutate(
+      y_obs = (glucose - mean(glucose, na.rm = TRUE)) / sd(glucose, na.rm = TRUE),
+      y_obs = if_else(is.na(glucose), -999, y_obs),
+      y_miss = if_else(is.na(glucose), 0, 1),
+      tx = paste0(time, treat),
+      tx = factor(tx, levels = c("T1ctrl", "T1omega", "T2ctrl", "T2omega", "T4ctrl", "T4omega")),
+      G = dense_rank(tx),
+      P = dense_rank(participant),
+      Tt = dense_rank(time)
+    )
+
+  B <- splines::bs(full_dat$min, df = 5)
+
+  list(
+    N = nrow(full_dat),
+    y_obs = full_dat$y_obs,
+    y_miss = full_dat$y_miss,
+    K = ncol(B),
+    B = B,
+    N_G = length(unique(full_dat$G)),
+    G = full_dat$G,
+    N_P = length(unique(full_dat$P)),
+    P = full_dat$P,
+    N_T = length(unique(full_dat$Tt)),
+    Tt = full_dat$Tt,
+    prior_only = 1
+  )
 }

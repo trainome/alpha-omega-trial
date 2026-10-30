@@ -2,13 +2,14 @@
 
 # Color scale
 colscale <- c(
-  "#009E73",
-  "#D55E00",
-  "#E69F00",
-  "#56B4E9",
   "#F0E442",
-  "#0072B2",
-  "#CC79A7",
+  "#D55E00", # Krill-oil
+  "#0072B2", # Supplementation only
+  "#999999", # Placebo
+  "#0072B2", #
+  "#CC79A7", # Combined
+  "#D55E00",
+
   "darkmagenta",
   "coral2",
   "forestgreen",

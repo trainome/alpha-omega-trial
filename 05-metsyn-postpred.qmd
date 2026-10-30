@@ -22,7 +22,7 @@ source("./R/sim-fun.R")
 refit.models <- FALSE
 ```
 
-Models S7 to S10 (@tbl-models-s7s10) were next fitted with the observed data. Diagnostic statistics indicated that the HMC algorithm converges with satisfactory results (@tbl-diagnostic-summary-s7s10). @fig-chain-stats-s7s10-org shows per-parameter summaries of $\hat{R}$ and effective sample size indicating that parameters have $\hat{R} << 1.01$ and effective sample sizes are generally > 1000 per chain.
+Models S7 to S10 (@tbl-models-s7s10) were next fitted with the observed data. Diagnostic statistics indicated that the HMC algorithm converges with satisfactory results (@tbl-diagnostic-summary-s8s10). @fig-chain-stats-s7s10-org shows per-parameter summaries of $\hat{R}$ and effective sample size indicating that parameters have $\hat{R} << 1.01$ and effective sample sizes are generally > 1000 per chain.
 
 |Model |Likelihood |Variance structure  |
 |---|---|---|
@@ -56,7 +56,7 @@ d_full <- criteria_dat |>
                values_to = "value",
                names_to = "analyte" ) |> 
   
-  mutate(value_std = if_else(analyte %in% c("TG", "HOMA2IR"), log(value), value)) |> 
+  mutate(value_std = if_else(analyte %in% c("TG", "HOMA2IR", "HbA1c"), log(value), value)) |>
   
 
   
@@ -161,8 +161,8 @@ fit.s10.post <- readRDS("fits/paper1/fit.s10.post.RDS")
 #| label: fig-chain-stats-s7s10-org
 #| fig-cap: "Summary chain statistics indicate satisfactory results in models s7-s10."
 #| eval: true
-#| fig-height: 6
-#| fig-width: 6
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 # Extract relevant variables for summary statistics
 extract_sum <- function(fit) {
@@ -194,8 +194,8 @@ fits <- list(fit.s7.post,
 
 
 # Extracting chain diagnostics takes some time - Only this if refit.models == TRUE
-# and/or chain diagnostics isn't available. 
-if(!(file.exists("./data-derived/chain-diagnostics-s7-s10.RDS") & refit.models)) {
+# and/or chain diagnostics isn't available.
+if(refit.models || !file.exists("./data-derived/chain-diagnostics-s7-s10.RDS")) {
   sums <- lapply(fits, extract_sum)
   models <- paste0("s", 7:10)
   
@@ -234,7 +234,7 @@ bind_rows(sums) |>
 
 
 ```{r}
-#| label: tbl-diagnostic-summary-s7s10
+#| label: tbl-diagnostic-summary-s8s10
 #| tbl-cap: "Diagnostic summaries of models s8 to s10. BFMI, Bayesian Fraction of Missing Information."
 
 
@@ -360,103 +360,20 @@ ppcheck_dist <- function(yreps, obsdata, label = FALSE) {
   if(label) {
     p <- p + labs(caption = caption)
             }
-  
+
   return(p)
-  
+
 }
-
-p1 <- ppcheck_dist(yrep.s7, dobs) + labs(subtitle = "Model s7")
-
-p2 <- ppcheck_dist(yrep.s8, dobs)+ labs(subtitle = "Model s8")
-
-p3 <- ppcheck_dist(yrep.s9, dobs)+ labs(subtitle = "Model s9")
-
-p4 <- ppcheck_dist(yrep.s10, dobs, label = TRUE)+ labs(subtitle = "Model s10")
-```
-
-
-
-```{r}
-#| label: fig-ppcheck-dist-s7
-#| fig-cap: "Posterior predictive check of models s7. y^rep^ (40 draws from the posterior) and observed data (thick line) indicate that the model replicate the observed data distributions."
-#| eval: true
-#| fig-height: 8
-#| fig-width: 10
-
-p1
-
-```
-
-```{r}
-#| label: fig-ppcheck-dist-s8
-#| fig-cap: "Posterior predictive check of models s8. y^rep^ (40 draws from the posterior) and observed data (thick line) indicate that the model replicate the observed data distributions."
-#| eval: true
-#| fig-height: 8
-#| fig-width: 10
-
-p2
-
-```
-
-```{r}
-#| label: fig-ppcheck-dist-s9
-#| fig-cap: "Posterior predictive check of models s9. y^rep^ (40 draws from the posterior) and observed data (thick line) indicate that the model replicate the observed data distributions."
-#| eval: true
-#| fig-height: 8
-#| fig-width: 10
-
-p3
-
-```
-
-```{r}
-#| label: fig-ppcheck-dist-s10
-#| fig-cap: "Posterior predictive check of models s10. y^rep^ (40 draws from the posterior) and observed data (thick line) indicate that the model replicate the observed data distributions."
-#| eval: true
-#| fig-height: 8
-#| fig-width: 10
-
-p4
-
-```
-
-
-To further explore model implications we calculate the observed standard deviation per measurement type and treatment and extract distributions implied by the model through y^rep^. In @fig-ppcheck-s7-sd and @fig-ppcheck-s8-sd most distributions of y^rep^ standard deviations contain the empirical SD (shown as contrasts between y^rep^ and y^obs^ where 0 indicate agreement), however, for both model S7 and S8, some of the standard deviations observed in the data do not correspond to those implied by the model. 
-
-```{r}
-#| label: fig-ppcheck-s7-sd
-#| fig-cap: "Posterior predictive check of model s7. The distributions of standard deviations calculated from y^rep^"
-#| fig-height: 8
-#| fig-width: 8
-#| eval: false
-
-
-
-# Obs data (make sure sex is sorted cerrectly)
-dobs <- data.frame(
-  
-  miss = d$y_miss,
-  miss_pre = d$pre_miss,
-  pre = d$pre_obs,
-  y = d$y_obs, 
-  type = d$type, 
-    sex = factor(ifelse(d$sex == -0.5, "m", "f"), levels = c("m", "f")),
-    treat = d$treat, 
-  time = d$time
-  ) |> 
-    # Filter away missing data obs
-    filter(miss == 1, 
-           miss_pre == 1) 
 
 
 # Posterior predictive check. the function can be used for a summary statistics
 # function (sd, mean, max, min, quantile).
 # use stat_arg for supplying extra functions to the summary function.
-ppcheck_stat <- function(yreps, obsdata, 
-                         stat = sd, 
+ppcheck_stat <- function(yreps, obsdata,
+                         stat = sd,
                          stat_arg = list(),
                          group = c("type", "time", "treat"),
-                         fill_color = "treat", 
+                         fill_color = "treat",
                          plot = TRUE) {
 
   if (obsdata$sex[1] %in% c(-0.5, 0.5)) stop("Convert sex to a factor with 'm' and 'f'")
@@ -526,21 +443,100 @@ ppcheck_stat <- function(yreps, obsdata,
          subtitle = "Contrast (T(y^rep^) - T(y^obs^))",
          caption = caption) +
     theme(axis.title.y = element_blank(),
-          plot.subtitle = element_markdown()) + 
+          plot.subtitle = element_markdown()) +
     geom_vline(xintercept = 0, lty = 2, color = "gray")
-  
+
   return(list(plot_estimate = plot1, plot_contrast = plot2, pvals = pvals))
-  
+
   } else {
     return(pvals)
   }
- 
 
-  
+
+
 }
 
+p1 <- ppcheck_dist(yrep.s7, dobs) + labs(subtitle = "Model s7")
+
+p2 <- ppcheck_dist(yrep.s8, dobs)+ labs(subtitle = "Model s8")
+
+p3 <- ppcheck_dist(yrep.s9, dobs)+ labs(subtitle = "Model s9")
+
+p4 <- ppcheck_dist(yrep.s10, dobs, label = TRUE)+ labs(subtitle = "Model s10")
+```
 
 
+
+```{r}
+#| label: fig-ppcheck-dist-s7
+#| fig-cap: "Posterior predictive check of models s7. y^rep^ (40 draws from the posterior) and observed data (thick line) indicate that the model replicate the observed data distributions."
+#| eval: true
+#| fig-height: 4.7
+#| fig-width: 5.9
+
+p1
+
+```
+
+```{r}
+#| label: fig-ppcheck-dist-s8
+#| fig-cap: "Posterior predictive check of models s8. y^rep^ (40 draws from the posterior) and observed data (thick line) indicate that the model replicate the observed data distributions."
+#| eval: true
+#| fig-height: 4.7
+#| fig-width: 5.9
+
+p2
+
+```
+
+```{r}
+#| label: fig-ppcheck-dist-s9
+#| fig-cap: "Posterior predictive check of models s9. y^rep^ (40 draws from the posterior) and observed data (thick line) indicate that the model replicate the observed data distributions."
+#| eval: true
+#| fig-height: 4.7
+#| fig-width: 5.9
+
+p3
+
+```
+
+```{r}
+#| label: fig-ppcheck-dist-s10
+#| fig-cap: "Posterior predictive check of models s10. y^rep^ (40 draws from the posterior) and observed data (thick line) indicate that the model replicate the observed data distributions."
+#| eval: true
+#| fig-height: 4.7
+#| fig-width: 5.9
+
+p4
+
+```
+
+
+To further explore model implications we calculate the observed standard deviation per measurement type and treatment and extract distributions implied by the model through y^rep^. In @fig-ppcheck-s7-sd and @fig-ppcheck-s8-sd most distributions of y^rep^ standard deviations contain the empirical SD (shown as contrasts between y^rep^ and y^obs^ where 0 indicate agreement), however, for both model S7 and S8, some of the standard deviations observed in the data do not correspond to those implied by the model. 
+
+```{r}
+#| label: fig-ppcheck-s7-sd
+#| fig-cap: "Posterior predictive check of model s7. The distributions of standard deviations calculated from y^rep^"
+#| fig-height: 5.9
+#| fig-width: 5.9
+
+
+
+# Obs data (make sure sex is sorted cerrectly)
+dobs <- data.frame(
+  
+  miss = d$y_miss,
+  miss_pre = d$pre_miss,
+  pre = d$pre_obs,
+  y = d$y_obs, 
+  type = d$type, 
+    sex = factor(ifelse(d$sex == -0.5, "m", "f"), levels = c("m", "f")),
+    treat = d$treat, 
+  time = d$time
+  ) |> 
+    # Filter away missing data obs
+    filter(miss == 1,
+           miss_pre == 1)
 
 
 ### Check SD
@@ -557,9 +553,8 @@ stat_check_s7$plot_contrast
 ```{r}
 #| label: fig-ppcheck-s8-sd
 #| fig-cap: "Posterior predictive check of model s8. The distributions of standard deviations calculated from y^rep^"
-#| fig-height: 8
-#| fig-width: 8
-#| eval: false
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 
 stat_check_s8 <- ppcheck_stat(yrep.s8,  dobs,
@@ -578,9 +573,8 @@ Allowing for the models to capture more heterogeneity in the data could improve 
 ```{r}
 #| label: fig-ppcheck-s9-sd
 #| fig-cap: "Posterior predictive check of model s9. The distributions of standard deviations calculated from y^rep^"
-#| fig-height: 8
-#| fig-width: 8
-#| eval: false
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 
 stat_check_s9 <- ppcheck_stat(yrep.s9,  dobs,
@@ -596,9 +590,8 @@ stat_check_s9$plot_contrast
 ```{r}
 #| label: fig-ppcheck-s10-sd
 #| fig-cap: "Posterior predictive check of model s10. The distributions of standard deviations calculated from y^rep^"
-#| fig-height: 8
-#| fig-width: 8
-#| eval: false
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 
 stat_check_s10 <- ppcheck_stat(yrep.s10,  dobs,
@@ -748,8 +741,8 @@ fit.s12.post <- readRDS("fits/paper1/fit.s12.post.RDS")
 #| label: fig-chain-stats-s11s12-org
 #| fig-cap: "Summary chain statistics indicate satisfactory results in models s11 and s12."
 #| eval: true
-#| fig-height: 6
-#| fig-width: 6
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 
 # Extract diagnostics from models s11 and s12
@@ -765,8 +758,8 @@ fits <- list(fit.s11.post,
 
 
 # Extracting chain diagnostics takes some time - Only this if refit.models == TRUE
-# and/or chain diagnostics isn't available. 
-if(!(file.exists("./data-derived/chain-diagnostics-s11-s12.RDS") & refit.models)) {
+# and/or chain diagnostics isn't available.
+if(refit.models || !file.exists("./data-derived/chain-diagnostics-s11-s12.RDS")) {
   sums <- lapply(fits, extract_sum)
   models <- paste0("s", 11:12)
   
@@ -805,7 +798,7 @@ bind_rows(sums) |>
 
 
 ```{r}
-#| label: tbl-diagnostic-summary-s7s10
+#| label: tbl-diagnostic-summary-s11s12
 #| tbl-cap: "Diagnostic summaries of models s11 and s12. BFMI, Bayesian Fraction of Missing Information."
 
 
@@ -827,7 +820,7 @@ bind_rows(diagsums) |>
 ```
 
 
-The chain diagnostics indicate that the HMC algorithm converges (@fig-chain-stats-s11s12-org) and that no divergent transitions were evident along with healthy BFMI (@tbl-diagnostic-summary-s7s10; [See here](https://mc-stan.org/learn-stan/diagnostics-warnings.html) for light background on diagnostics). The plots of y^rep^ distributions against observed data distributions indicate that the model replicate the observed values (@fig-ppcheck-dist-s11, and @fig-ppcheck-dist-s12). 
+The chain diagnostics indicate that the HMC algorithm converges (@fig-chain-stats-s11s12-org) and that no divergent transitions were evident along with healthy BFMI (@tbl-diagnostic-summary-s11s12; [See here](https://mc-stan.org/learn-stan/diagnostics-warnings.html) for light background on diagnostics). The plots of y^rep^ distributions against observed data distributions indicate that the model replicate the observed values (@fig-ppcheck-dist-s11, and @fig-ppcheck-dist-s12). 
 
 
 ```{r}
@@ -857,8 +850,8 @@ yrep.s12 <- fit.s12.post$draws("y_rep", format = "df")
 #| label: fig-ppcheck-dist-s11
 #| fig-cap: "Posterior predictive check of models s11. y^rep^ (40 draws from the posterior) and observed data (thick line) indicate that the model replicate the observed data distributions."
 #| eval: true
-#| fig-height: 8
-#| fig-width: 10
+#| fig-height: 4.7
+#| fig-width: 5.9
 
 ppcheck_dist(yrep.s11, dobs) + labs(subtitle = "Model s11") + 
   coord_cartesian(xlim = c(-5,5))
@@ -869,8 +862,8 @@ ppcheck_dist(yrep.s11, dobs) + labs(subtitle = "Model s11") +
 #| label: fig-ppcheck-dist-s12
 #| fig-cap: "Posterior predictive check of models s12. y^rep^ (40 draws from the posterior) and observed data (thick line) indicate that the model replicate the observed data distributions."
 #| eval: true
-#| fig-height: 8
-#| fig-width: 10
+#| fig-height: 4.7
+#| fig-width: 5.9
 
 ppcheck_dist(yrep.s12, dobs) + labs(subtitle = "Model s12") + 
   coord_cartesian(xlim = c(-5,5))
@@ -885,8 +878,8 @@ No extreme deviations were seen from posterior predictive checks on the SD of re
 #| label: fig-ppcheck-sd-s11
 #| fig-cap: "Posterior predictive check, SD from replicated data (y^rep^) compared to observed from SD in the raw data for model s11."
 #| eval: true
-#| fig-height: 6
-#| fig-width: 6
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 stat_check_s11 <- ppcheck_stat(yrep.s11, dobs,
                               group = c("type", "time", "treat"),
@@ -904,10 +897,10 @@ stat_check_s11$plot_contrast + coord_cartesian(xlim = c(-0.5, 1))
 
 ```{r}
 #| label: fig-ppcheck-sd-s12
-#| fig-cap: "Posterior predictive check, SD from replicated data (y^rep^) compared to observed from SD in the raw data for model s12.""
+#| fig-cap: "Posterior predictive check, SD from replicated data (y^rep^) compared to observed from SD in the raw data for model s12."
 #| eval: true
-#| fig-height: 6
-#| fig-width: 6
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 
 stat_check_s12$plot_contrast + coord_cartesian(xlim = c(-0.5, 1))
@@ -922,8 +915,8 @@ Next we compare the approximate leave-one-out statistics. The univariate robust 
 #| label: fig-pareto-s11s12
 #| fig-cap: "Pareto K values for complete-case participants in model s11 and s12."
 #| eval: true
-#| fig-height: 6
-#| fig-width: 6
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 
 loo.s11 <- readRDS("fits/paper1/loo_s11.RDS")
@@ -1050,8 +1043,8 @@ As the simple version of the multivariate normal model (s8) performed better tha
 #| label: fig-dist-check-s13
 #| fig-cap: "Posterior predictive check model s13"
 #| eval: true
-#| fig-height: 6
-#| fig-width: 6
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 # Compile and run models if not in cache
 if (!file.exists("fits/paper1/fit.s13.post.RDS")) source("models-scripts/model-s13.R")
@@ -1072,8 +1065,8 @@ ppcheck_dist(yrep.s13, dobs) + labs(subtitle = "Model s13") +
 #| label: fig-stat-check-s13
 #| fig-cap: "Posterior predictive check model s13"
 #| eval: true
-#| fig-height: 6
-#| fig-width: 6
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 stat_check_s13 <- ppcheck_stat(yrep.s13, dobs,
                               group = c("type", "time", "treat"),
@@ -1091,8 +1084,8 @@ stat_check_s13$plot_contrast + coord_cartesian(xlim = c(-0.5, 1))
 #| label: fig-dist-check-s18
 #| fig-cap: "Posterior predictive check model s18"
 #| eval: true
-#| fig-height: 6
-#| fig-width: 6
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 # Compile and run models if not in cache
 if (!file.exists("fits/paper1/fit.s18.post.RDS")) source("models-scripts/model-s18.R")
@@ -1113,8 +1106,8 @@ ppcheck_dist(yrep.s18, dobs) + labs(subtitle = "Model s18") +
 #| label: fig-stat-check-s18
 #| fig-cap: "Posterior predictive check model s18"
 #| eval: true
-#| fig-height: 6
-#| fig-width: 6
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 stat_check_s18 <- ppcheck_stat(yrep.s18, dobs,
                               group = c("type", "time", "treat"),
@@ -1135,8 +1128,8 @@ stat_check_s18$plot_contrast + coord_cartesian(xlim = c(-0.5, 1))
 #| label: fig-loo-influential-s13
 #| fig-cap: "Posterior predictive check model s13"
 #| eval: true
-#| fig-height: 6
-#| fig-width: 6
+#| fig-height: 5.9
+#| fig-width: 5.9
 
 loo.s13 <- readRDS("fits/paper1/loo_s13.RDS")
 loo.s18 <- readRDS("fits/paper1/loo_s18.RDS")
