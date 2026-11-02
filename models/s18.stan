@@ -2,7 +2,7 @@
 Model S18:
 Univariate Student-t counterpart of S13. Extension of S7 (univariate
 observation likelihood per row, missing-data imputation, pre-value covariate,
-time-specific treatment effects) where the normal likelihood is replaced by a
+time-specific treatment effects and sex, as in S13) where the normal likelihood is replaced by a
 univariate Student-t with nu fixed as data (nu = 4, as in S12/S13).
 
 sigma is indexed by time x type only (as in S7 and S13, no treatment index).
@@ -36,6 +36,7 @@ data {
   array[N] int<lower=1, upper=N_P> P;         // Participant
   array[N] int<lower=1, upper=2> treat;       // Treatment index
   array[N] int<lower=1, upper=2> sex_idx;     // Sex index (1=male, 2=female)
+  array[N] real<lower=-0.5, upper=0.5> sex;   // Sex (-0.5 = male, 0.5 = female)
   array[N] int<lower=0, upper=1> cc;          // Complete case indicator
   // Used in the log-likelihood to create comparable data sets for loo.
 
@@ -92,6 +93,8 @@ parameters {
   array[2] matrix[K, N_TX] alpha;
   // Pre-score covariate parameter, separate for each type, time
   matrix[K, 2] beta;
+  // Time-specific sex parameters (as in S13)
+  matrix[K, 2] beta_sex;
   // Time- and type-specific scale (interpreted as the Student-t scale
   // parameter, not the marginal SD), shared across treatments as in S7/S13:
   // sigma[type, time]
@@ -136,7 +139,8 @@ transformed parameters {
   vector[N] sig;
 
   for(i in 1:N) {
-    mu[i] = alpha[time[i]][type[i], treat[i]] + beta[type[i],time[i]] * pre[i];
+    mu[i] = alpha[time[i]][type[i], treat[i]] + beta[type[i],time[i]] * pre[i] +
+            beta_sex[type[i], time[i]] * sex[i];
     sig[i] = sigma[type[i], time[i]];
 
   }
@@ -152,6 +156,7 @@ model {
   for(ti in 1:2)
    for (ty in 1:K)
   beta[ty, ti] ~ normal(1, 0.4);
+  to_vector(beta_sex) ~ normal(0, 0.5);
 
   to_vector(sigma) ~ exponential(1);
 

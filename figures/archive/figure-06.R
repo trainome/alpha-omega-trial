@@ -349,11 +349,11 @@ rel_contrast <- contrast_plot(contrast_dat, analytes = related_analytes)
 
 # Combine the full figure #########################################
 
-figure_06 <- cowplot::plot_grid(rel_scores, rel_contrast, align = "h")
+figure_07 <- cowplot::plot_grid(rel_scores, rel_contrast, align = "h")
 
 
 ggsave(
-  filename = "figures/figure-6.pdf",
+  filename = "figures/figure-7.pdf",
   figure_06,
   device = cairo_pdf,
   width = 9,
@@ -362,7 +362,7 @@ ggsave(
 )
 
 ggsave(
-  filename = "figures/figure-6.svg",
+  filename = "figures/figure-7.svg",
   figure_06,
   width = 9,
   height = 13,

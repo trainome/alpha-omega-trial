@@ -1,22 +1,26 @@
 ---
 title: "Effects of krill oil supplementation on indications of metabolic syndrome - Model sensitivity"
 format: html
-editor_options: 
+execute:
+  echo: false
+  warning: false
+  message: false
+editor_options:
   chunk_output_type: console
 ---
 
 
-## 
+## Are conclusions sensitive to the model structure?
 
-The residual correlations modeled in s13 allows us to account for associations between outcome variables when estimating treatment effects. Conceptually this could affect estimates in two ways. First, adding uncertainty associated with the between-variable correlation could increase uncertainty in the treatment effect. However, the correlations will help in estimating missing data, this would reduce uncertainty in estimation of single measurements which propagates into the treatment effect.     
+The residual correlations modeled in s13 allows us to account for associations between outcome variables when estimating treatment effects. Additionally, correlations between time-points within variables are captured in a set of parameters and baseline values are modeled as separate multivariate distribution. Conceptually this could affect estimates in two ways. First, adding uncertainty associated with the between- and within-variable correlations could increase uncertainty in the treatment effect. However, the correlations will help in estimating missing data, this would reduce uncertainty in estimation of single measurements which propagates into the treatment effects and the combined burden score. A univariate model (s18) is used here to show the sensitivity of the conclusion to this model structure.
 
+We first assess the effects of model structure on conclusions for each variable included in the joint models and the joint burden score. Overall, the models agree that the joint burden score is positively affected by treatment at both follow-up time-points albeit with more uncertainty in the univariate model  (89 vs. 95% and 94 vs. 95% probability of benefit at time *supplementation* and *combined*, respectively; @fig-s13-s18-contrasts). For single variables, most agree within 10-15 %-point on the benefit scale. However, triglycerides at the supplementation-only time-point and LDL at the combined time-point changed sign at the median of the posterior probability. Additionally, a somewhat large difference in magnitude between models where seen in HDL at the combined time-point.    
 
-## Changing the scale of the burden score
-
-The burden score as calculated from the five criteria measurements for the metabolic syndrome is created using the marginal SD as the denominator for each score. This could be problematic as the marginal SD contains sex differences and variation due to potential treatment effects. First we will recalculate the score using baseline, sex-adjusted standard deviations. 
 
 ```{r}
-#| label: burden-baseline-sd
+#| label: fig-s13-s18-contrasts
+#| fig-cap: "Treatment effects (krill oil - placebo) on the standardized scale (SD units) from the multivariate model (s13) and its univariate counterpart (s18). Points are posterior medians with 50% (thick) and 95% (thin) CrI. Numbers indicate P(benefit), the posterior probability of benefit for krill oil (higher values for HDL and adiponectin, lower values otherwise). The joint burden score is calculated per draw from the diagnostic criteria."
+#| fig-height: 6
 
 source("./R/packages.R")
 source("./R/data-prep.R")
@@ -25,12 +29,238 @@ source("./R/fig-opt-fun.R")
 
 dat <- data_load_s7s10()
 fit.s13.post <- readRDS("fits/paper1/fit.s13.post.RDS")
+fit.s18.post <- readRDS("fits/paper1/fit.s18.post.RDS")
 
 type_idx <- setNames(dat$scale$type, dat$scale$analyte)
 
 # Sign-aligned weights of the burden score components, as in 07
 # (joint-burden-score): (-HDL + TG + 0.5 * (dias + sys) + glucose + waist) / 5
 burden_w <- c(HDL = -1, TG = 1, dias = 0.5, sys = 0.5, glucose = 1, waist = 1) / 5
+
+# Outcomes where higher values indicate benefit
+up_benefit <- c("HDL", "Adiponectin")
+
+var_labs <- c(waist = "Waist circumference",
+              dias = "Diastolic blood pressure",
+              sys = "Systolic blood pressure",
+              glucose = "Fasting glucose",
+              HDL = "HDL",
+              TG = "Triglycerides",
+              bmi = "Body mass index",
+              fat.rel = "Relative fat mass",
+              LDL = "LDL",
+              Adiponectin = "Adiponectin",
+              HOMA2IR = "HOMA2-IR",
+              HbA1c = "HbA1c",
+              burden = "Joint burden score")
+
+# Treatment contrasts per draw (krill oil - placebo, SD units) for every
+# outcome in the model, and the burden score combined per draw
+model_contrasts <- function(fit, model) {
+  a <- fit$draws("alpha", format = "df")
+  eff <- function(t, k) a[[sprintf("alpha[%d,%d,2]", t, k)]] - a[[sprintf("alpha[%d,%d,1]", t, k)]]
+
+  bind_rows(lapply(1:2, function(t) {
+    e <- sapply(type_idx, function(k) eff(t, k))
+    e <- cbind(e, burden = drop(e[, names(burden_w)] %*% burden_w))
+    data.frame(e, check.names = FALSE) |>
+      mutate(time = t, .draw = row_number())
+  })) |>
+    pivot_longer(-c(time, .draw), names_to = "analyte") |>
+    mutate(model = model)
+}
+
+mod_comp <- bind_rows(model_contrasts(fit.s13.post, "s13"),
+                      model_contrasts(fit.s18.post, "s18")) |>
+  summarise(.by = c(model, time, analyte),
+            med = median(value),
+            lwr95 = quantile(value, 0.025),
+            upr95 = quantile(value, 0.975),
+            lwr50 = quantile(value, 0.25),
+            upr50 = quantile(value, 0.75),
+            benefit = if_else(analyte[1] %in% up_benefit,
+                              mean(value > 0), mean(value < 0))) |>
+  mutate(time = factor(time, levels = 1:2,
+                       labels = c("Supplementation", "Combined")),
+         # Joint burden score last (bottom of the y axis)
+         analyte = factor(analyte, levels = rev(names(var_labs)),
+                          labels = rev(var_labs)),
+         model = factor(model, levels = c("s13", "s18"),
+                        labels = c("s13 (multivariate)", "s18 (univariate)")))
+
+# Position for the P(benefit) labels, to the right of all intervals
+lab_x <- max(mod_comp$upr95) + 0.05
+
+dodge <- position_dodge(width = 0.6)
+
+mod_comp |>
+  ggplot(aes(med, analyte, color = model)) +
+  geom_vline(xintercept = 0, color = "gray60") +
+  geom_linerange(aes(xmin = lwr95, xmax = upr95),
+                 linewidth = 0.4, position = dodge) +
+  geom_linerange(aes(xmin = lwr50, xmax = upr50),
+                 linewidth = 1.2, position = dodge) +
+  geom_point(size = 1.5, position = dodge) +
+  geom_text(aes(x = lab_x, label = sprintf("%.0f%%", 100 * benefit)),
+            position = dodge, hjust = 0, size = 2.2, show.legend = FALSE) +
+  facet_wrap(~ time) +
+  scale_x_continuous(expand = expansion(mult = c(0.05, 0.15))) +
+  scale_color_manual(values = c(colscale[2], colscale[4])) +
+  alpha_theme(text_base_size = 8) +
+  theme(legend.position = "top",
+        legend.title = element_blank(),
+        axis.title.y = element_blank()) +
+  labs(x = "Contrast (Krill oil - Placebo), SD units<br>(Median, 50% and 95% CrI; P(benefit))")
+
+```
+
+The two models differ in how residuals are related between variables and between time-points. In s13, residual correlations are estimated with a regularizing prior, while s18 assumes them to be zero. The correlations are still present in the residuals from s18. @fig-resid-cor shows the residual correlation patterns in both models with the between-timepoint within-variable shown on the diagonal, the between-variable correlations at *supplementation-only* and *combined* time-points in the lower and upper triangle, respectively. The correlation patterns are visible in both models but only the s13 model captures them to carry information forward to the posterior. The estimated correlations are weaker due to regularization in the model.
+
+```{r}
+#| label: fig-resid-cor
+#| fig-cap: "Residual correlations from s13 (posterior medians of $\\Omega$) and empirical correlations of residuals from s18 (observed values minus the posterior median of $\\mu$, pairwise complete observations). Lower triangle: supplementation (T2), upper triangle: combined (T4), diagonal: correlation between time-points within each variable. Variables are ordered by hierarchical clustering of the s13 correlations."
+#| fig-height: 7
+
+K <- dat$d$K
+d_long <- dat$dat
+
+type_lab <- dat$scale |>
+  distinct(type, analyte) |>
+  arrange(type)
+
+# s13: residual correlation matrix Omega (M = 2K; 1:K = T2, (K+1):M = T4)
+omega_s13 <- fit.s13.post$summary("Omega", "median") |>
+  mutate(ij = gsub("[^0-9,]", "", variable)) |>
+  separate(ij, into = c("i", "j"), convert = TRUE) |>
+  select(i, j, r = median)
+
+# s18: empirical correlation of residuals (y - mu) on observed outcomes with
+# observed pre-values, using the posterior median of mu per row
+obs_rows <- which(d_long$y_miss == 1 & d_long$pre_miss == 1)
+mu_s18 <- fit.s18.post$summary(sprintf("mu[%d]", obs_rows), "median")$median
+
+resid_s18 <- d_long[obs_rows, ] |>
+  mutate(resid = y_obs - mu_s18,
+         col = (time - 1) * K + type) |>
+  select(P, col, resid) |>
+  pivot_wider(names_from = col, values_from = resid, names_sort = TRUE)
+
+R_s18 <- cor(resid_s18[, as.character(1:(2 * K))], use = "pairwise.complete.obs")
+
+omega_s18 <- expand_grid(i = 1:(2 * K), j = 1:(2 * K)) |>
+  mutate(r = R_s18[cbind(i, j)])
+
+# Order types by clustering on the s13 within-time correlations (mean of T2
+# and T4) so that correlated types are placed next to each other
+R_avg <- diag(K)
+for (k1 in 1:K) for (k2 in 1:K) {
+  R_avg[k1, k2] <- mean(c(
+    omega_s13$r[omega_s13$i == k1 & omega_s13$j == k2],
+    omega_s13$r[omega_s13$i == K + k1 & omega_s13$j == K + k2]))
+}
+type_ord <- hclust(as.dist(1 - abs(R_avg)), method = "average")$order
+analyte_ord <- type_lab$analyte[type_ord]
+
+# Keep T2 below and T4 above the diagonal (in the clustered order) and the
+# T2-T4 correlation of each type on the diagonal
+resid_cor <- bind_rows(s13 = omega_s13, s18 = omega_s18, .id = "model") |>
+  mutate(time_i = if_else(i <= K, "T2", "T4"),
+         time_j = if_else(j <= K, "T2", "T4"),
+         type_i = (i - 1) %% K + 1,
+         type_j = (j - 1) %% K + 1,
+         pos_i = match(type_i, type_ord),
+         pos_j = match(type_j, type_ord)) |>
+  filter((time_i == time_j & time_i == "T2" & pos_i < pos_j) |
+           (time_i == time_j & time_i == "T4" & pos_i > pos_j) |
+           (time_i == "T2" & time_j == "T4" & type_i == type_j)) |>
+  mutate(analyte_i = factor(type_lab$analyte[type_i], levels = analyte_ord),
+         analyte_j = factor(type_lab$analyte[type_j], levels = rev(analyte_ord)),
+         model = factor(model, levels = c("s13", "s18"),
+                        labels = c("s13 (estimated)", "s18 (empirical)")))
+
+resid_cor |>
+  ggplot(aes(analyte_i, analyte_j, fill = r)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = sprintf("%.2f", r)), size = 2) +
+  facet_wrap(~ model, ncol = 1) +
+  scale_fill_gradient2(limits = c(-1, 1),
+                       low = colscale[2],
+                       high = colscale[4]) +
+  alpha_theme() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  labs(fill = "r")
+
+```
+
+About a third of participants did not attend the combined-treatment (T4) assessment, giving missing values for all variables at T4. When participants have observed data at T2, s13 uses their deviation from the expected value at T2 to impute T4 values through the correlation between time-points, while s18 imputes T4 values from the expected value only (@fig-dropout). This shows up as a correlated deviations from expected values at T2 and T4 in the s13 model but not in s18. 
+
+```{r}
+#| label: fig-dropout
+#| fig-cap: "Imputed T4 values in participants with missing T4 but observed T2 values for LDL and HDL. The x axis shows the observed deviation from the expected value at T2 and the y axis the imputed deviation from the expected value at T4 (posterior means, SD units), per model. Large symbols show group means."
+#| fig-height: 5
+
+dropout_analytes <- c("LDL", "HDL")
+
+# Rows with a missing T4 value and an observed T2 value of the same type
+miss_t4 <- d_long |>
+  mutate(row = row_number()) |>
+  filter(type %in% type_idx[dropout_analytes]) |>
+  select(row, P, type, time, treat, y_miss) |>
+  pivot_wider(names_from = time, values_from = c(row, y_miss)) |>
+  filter(y_miss_2 == 0, y_miss_1 == 1)
+
+# Posterior mean deviation (y - mu) per row. The expected value is y_expect
+# in s13 and mu in s18.
+dev_rows <- function(fit, rows, mu_var) {
+  y <- fit$draws(sprintf("y[%d]", rows), format = "matrix")
+  mu <- fit$draws(sprintf("%s[%d]", mu_var, rows), format = "matrix")
+  colMeans(y - mu)
+}
+
+dropout <- bind_rows(
+  s13 = miss_t4 |> mutate(dev_t2 = dev_rows(fit.s13.post, row_1, "y_expect"),
+                          dev_t4 = dev_rows(fit.s13.post, row_2, "y_expect")),
+  s18 = miss_t4 |> mutate(dev_t2 = dev_rows(fit.s18.post, row_1, "mu"),
+                          dev_t4 = dev_rows(fit.s18.post, row_2, "mu")),
+  .id = "model") |>
+  mutate(analyte = factor(names(type_idx)[match(type, type_idx)],
+                          levels = dropout_analytes),
+         treat = factor(treat, levels = 1:2, labels = c("Placebo", "Krill oil")))
+
+dropout_means <- dropout |>
+  summarise(.by = c(model, analyte, treat),
+            n = n(),
+            dev_t2 = mean(dev_t2),
+            dev_t4 = mean(dev_t4))
+
+dropout |>
+  ggplot(aes(dev_t2, dev_t4, color = treat)) +
+  geom_hline(yintercept = 0, color = "gray60") +
+  geom_vline(xintercept = 0, color = "gray60") +
+  geom_point(alpha = 0.6, size = 1.2) +
+  geom_point(data = dropout_means, size = 3.5, shape = 18) +
+  facet_grid(analyte ~ model) +
+  scale_color_manual(values = c(colscale[4], colscale[2])) +
+  alpha_theme(text_base_size = 8) +
+  theme(legend.position = "top",
+        legend.title = element_blank()) +
+  labs(x = "Observed deviation from expected value at T2 (SD units)",
+       y = "Imputed deviation from expected value at T4 (SD units)")
+
+```
+
+Together the above indicate that the multivariate alternative take advantage of the information available in data set. However, a simpler model (uninformed) does not change the main conclusions of the analysis.  
+
+
+
+## Changing the scale of the burden score
+
+The burden score as calculated from the five criteria measurements for the metabolic syndrome is created using the marginal SD as the denominator for each score. This could be problematic as the marginal SD contains sex differences and variation due to potential treatment effects. First we will recalculate the score using baseline, sex-adjusted standard deviations. 
+
+```{r}
+#| label: burden-baseline-sd
 
 # Baseline (T1) SD pooled within sex. pre_obs is on the standardised scale
 # (marginal SD = 1), so the within-sex SD computed here is the ratio
