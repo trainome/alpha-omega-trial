@@ -1,0 +1,8 @@
+---
+title: "Methods and results"
+---
+
+This chapter reproduces the methods and results sections of the main
+manuscript. 
+
+{{< include _methods-results.qmd >}}

@@ -19,6 +19,7 @@ source("./R/packages.R")
 source("./R/data-prep.R")
 source("./R/helpers.R")
 source("./R/sim-fun.R")
+source("./R/negligible.R") # P(benefit/negligible/harm), thresholds from 01-data.qmd
 
 
 refit.models <- FALSE
@@ -41,7 +42,7 @@ fmt_prob <- function(p) {
 ```
 
 
-Here, we draw inferences about the effect of krill oil supplementation on metabolic health markers. First, we examine the differences in outcomes between placebo and krill oil, followed by a combined analysis of the dichotomous diagnostic score (0/1) and a continuous version derived from the sum of the sub-scores, each given equal weight.
+Here, we draw inferences about the effect of krill oil supplementation on metabolic health markers. First, we examine the differences in outcomes between placebo and krill oil, followed by a combined analysis of the dichotomous diagnostic score (0/1) and a continuous burden score derived as the average of the five diagnostic criteria (HDL with negative sign, blood pressure as the average of systolic and diastolic pressure), with each criterion re-scaled to sex-specific population SD units.
 
 
 ```{r}
@@ -98,7 +99,7 @@ d <- dat$d
 s18 <- cmdstan_model(stan_file = "models/s18.stan", 
                       exe_file = "models/s18.exe")
 
-# S13 is the preffered main model, multivariate t distribution.
+# S13 is the preferred main model, multivariate t distribution.
 s13 <- cmdstan_model(stan_file = "models/s13.stan", 
                       exe_file = "models/s13.exe")
 
@@ -203,7 +204,7 @@ pred_means <- bind_rows(
 
 
 
-# We are creating two plots, one for the metabolic syndrom subscores
+# We are creating two plots, one for the metabolic syndrome subscores
 # and one for the related scores.
 strip_lab <- function(label, unit) paste0(label, " (", unit, ")")
 
@@ -325,7 +326,7 @@ rel_scores <- pred_plot(pred_plot_dat,
                                          "bmi", "LDL", "HbA1c"))
 
 
-## Add the contrats plot 
+## Add the contrasts plot
 draws.s18 <- fit.s18.post$draws("alpha", format = "df")
 draws.s13 <- fit.s13.post$draws("alpha", format = "df")
 
@@ -379,7 +380,7 @@ infer_treat <- function(draws_list, scale = dat$scale) {
               contrasts = contrasts))
 }
 
-# Run the infear routine
+# Run the inference routine
 infer <- infer_treat(ls)
 
 
@@ -481,11 +482,23 @@ type_idx <- setNames(dat$scale$type, dat$scale$analyte)
 # The score is
 # (0.5 * (dias + sys) +
 # (- HDL) + TG + glucose + waist) / 5
-burden_eff <- sapply(1:2, function(t)
+# Model-scale version (study SDs pooled over time-points), kept for comparison
+burden_eff_marg <- sapply(1:2, function(t)
     (-eff(t, type_idx[["HDL"]]) + eff(t, type_idx[["TG"]]) +
        0.5 * (eff(t, type_idx[["dias"]]) + eff(t, type_idx[["sys"]])) +
        eff(t, type_idx[["glucose"]]) + eff(t, type_idx[["waist"]])) / 5
   )
+colnames(burden_eff_marg) <- c("T2", "T4")
+
+# Main analysis: re-weighted score, each criterion in sex-specific population
+# SD units (own baseline SD for fasting glucose), averaged over participants.
+# burden_f holds w_k * SD_k^model * mean_p(1 / SD_k,sex(p)^ref), see R/pop-ref.R
+source("./R/pop-ref.R")
+burden_f <- burden_pop_factors(dat$scale, dat$part$sex)
+
+burden_eff <- sapply(1:2, function(t)
+  Reduce(`+`, lapply(names(burden_f), function(k)
+    burden_f[[k]] * eff(t, type_idx[[k]]))))
 
 colnames(burden_eff) <- c("T2", "T4")
 
@@ -505,7 +518,7 @@ burden_contrast <- burden_eff |>
             benefit = mean(value < 0))  |>
   mutate(
     digits = 2,
-    unit_txt = "SD-units",
+    unit_txt = "population SD units",
     est = sprintf("%.*f %s", digits, med, unit_txt),
     ci = sprintf("%.*f, %.*f", digits, lwr95, digits, upr95),
     prob = paste("P(benefit)", fmt_prob(benefit)),
@@ -560,11 +573,68 @@ burden_fig <- burden_eff |>
         legend.key.size = unit(3, "mm"))  +
   labs(color = "Treatment-period",
        fill = "Treatment-period",
-       x = "Average burden score<br>Krill oil - Placebo (SD-units)") + 
+       x = "Average burden score<br>Krill oil - Placebo (population SD units)") + 
   scale_fill_manual(values = colscale[c(3,6)]) + 
-  scale_color_manual(values = colscale[c(3,6)]) 
-  
+  scale_color_manual(values = colscale[c(3,6)])
 
+
+
+```
+
+### Probability of benefit, negligible effect and harm
+
+For each outcome, we summarise the posterior distribution of the treatment effect (krill oil &minus; placebo) as the probability of benefit, a negligible effect and harm. An effect is negligible when it is smaller in magnitude than the outcome-specific threshold &delta;, and a benefit or harm when it is larger than &delta; in the beneficial or harmful direction (higher is beneficial for HDL cholesterol and adiponectin, lower for all other outcomes). Thresholds were derived in the data chapter and are applied on the scale of the contrast, i.e. the log scale for triglycerides, HOMA2-IR and HbA1c. The burden score is the re-weighted score, with each criterion expressed in sex-specific population SD units (own baseline SD for fasting glucose). For the burden score, &delta; is based on the between-individual SD of this score at baseline rather than the component thresholds (@tbl-metsyn-bnh).
+
+```{r}
+#| label: tbl-metsyn-bnh
+#| tbl-cap: "Posterior probabilities (%) of benefit, a negligible effect and harm of krill oil compared with placebo for the metabolic syndrome criteria, the burden score and related outcomes (model s13), after the supplementation period and after the combined period. &delta;, threshold for a negligible effect, on the scale of the contrast (log scale for triglycerides, HOMA2-IR and HbA1c; population SD units for the burden score)."
+
+# P(benefit/negligible/harm) per outcome and time from the s13 contrasts
+# (contrast_nat: natural units, or log scale for log outcomes)
+bnh_tab <- bind_rows(
+  contrast_dat |>
+    mutate(analyte = as.character(analyte)) |>
+    summarise(.by = c(analyte, label, time),
+              bnh_df(contrast_nat, analyte[1])),
+  # Burden score (standardised scale)
+  burden_eff |>
+    data.frame() |>
+    pivot_longer(everything(), names_to = "time") |>
+    mutate(time = if_else(time == "T2", "1", "2")) |>
+    summarise(.by = time, bnh_df(value, "burden_pop")) |>
+    mutate(analyte = "burden", label = "Burden score")
+) |>
+  # Burden score row uses the re-weighted score threshold (burden_pop)
+  inner_join(load_neg() |>
+               filter(outcome != "burden") |>
+               mutate(outcome = if_else(outcome == "burden_pop", "burden", outcome)) |>
+               select(analyte = outcome, delta), by = "analyte") |>
+  mutate(time = if_else(time == 1, "Supplementation", "Combined"),
+         group = if_else(analyte %in% c("waist", "dias", "sys", "glucose", "HDL", "TG", "burden"),
+                         "Metabolic syndrome", "Related outcomes"),
+         analyte = factor(analyte, levels = c("waist", "dias", "sys", "glucose", "HDL",
+                                              "TG", "burden", "bmi", "fat.rel", "LDL",
+                                              "Adiponectin", "HOMA2IR", "HbA1c"))) |>
+  pivot_wider(names_from = time, values_from = c(benefit, negligible, harm)) |>
+  arrange(analyte)
+
+bnh_tab |>
+  select(group, label, delta,
+         ends_with("_Supplementation"), ends_with("_Combined")) |>
+  gt::gt(groupname_col = "group") |>
+  gt::fmt(columns = c(starts_with("benefit"), starts_with("negligible"), starts_with("harm")),
+          fns = fmt_pct_bnh) |>
+  gt::fmt(columns = delta,
+          fns = function(x) vapply(x, function(v) format(signif(v, 2)), "")) |>
+  gt::tab_spanner(label = "Supplementation", columns = ends_with("_Supplementation")) |>
+  gt::tab_spanner(label = "Combined", columns = ends_with("_Combined")) |>
+  gt::cols_label(label = "", delta = "δ",
+                 benefit_Supplementation = "Benefit",
+                 negligible_Supplementation = "Negligible",
+                 harm_Supplementation = "Harm",
+                 benefit_Combined = "Benefit",
+                 negligible_Combined = "Negligible",
+                 harm_Combined = "Harm")
 
 ```
 
@@ -879,7 +949,7 @@ diag_criteria_fig <- est_13 |>
 
 ```{r}
 #| label: fig-metsyn-inference
-#| fig-cap: "A, Observed group means (open symbols, all available observations; geometric means for triglycerides) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CI) for each outcome in the metabolic syndrome score on its natural scale (A). Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (krill oil - placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively. B, posterior distribution of the average burden score contrast (krill oil - placebo) at post-supplementation and after the combined period. P(benefit) indicates the percentage of the posterior associated with any benefit for krill oil. C, the percentage of participants meeting the diagnostic criteria in each group; error bars represent the uncertainty associated with missing-value imputation (95th and 50th percentile intervals). D, treatment contrast for the occurrence of metabolic syndrome diagnosis, baseline-adjusted differences between groups at post-supplementation and after the combined treatment period."
+#| fig-cap: "A, Observed group means (open symbols, all available observations; geometric means for triglycerides) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CrI) for each outcome in the metabolic syndrome score on its natural scale. Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (krill oil - placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively. B, posterior distribution of the burden score contrast (krill oil - placebo, population SD units) at post-supplementation and after the combined period. P(benefit) indicates the percentage of the posterior associated with any benefit for krill oil. C, the percentage of participants meeting the diagnostic criteria in each group; error bars represent the uncertainty associated with missing-value imputation (95th and 50th percentile intervals). D, treatment contrast for the occurrence of metabolic syndrome diagnosis, baseline-adjusted differences between groups (log odds ratio with 95% confidence interval pooled over imputations using Rubin's rules) at post-supplementation and after the combined treatment period."
 #| fig-width: 3.55
 #| fig-height: 7.1
 
@@ -917,7 +987,7 @@ ggsave(
 
 ```{r}
 #| label: fig-metsyn-related
-#| fig-cap: "Observed group means (open symbols, all available observations; geometric means for HOMA2-IR and HbA1c) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CI) for each outcome on its natural scale. Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (krill oil - placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively."
+#| fig-cap: "Observed group means (open symbols, all available observations; geometric means for HOMA2-IR and HbA1c) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CrI) for each outcome on its natural scale. Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (krill oil - placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively."
 #| fig-width: 3.55
 #| fig-height: 6.14
 
@@ -995,7 +1065,7 @@ ctxt_simple <- with(ctxt_dat, setNames(as.list(txt_simple), key))
 # Waist single values
 waist_est_t2 <- ctxt_dat |> 
   filter(analyte == "waist", time == "T2") |> 
-  mutate(stat = sprintf("%s (95%% PI: %s)", est, ci)) |> 
+  mutate(stat = sprintf("%s (95%% CrI: %s)", est, ci)) |>
   pull(stat)
 
 waist_prob_t2 <- ctxt_dat |> 
@@ -1016,7 +1086,7 @@ At post-supplementation (T2), baseline- and sex-adjusted differences between gro
 
 After the supplementation period, the krill oil group displayed similar levels of high-density lipoproteins (HDL) as compared to the placebo group (`r ctxt_simple$HDL_T2`). However, following the combined period, the krill oil group increased HDL levels compared to placebo, indicating a higher probability of beneficial effects of krill oil supplementation (`r ctxt_simple$HDL_T4`). Triglyceride levels were estimated to be similar between intervention protocols, both after the post-supplementation period (`r ctxt_simple$TG_T2`) and after the combined period (`r ctxt_simple$TG_T4`).
 
-A combined score was created by summing the five sub-scores of the metabolic syndrome diagnostic criteria from their continuous, standardized scales, with each score given equal weight (the average blood pressure score was one-fifth of the total score). Comparing the combined scores between treatments indicated a high probability of benefit from krill oil at both post-treatment time points (post-supplementation, `r burden_t2`; post combined treatment, `r burden_t4`; @fig-metsyn-inference B). The differences in the combined score did not yield a significant (95% confidence interval not containing 0) difference in the dichotomous diagnostic criteria (harmonised definition, at least three of the five criteria passing their thresholds [@alberti2009]; @fig-metsyn-inference C and D).      
+A combined burden score was created as the average of the five metabolic syndrome diagnostic criteria on their continuous scales (HDL entering with a negative sign so that higher scores indicate worse metabolic health, and the average of diastolic and systolic blood pressure counting as one criterion), with each criterion re-weighted to sex-specific population SD units (see `R/pop-ref.R`; fasting glucose scaled by the trial's own sex-specific baseline SD). Comparing the combined scores between treatments indicated a high probability of benefit from krill oil at both post-treatment time points (post-supplementation, `r burden_t2`; post combined treatment, `r burden_t4`; @fig-metsyn-inference B). The differences in the combined score did not yield a significant (95% confidence interval not containing 0) difference in the dichotomous diagnostic criteria (harmonised definition, at least three of the five criteria passing their thresholds [@alberti2009]; @fig-metsyn-inference C and D).      
 
 
 
@@ -1033,7 +1103,7 @@ Comparing BMI between treatment groups indicated no clear difference between gro
 # sex, treatment and pre-values. E.g., a positive correlation between sys and dia
 # indicate that individuals with higher than expected diastolic 
 # bp also tend to have have higher than expected systolic bp
-# after acounting fort sex, pre-value and treatment.
+# after accounting for sex, pre-value and treatment.
 
  
 # Residual correlation matrix Omega from s13 (M = 2K; rows/cols 1:K = T2,
@@ -1298,6 +1368,58 @@ bind_rows(chain_sums) |>
        size = "ESS tail")
 ```
 
+```{r}
+#| label: loo-s13-s19s22
+
+# Approximate leave-one-out cross-validation (PSIS-LOO, one observation per
+# participant) for s13 and the moderation models s19 to s22
+loo_mod <- lapply(c("s13", paste0("s", 19:22)), function(m)
+  readRDS(sprintf("fits/paper1/loo_%s.RDS", m)))
+names(loo_mod) <- c("s13", paste0("s", 19:22))
+
+loo_mod_comp <- loo::loo_compare(loo_mod) |>
+  data.frame() |>
+  rownames_to_column(var = "model") |>
+  select(model, elpd_diff, se_diff) |>
+  inner_join(
+    data.frame(model = names(loo_mod),
+               n_k07 = sapply(loo_mod, function(x) sum(loo::pareto_k_values(x) > 0.7)),
+               n_k1 = sapply(loo_mod, function(x) sum(loo::pareto_k_values(x) > 1)),
+               n_obs = sapply(loo_mod, function(x) length(loo::pareto_k_values(x)))),
+    by = "model")
+
+# For text
+loo_mod_txt <- with(loo_mod_comp,
+                    paste(sprintf("%s %.1f (%.1f)", model, elpd_diff, se_diff),
+                          collapse = ", "))
+loo_mod_k_range <- sprintf("%d-%d of %d",
+                           min(loo_mod_comp$n_k07), max(loo_mod_comp$n_k07),
+                           max(loo_mod_comp$n_obs))
+loo_mod_k1 <- sum(loo_mod_comp$n_k1)
+```
+
+The moderation models did not credibly differ from s13, or from each other, in estimated out-of-sample predictive performance (ELPD difference (SE) relative to the best model: `r loo_mod_txt`; @tbl-loo-s13-s19s22). In each model, `r loo_mod_k_range` participants had Pareto k values > 0.7 (`r if (loo_mod_k1 == 0) "none" else loo_mod_k1` > 1), so the ELPD estimates should be interpreted with some caution.
+
+```{r}
+#| label: tbl-loo-s13-s19s22
+#| tbl-cap: "Approximate leave-one-out cross-validation (PSIS-LOO) comparison of model s13 and the moderation models s19 to s22. ELPD diff, difference in expected log pointwise predictive density relative to the model with the highest ELPD; SE, standard error of the difference; Pareto k > 0.7 (> 1), number of participants with Pareto k values above 0.7 (above 1)."
+
+loo_mod_comp |>
+  mutate(model = factor(model,
+                        levels = c("s13", paste0("s", 19:22)),
+                        labels = c("s13: No moderation",
+                                   "s19: Own baseline", "s20: Metabolic burden",
+                                   "s21: Relative fat mass", "s22: Omega-3 index"))) |>
+  select(model, elpd_diff, se_diff, n_k07, n_k1) |>
+  gt() |>
+  cols_label(model = "Model",
+             elpd_diff = "ELPD diff",
+             se_diff = "SE",
+             n_k07 = "Pareto k > 0.7",
+             n_k1 = "Pareto k > 1") |>
+  fmt_number(columns = c(elpd_diff, se_diff), decimals = 1)
+```
+
 
 
 
@@ -1316,10 +1438,13 @@ mod_burden_file <- "data-derived/ch-07-moderation-burden.RDS"
 mod_coef_file <- "data-derived/ch-07-moderation-coef.RDS"
 
 # (also re-computed if the stored coefficient summary predates the
-# P(benefit) column)
+# P(benefit) column, or if the stored burden summaries predate the population
+# SD re-weighting, i.e. lack the `burden_scale` column)
 if (!file.exists(mod_pred_file) || !file.exists(mod_burden_file) ||
     !file.exists(mod_coef_file) ||
-    !"benefit" %in% names(readRDS(mod_coef_file)) || refit.models) {
+    !"benefit" %in% names(readRDS(mod_coef_file)) ||
+    !"burden_scale" %in% names(readRDS(mod_burden_file)) ||
+    !"burden_scale" %in% names(readRDS(mod_coef_file)) || refit.models) {
 
   # Observed baseline SD of each standardised outcome (moderator SD in s19)
   pre_sd <- dat$dat |>
@@ -1374,14 +1499,16 @@ if (!file.exists(mod_pred_file) || !file.exists(mod_burden_file) ||
     expand_grid(m = c(-1, 0, 1)) |>
     mutate(effect = diff + coef * m * mod_sd)
 
-  # Burden score effect per draw, combined from the criteria as in
-  # joint-burden-score: (-HDL + TG + 0.5 * (dias + sys) + glucose + waist) / 5
-  burden_w <- data.frame(
-    type = unname(type_idx[c("HDL", "TG", "dias", "sys", "glucose", "waist")]),
-    w = c(-1, 1, 0.5, 0.5, 1, 1) / 5)
+  # Burden score effect per draw, combined from the criteria as in the main
+  # burden score (joint-burden-score): population SD re-weighting with the
+  # per-criterion factors burden_f (w_k * SD_k^model * mean_p(1 / SD_k,sex(p)^ref),
+  # R/pop-ref.R), with w = (-HDL + TG + 0.5 * (dias + sys) + glucose + waist) / 5
+  burden_f_df <- data.frame(
+    type = unname(type_idx[names(burden_f)]),
+    w = unname(burden_f))
 
   mod_burden <- mod_eff |>
-    inner_join(burden_w, by = "type") |>
+    inner_join(burden_f_df, by = "type") |>
     summarise(.by = c(model, time, m, .draw), effect = sum(w * effect)) |>
     summarise(.by = c(model, time, m),
               med = median(effect),
@@ -1389,7 +1516,8 @@ if (!file.exists(mod_pred_file) || !file.exists(mod_burden_file) ||
               upr95 = quantile(effect, 0.975),
               lwr50 = quantile(effect, 0.25),
               upr50 = quantile(effect, 0.75),
-              p_neg = mean(effect < 0))
+              p_neg = mean(effect < 0)) |>
+    mutate(burden_scale = "population SD")
 
   saveRDS(mod_burden, mod_burden_file)
 
@@ -1404,7 +1532,7 @@ if (!file.exists(mod_pred_file) || !file.exists(mod_burden_file) ||
   up_benefit <- unname(type_idx[c("HDL", "Adiponectin")])
 
   mod_coef <- coef_draws |>
-    inner_join(burden_w, by = "type") |>
+    inner_join(burden_f_df, by = "type") |>
     summarise(.by = c(model, time, .draw), coef_sd = sum(w * coef_sd)) |>
     mutate(type = NA_integer_) |>
     bind_rows(coef_draws) |>
@@ -1416,7 +1544,10 @@ if (!file.exists(mod_pred_file) || !file.exists(mod_burden_file) ||
               upr50 = quantile(coef_sd, 0.75),
               # Probability that the treatment effect at +1 SD of the
               # moderator is more beneficial than at the moderator mean
-              benefit = mean(if_else(type %in% up_benefit, -coef_sd, coef_sd) < 0))
+              benefit = mean(if_else(type %in% up_benefit, -coef_sd, coef_sd) < 0)) |>
+    # Burden score row (type = NA) in population SD units, outcomes in
+    # outcome (model) SD units
+    mutate(burden_scale = "population SD")
 
   saveRDS(mod_coef, mod_coef_file)
 
@@ -1474,12 +1605,12 @@ mod_pred |>
 ```
 
 
-Combining the predicted effects on the diagnostic criteria per posterior draw, in the same way as for the metabolic burden score in s13, gives the predicted treatment effect on the burden score across each moderator (@fig-moderation-burden).
+Combining the predicted effects on the diagnostic criteria per posterior draw, in the same way as for the metabolic burden score in s13 (average of the criteria re-weighted to population SD units), gives the predicted treatment effect on the burden score across each moderator (@fig-moderation-burden).
 
 
 ```{r}
 #| label: fig-moderation-burden
-#| fig-cap: "Predicted treatment effects (krill oil - placebo) on the metabolic burden score at the moderator mean and at &plusmn; 1 SD of the moderator in models s19 (each outcome's own baseline value), s20 (baseline metabolic burden score), s21 (baseline relative fat mass) and s22 (baseline omega-3 index), after the supplementation and combined periods. The burden score effect is combined per posterior draw from the effects on the diagnostic criteria. Points and error bars show posterior medians with 50% and 95% CrI on the standardised scale (SD units)."
+#| fig-cap: "Predicted treatment effects (krill oil - placebo) on the metabolic burden score at the moderator mean and at &plusmn; 1 SD of the moderator in models s19 (each outcome's own baseline value), s20 (baseline metabolic burden score), s21 (baseline relative fat mass) and s22 (baseline omega-3 index), after the supplementation and combined periods. The burden score effect is combined per posterior draw from the effects on the diagnostic criteria using the same population SD re-weighting as the main burden score. Points and error bars show posterior medians with 50% and 95% CrI in population SD units."
 #| fig-height: 2.1
 #| fig-width: 5.9
 
@@ -1509,7 +1640,7 @@ mod_burden |>
   theme(legend.position = "top",
         legend.title = element_blank(),
         axis.title.x = element_blank()) +
-  labs(y = "Average burden score<br>Krill oil - Placebo (SD-units)")
+  labs(y = "Burden score, Krill oil - Placebo<br>(population SD units)")
 ```
 
 
@@ -1518,7 +1649,7 @@ The moderation parameters of all outcomes and the burden score are summarised in
 
 ```{r}
 #| label: tbl-moderation-coef
-#| tbl-cap: "Moderation parameters, the change in the treatment effect (krill oil - placebo) per SD of the moderator, in models s19 (each outcome's own baseline value, $\\delta_{k,t}$), s20 (baseline metabolic burden score, $\\gamma_{k,t}$), s21 (baseline relative fat mass, $\\gamma_{k,t}$) and s22 (baseline omega-3 index, $\\gamma_{k,t}$), after the supplementation and combined periods. The burden score parameter is combined per posterior draw from the parameters of the diagnostic criteria. Values are posterior medians with 50% and 95% CrI on the standardised scale (SD units). P(benefit) is the posterior probability that the treatment effect at +1 SD of the moderator is more beneficial than at the moderator mean (higher values for HDL and adiponectin, lower values otherwise)."
+#| tbl-cap: "Moderation parameters, the change in the treatment effect (krill oil - placebo) per SD of the moderator, in models s19 (each outcome's own baseline value, $\\delta_{k,t}$), s20 (baseline metabolic burden score, $\\gamma_{k,t}$), s21 (baseline relative fat mass, $\\gamma_{k,t}$) and s22 (baseline omega-3 index, $\\gamma_{k,t}$), after the supplementation and combined periods. The burden score parameter is combined per posterior draw from the parameters of the diagnostic criteria using the same population SD re-weighting as the main burden score (population SD units). Values are posterior medians with 50% and 95% CrI on the standardised scale (outcome SD units; population SD units for the burden score). P(benefit) is the posterior probability that the treatment effect at +1 SD of the moderator is more beneficial than at the moderator mean (higher values for HDL and adiponectin, lower values otherwise)."
 
 score_levels <- c(labels$label[match(levels(pred_plot_dat$analyte), labels$analyte)],
                   "Metabolic burden score")

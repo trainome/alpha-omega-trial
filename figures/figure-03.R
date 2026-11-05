@@ -124,8 +124,9 @@ fa_labels <- data.frame(
     "Stearic Acid",
     "Oleic Acid",
     "Linoleic Acid (n-6)",
-    "Gamma-linolenic Acid (n-6)",
+    # C18:3n3 is alpha-linolenic acid, C18:3n6 gamma-linolenic acid
     "Alpha-linolenic Acid (n-3)",
+    "Gamma-linolenic Acid (n-6)",
     "Dihomo-gamma-linolenic Acid (n-6)",
     "Arachidonic Acid (n-6)",
     "Eicosapentaenoic Acid (EPA, n-3)",
@@ -199,7 +200,7 @@ sumdat_all <- draws |>
   ungroup() |>
   summarise(
     .by = c(FA, TI, TX),
-    Mu = mean(mu),
+    Mu = median(mu),
     lwr99 = quantile(mu, 0.005),
     upr99 = quantile(mu, 0.995),
     lwr95 = quantile(mu, 0.025),
@@ -522,15 +523,16 @@ omega_index_fig <- o3i_sumdat |>
     alpha = 0.1
   ) +
 
-  # Model-based adjusted means at T2 and T4
+  # Model-based adjusted means at T2 and T4 with 95 % (thin) and 50 % (thick)
+  # percentile intervals, as in Figure 3
   geom_errorbar(
-    aes(ymin = lwr99, ymax = upr99),
+    aes(ymin = lwr95, ymax = upr95),
     width = 0,
     linewidth = 0.4,
     position = pd
   ) +
   geom_errorbar(
-    aes(ymin = lwr95, ymax = upr95),
+    aes(ymin = lwr50, ymax = upr50),
     width = 0,
     linewidth = 1,
     position = pd

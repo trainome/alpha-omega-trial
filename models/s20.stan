@@ -46,8 +46,8 @@ Model S13:
   can be re-fit under different nu (nu = 1..30; large nu -> MVN, cf. BDA p. 441).
 - Pre-value imputation model remains multivariate normal.
 - Metabolic syndrome diagnosis is derived in generated quantities from
-  the continuous biomarker model (central obesity [waist] required AND >= 2 of the 4 remaining
-  criteria: HDL, TG, BP, glucose).
+  the continuous biomarker model (harmonised definition: >= 3 of the 5 criteria
+  waist, HDL, TG, BP, glucose; central obesity is not required).
 */
 
 data {
@@ -74,6 +74,12 @@ data {
 
   int<lower=1, upper=30> nu;                  // nu parameter for the mvt-dist
 
+  // Standardised MetS diagnostic thresholds in diag_idx order
+  // {HDL, TG, dias, glucose, sys, waist}; computed in R by diag_thresholds()
+  // (R/data-prep.R) from the harmonised cut-offs and the standardisation scale.
+  vector[6] threshold_male;
+  vector[6] threshold_female;
+
 }
 transformed data {
   int n_miss_y = N - sum(y_miss);
@@ -81,18 +87,14 @@ transformed data {
 
   // Diagnostic criteria data
   array[6] int diag_idx = {2, 6, 8, 10, 11, 12};
-// set the right index for subscores
-//
-// analyte  type std_threshold_male std_threshold_female
-// HDL         2            -1.10                -0.233
-// TG          6             0.947                0.947
-// dias        8            -0.0200              -0.0200
-// glucose     10             1.88                 1.88
-// sys         11             0.0638               0.0638
-// waist       12            -0.432               -1.48
-
-  vector[6] threshold_male   = [-1.1,   0.947, -0.02, 1.88, 0.0638, -0.432]';
-  vector[6] threshold_female = [-0.233, 0.947, -0.02, 1.88, 0.0638, -1.48]';
+  // analyte  type  cut-off (men / women)
+  // HDL         2   < 1.0 / < 1.3 mmol/L      (above = 0: below is abnormal)
+  // TG          6   >= 1.7 mmol/L (log scale)
+  // dias        8   >= 85 mmHg   } BP criterion: dias OR sys
+  // glucose    10   >= 5.6 mmol/L
+  // sys        11   >= 130 mmHg  }
+  // waist      12   >= 94 / >= 80 cm
+  // threshold_male / threshold_female are data (standardised cut-offs).
   array[6] int above = {0, 1, 1, 1, 1, 1};   // 1 = above is abnormal
 
   // Participant-level sex variable (constant per participant)
@@ -345,8 +347,8 @@ generated quantities {
   vector[N_P] log_lik_part;
   vector[N] y_expect;
 
-  // Per-participant, per-time diagnosis: 1 if central obesity (waist)
-  // AND >= 2 of the 4 remaining criteria (HDL, TG, BP, glucose)
+  // Per-participant, per-time diagnosis: 1 if >= 3 of the 5 criteria
+  // (waist, HDL, TG, BP, glucose) are met (harmonised definition)
   matrix[N_P, 3] diagnosed;
   // Per-participant, per-time count of criteria met (0-5)
   matrix[N_P, 3] n_criteria;
@@ -459,8 +461,8 @@ generated quantities {
       count += bp_pass;
       // n_criteria keeps the total count (0-5) incl. waist for reference
       n_criteria[p, t] = count + waist_pass;
-      // Two-step rule: central obesity required, plus >= 2 of the other 4
-      diagnosed[p, t] = (waist_pass == 1 && count >= 2) ? 1.0 : 0.0;
+      // Harmonised definition: any 3 of the 5 criteria (waist not required)
+      diagnosed[p, t] = (n_criteria[p, t] >= 3) ? 1.0 : 0.0;
     }
   }
 

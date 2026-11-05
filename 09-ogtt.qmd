@@ -1,13 +1,17 @@
 ---
 title: "Oral glucose-tolerance test"
 editor: source
+execute:
+  echo: false
+  warning: false
+  message: false
 editor_options: 
   chunk_output_type: console
 ---
 
 ## Introduction
 
-Here we model the oral glucose-tolerance test data. Blood glucose was measured every fifteen minute after a standard 75 g glucose drink over the course of a 2 hour period. The test was performed before the intervention period (T1), after the supplementation-only period (T2), and after the full intervention (combined period, supplementation and resistance training vs. placebo and resistance training). The goal is to evaluate the effect of the intervention (krill oil supplementation) on the glucose tolerance curve.
+Here we model the oral glucose-tolerance test data. Blood glucose was measured before (0 min) and 15, 30, 45, 60, 90 and 120 min after a standard 75 g glucose drink. The test was performed before the intervention period (T1), after the supplementation-only period (T2), and after the full intervention (combined period, supplementation and resistance training vs. placebo and resistance training). The goal is to evaluate the effect of the intervention (krill oil supplementation) on the glucose tolerance curve.
 
 We aim to build a model that captures the glucose time-course after ingesting the drink. We will accomplish this by fitting a spline model to participant-level data with treatment-groups and time-points as population-level effects. 
 
@@ -20,6 +24,7 @@ source("./R/fig-opt-fun.R")
 source("./R/packages.R")
 source("./R/helpers.R")
 source("./R/data-prep.R")
+source("./R/negligible.R") # P(benefit/negligible/harm), thresholds from 01-data.qmd
 
 # The spline package is needed for basis spline construction
 library(splines)
@@ -84,7 +89,7 @@ In a preliminary model we fit complete data (seven measurements per participant)
 #| fig-height: 4
 #| fig-width: 5
 
-# Spline basis: bs(min, df = 4) WITHOUT an intercept column, so the random
+# Spline basis: bs(min, df = 5) WITHOUT an intercept column, so the random
 # intercept is not confounded with the spline weights. This is similar to 
 # what brms do, see archive/ogtt-analysis.qmd for a preliminary analysis
 # using brms.
@@ -138,7 +143,7 @@ The basis $B$ is `bs(min, df = 5)` (no intercept column), so the random intercep
 
 In preliminary versions of this model (`archive/ogtt-analysis.qmd`), specific priors were used to regularize the population-level spline towards increased glucose in the first half of the test followed by declining values in the second half. Since the data will likely wash away such prior information we will simplify this part of the model to avoid prior-likelihood conflicts. 
 
-Below we run a prior predictive check of the pre-intervention model. The Prior-predictive check (@fig-mo1-pp) indicates that model does not expect systematic changes over the course of the test but allow for variation across participants.  
+Below we run a prior predictive check of the pre-intervention model. The Prior-predictive check (@fig-mo1-pp) indicates that the model does not expect systematic changes over the course of the test but allows for variation across participants.  
 
 
 
@@ -248,7 +253,7 @@ ggplot(pop_curve, aes(min_seq, m)) +
   geom_line(linewidth = 1) +
   alpha_theme() +
   labs(x = "Minute",
-       y = "Blood Glucose (mmol L<sup>-1</sup>") + 
+       y = "Blood Glucose (mmol L<sup>-1</sup>)") +
   theme(axis.title.y = ggtext::element_markdown())
 
 
@@ -256,14 +261,14 @@ ggplot(pop_curve, aes(min_seq, m)) +
 ```
 
 
-Running the model on the actual data let's us explore the model fit to data. The overall model fit gives a population mean curve and allows for large variations between individuals (@fig-mo1 A). Inspecting three individuals indicate that individual curves are shrunken from very wiggly shapes (@fig-mo1 B). Analysis of residuals indicate that there might be a tendency towards larger positive errors at higher fitted values (@fig-mo1 C), the overall data patterns indicate that the observed data can be replicated using the model. Overall these checks validate the model for further development.
+Running the model on the actual data lets us explore the model fit to data. The overall model fit gives a population mean curve and allows for large variations between individuals (@fig-mo1 A). Inspecting three individuals indicate that individual curves are shrunken from very wiggly shapes (@fig-mo1 B). Analysis of residuals indicate that there might be a tendency towards larger positive errors at higher fitted values (@fig-mo1 C), the overall data patterns indicate that the observed data can be replicated using the model. Overall these checks validate the model for further development.
 
 
 ```{r}
 #| label: fig-mo1
 #| fig-width: 6
 #| fig-height: 4
-#| fig-cap: "Posterior predictive simulation of population average and participant-level glucose curves (A and B). Residuals vs. predicted values (C) and distributions of simulated (y<sup>rep</sup>) data sets and the observed data. "
+#| fig-cap: "Posterior predictive simulation of population average and participant-level glucose curves (A and B). Residuals vs. predicted values (C) and distributions of simulated (y^rep^) data sets and the observed data. "
 
 
 # Set prior_only to 0 to sample from the likelihood
@@ -345,7 +350,7 @@ p1 <- ggplot(pop_curve, aes(min_seq, m)) +
   geom_line(linewidth = 1) +
   alpha_theme() +
   labs(x = "Minute",
-       y = "Blood Glucose (mmol L<sup>-1</sup>") + 
+       y = "Blood Glucose (mmol L<sup>-1</sup>)") +
   theme(axis.title.y = ggtext::element_markdown())
 
 
@@ -364,7 +369,7 @@ p2 <- ggplot(pop_curve, aes(min_seq, m)) +
   alpha_theme() + 
   geom_line(linewidth = 1) +
   labs(x = "Minute",
-       y = "Blood Glucose (mmol L<sup>-1</sup>", 
+       y = "Blood Glucose (mmol L<sup>-1</sup>)",
        color = "Participant ID") +  
   theme(axis.title.y = ggtext::element_markdown()) +
   scale_color_manual(values = colscale) 
@@ -447,14 +452,14 @@ b_{k,g} &\sim \operatorname{Normal}(0,2) \\
 \end{align}
 $$ {#eq-mo2}
 
-The participant block has $M = 1 + K\,T$ effects (intercept + a spline per time point), all correlated through $\mathbf R$ and sampled with a non-centered Cholesky factor. The prior predictive simulation indicate a very flexible curves per time &times; treatment (@fig-prior-predictive-mo2) 
+The participant block has $M = 1 + K\,T$ effects (intercept + a spline per time point), all correlated through $\mathbf R$ and sampled with a non-centered Cholesky factor. The prior predictive simulation indicates very flexible curves per time &times; treatment (@fig-prior-predictive-mo2) 
 
 
 ```{r}
 #| label: fig-prior-predictive-mo2
 #| fig-height: 4
 #| fig-width: 7
-#| fig-cap: "Prior predictive simulation using model `mo2` showing average group &times time curves."
+#| fig-cap: "Prior predictive simulation using model `mo2` showing average group &times; time curves."
 
 
 # Three timepoints, complete OGTT curves only (7 samples per participant-time)
@@ -538,7 +543,7 @@ pop_by_time <- B2_pred_long |>
             upr = quantile(mu, 0.975)) |>
   left_join(time_levels, by = c("g" = "G")) |> 
   mutate(time = if_else(g %in% c(1,2), "T1", 
-    if_else(g %in% c(3, 4), "T2", "T3")), 
+    if_else(g %in% c(3, 4), "T2", "T4")),
     treat = if_else(g %in% c(1, 3, 5), "ctrl", "omega")) 
 
 pop_by_time |> 
@@ -559,7 +564,7 @@ pop_by_time |>
 #| label: fig-posterior-mo2
 #| fig-height: 4
 #| fig-width: 7
-#| fig-cap: "Posterior implications of model `mo2` showing average group &times time curves with 95% percentile intervals at the three sampling time points, before the intervention (Baseline), after the supplementation-only period (Supplementation) and after the combined supplementation and resistance-training period (Combined)."
+#| fig-cap: "Posterior implications of model `mo2` showing average group &times; time curves with 95% percentile intervals at the three sampling time points, before the intervention (Baseline), after the supplementation-only period (Supplementation) and after the combined supplementation and resistance-training period (Combined)."
 
 
 
@@ -599,11 +604,11 @@ pop_by_time <- B2_pred_long |>
             mu_spl = sum(B * b_g)) |>
   inner_join(ag_long, by = c(".draw", "g")) |>
   mutate(mu = a_g + mu_spl, 
-         # back tranmsform the standardization
+         # back transform the standardization
          mu = mu * sglucose + mglucose
          ) |>
   summarise(.by = c(g, min_seq2),
-            m   = mean(mu),
+            m   = median(mu),
             lwr = quantile(mu, 0.025),
             upr = quantile(mu, 0.975)) |>
   left_join(time_levels, by = c("g" = "G")) |> 
@@ -847,7 +852,7 @@ fit_wrap(mo3, fit = "fit.mo3", DATA = dat)
 #| label: fig-mo3-ppc
 #| fig-width: 7
 #| fig-height: 6
-#| fig-cap: "Posterior predictive checks of model `mo3`. Population average curves per time &times; treatment with participant-level curves (A), three example participants with observed data (B), residuals vs. predicted values for observed data points (C) and distributions of simulated (y<sup>rep</sup>) data sets and the observed data (D)."
+#| fig-cap: "Posterior predictive checks of model `mo3`. Population average curves per time &times; treatment with participant-level curves (A), three example participants with observed data (B), residuals vs. predicted values for observed data points (C) and distributions of simulated (y^rep^) data sets and the observed data (D)."
 
 # Posterior draws of the parameters needed for curves
 draws <- fit.mo3$draws(variables = c("a_g", "b_g", "r_p"), format = "df")
@@ -1043,7 +1048,7 @@ We extract two sets of fitted curves from model `mo3`, the population-average gl
 #| label: fig-mo3
 #| fig-width: !expr 18/2.54
 #| fig-height: !expr 10/2.54
-#| fig-cap: "Predictions (top panels), within-group time-contrasts (middle panels) and between-group contrasts of changes (&Delta;) from baseline. Error bars and ribbons represent 50 and 95% intervals in the middle and lower panels."
+#| fig-cap: "Predictions (top panels, posterior medians), within-group changes from baseline (middle panels) and between-group contrasts (krill oil &minus; placebo) of changes (&Delta;) over the supplementation period (week 0-7) and the combined period (week 7-20; bottom panels). Points and lines are posterior medians; error bars and ribbons represent 50 and 95% CrI in the middle and lower panels."
 
 
 draws <- fit.mo3$draws(format = "df")
@@ -1130,7 +1135,7 @@ within_contrasts <- pred |>
   
   pivot_longer(cols = ctrl_t2:omega_t4) |> 
   
-  filter(min_seq %in% c(15, 30, 45, 60, 60, 90, 120)) |> 
+  filter(min_seq %in% c(15, 30, 45, 60, 90, 120)) |>
   
   summarise(.by = c(name,min_seq), 
             m = median(value), 
@@ -1229,33 +1234,35 @@ p_pred <- pred |>
 
 
 
-# Contrasts - These are differences in delta from baseline
+# Contrasts - These are differences in change (krill oil - placebo) over each
+# period: supplementation period (T1 -> T2, week 0-7) and combined period
+# (T2 -> T4, week 7-20, primary outcome), as in ogtt_effects() (R/negligible.R)
 
-delta_contrasts <- pred |> 
-  pivot_wider(values_from = mu, 
-              names_from = time_treat)  |> 
+delta_contrasts <- pred |>
+  pivot_wider(values_from = mu,
+              names_from = time_treat)  |>
   # Calculate contrasts
-  mutate(ctrl_t2 = T2_ctrl - T1_ctrl, 
-         ctrl_t4 = T4_ctrl - T1_ctrl, 
-         omega_t2 = T2_omega - T1_omega, 
-         omega_t4 =  T4_omega - T1_omega,
-         omega_ctrl_t2 = omega_t2 - ctrl_t2, 
-         omega_ctrl_t4 = omega_t4 - ctrl_t4, 
-         ) |> 
-  pivot_longer(names_to = "contrast", 
-               values_to = "value", 
-               cols = T1_ctrl:omega_ctrl_t4) |> 
-  summarise(.by = c(min_seq, contrast), 
-            m = mean(value), 
+  mutate(ctrl_t2 = T2_ctrl - T1_ctrl,
+         ctrl_t4 = T4_ctrl - T2_ctrl,
+         omega_t2 = T2_omega - T1_omega,
+         omega_t4 =  T4_omega - T2_omega,
+         omega_ctrl_t2 = omega_t2 - ctrl_t2,
+         omega_ctrl_t4 = omega_t4 - ctrl_t4,
+         ) |>
+  pivot_longer(names_to = "contrast",
+               values_to = "value",
+               cols = T1_ctrl:omega_ctrl_t4) |>
+  summarise(.by = c(min_seq, contrast),
+            m = median(value),
             lwr50 = quantile(value, 0.25), 
             upr50 = quantile(value, 0.75), 
             lwr95 = quantile(value, 0.025), 
             upr95 = quantile(value, 0.975)) |> 
   filter(contrast %in% c("omega_ctrl_t2", "omega_ctrl_t4")) |> 
-  mutate(contrast = case_when(contrast == "omega_ctrl_t2" ~ "Placebo vs. Krill oil: Supplementation period", 
-                              contrast == "omega_ctrl_t4" ~ "Placebo vs. Krill oil: Combined period"), 
-         contrast = factor(contrast, levels = c("Placebo vs. Krill oil: Supplementation period", 
-                                                "Placebo vs. Krill oil: Combined period"))) |> 
+  mutate(contrast = case_when(contrast == "omega_ctrl_t2" ~ "Krill oil vs. Placebo: Supplementation period (week 0-7)",
+                              contrast == "omega_ctrl_t4" ~ "Krill oil vs. Placebo: Combined period (week 7-20)"),
+         contrast = factor(contrast, levels = c("Krill oil vs. Placebo: Supplementation period (week 0-7)",
+                                                "Krill oil vs. Placebo: Combined period (week 7-20)"))) |>
   
   ggplot(aes(min_seq, m, fill = contrast)) + 
     scale_x_continuous(limits = c(0, 125), 
@@ -1299,6 +1306,59 @@ ggsave(
 
 ogtt
 ```
+
+
+To evaluate whether the effects of krill oil were beneficial, negligible or harmful, we calculated the posterior probability that the difference in change between krill oil and placebo exceeded the threshold for a negligible effect (&delta;; see the data chapter), at each minute of the curve (time-point-specific &delta;, `r round(subset(load_neg(), outcome == "ogtt_point")$delta, 2)` mmol/L) and for the average difference across the curve (&delta; = `r round(subset(load_neg(), outcome == "ogtt_mean")$delta, 2)` mmol/L). Lower glucose was considered beneficial.
+
+```{r}
+#| label: fig-mo3-bnh
+#| fig-width: !expr 18/2.54
+#| fig-height: !expr 6/2.54
+#| fig-cap: "Posterior probabilities of benefit (lower glucose with krill oil than placebo), a negligible effect and harm along the OGTT curve, model `mo3`. Effects are differences in change between krill oil and placebo, classified by the time-point-specific threshold for a negligible effect."
+
+# Stacked P(benefit/negligible/harm) along the curve
+plot_bnh_curve <- function(curve) {
+  curve |>
+    pivot_longer(benefit:harm, names_to = "cat", values_to = "p") |>
+    mutate(cat = factor(cat, levels = c("harm", "negligible", "benefit"),
+                        labels = c("Harm", "Negligible", "Benefit")),
+           contrast = factor(contrast, levels = c("T1-T2", "T1-T4", "T2-T4"),
+                             labels = c("Supplementation period (week 0-7)",
+                                        "Week 0-20",
+                                        "Combined period (week 7-20)"))) |>
+    ggplot(aes(min_seq, 100 * p, fill = cat)) +
+    geom_area(position = "stack") +
+    facet_wrap(~ contrast) +
+    scale_x_continuous(limits = c(0, 120), expand = c(0, 0),
+                       breaks = c(0, 30, 60, 90, 120)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    scale_fill_manual(values = c(Harm = "#E69F00",
+                                 Negligible = "#BBBBBB",
+                                 Benefit = "#009E73")) +
+    alpha_theme() +
+    theme(legend.title = element_blank(),
+          legend.position = "bottom",
+          panel.spacing = unit(5, "mm")) +
+    labs(x = "Time (min)", y = "Posterior probability (%)")
+}
+
+# Inline text for the curve-average effects
+bnh_mean_txt <- function(tab, k) {
+  r <- tab[tab$contrast == k, ]
+  sprintf("%.2f mmol/L (95%% CrI: %.2f, %.2f; P(benefit/negligible/harm) %s)",
+          r$m, r$lwr95, r$upr95,
+          p_bnh_txt(c(benefit = r$benefit, negligible = r$negligible, harm = r$harm), "short"))
+}
+
+eff_mo3 <- ogtt_effects(pred)
+bnh_curve_mo3 <- ogtt_bnh_curve(eff_mo3)
+bnh_mean_mo3 <- ogtt_bnh_mean(eff_mo3)
+
+plot_bnh_curve(bnh_curve_mo3)
+
+```
+
+Averaged across the curve, the difference in change (krill oil &minus; placebo; posterior median) was `r bnh_mean_txt(bnh_mean_mo3, "T1-T2")` during the supplementation period, `r bnh_mean_txt(bnh_mean_mo3, "T2-T4")` during the combined period and `r bnh_mean_txt(bnh_mean_mo3, "T1-T4")` from baseline to after the combined period (@fig-mo3-bnh).
 
 
 
@@ -1549,7 +1609,7 @@ fit_wrap(mo4, fit = "fit.mo4", DATA = dat4)
 #| label: fig-mo4-ppc
 #| fig-width: 7
 #| fig-height: 6
-#| fig-cap: "Posterior predictive checks of model `mo4`. Population average curves per time &times; treatment with participant-level curves (A), three example participants with observed data (B), residuals vs. predicted values for observed data points (C) and distributions of simulated (y<sup>rep</sup>) data sets and the observed data (D)."
+#| fig-cap: "Posterior predictive checks of model `mo4`. Population average curves per time &times; treatment with participant-level curves (A), three example participants with observed data (B), residuals vs. predicted values for observed data points (C) and distributions of simulated (y^rep^) data sets and the observed data (D)."
 
 # Posterior draws of the parameters needed for curves
 draws <- fit.mo4$draws(variables = c("a_g", "b_g", "r_p", "delta"), format = "df")
@@ -1771,7 +1831,7 @@ We perform the same inference as for `mo3` using model `mo4`. As the population-
 #| label: fig-mo4
 #| fig-width: !expr 18/2.54
 #| fig-height: !expr 10/2.54
-#| fig-cap: "Model `mo4` predictions (top panels), within-group time-contrasts (middle panels) and between-group contrasts of changes (&Delta;) from baseline. Error bars and ribbons represent 50 and 95% intervals in the middle and lower panels."
+#| fig-cap: "Model `mo4` predictions (top panels, posterior medians), within-group changes from baseline (middle panels) and between-group contrasts (krill oil &minus; placebo) of changes (&Delta;) over the supplementation period (week 0-7) and the combined period (week 7-20; bottom panels). Points and lines are posterior medians; error bars and ribbons represent 50 and 95% CrI in the middle and lower panels."
 
 
 draws <- fit.mo4$draws(variables = c("a_g", "b_g"), format = "df")
@@ -1897,31 +1957,33 @@ p_pred <- pred |>
         axis.title.x = element_blank())
 
 
-# Contrasts - These are differences in delta from baseline
+# Contrasts - These are differences in change (krill oil - placebo) over each
+# period: supplementation period (T1 -> T2, week 0-7) and combined period
+# (T2 -> T4, week 7-20, primary outcome), as in ogtt_effects() (R/negligible.R)
 
 delta_contrasts <- pred |>
   pivot_wider(values_from = mu,
               names_from = time_treat)  |>
   mutate(ctrl_t2 = T2_ctrl - T1_ctrl,
-         ctrl_t4 = T4_ctrl - T1_ctrl,
+         ctrl_t4 = T4_ctrl - T2_ctrl,
          omega_t2 = T2_omega - T1_omega,
-         omega_t4 =  T4_omega - T1_omega,
+         omega_t4 =  T4_omega - T2_omega,
          omega_ctrl_t2 = omega_t2 - ctrl_t2,
          omega_ctrl_t4 = omega_t4 - ctrl_t4) |>
   pivot_longer(names_to = "contrast",
                values_to = "value",
                cols = T1_ctrl:omega_ctrl_t4) |>
   summarise(.by = c(min_seq, contrast),
-            m = mean(value),
+            m = median(value),
             lwr50 = quantile(value, 0.25),
             upr50 = quantile(value, 0.75),
             lwr95 = quantile(value, 0.025),
             upr95 = quantile(value, 0.975)) |>
   filter(contrast %in% c("omega_ctrl_t2", "omega_ctrl_t4")) |>
-  mutate(contrast = case_when(contrast == "omega_ctrl_t2" ~ "Placebo vs. Krill oil: Supplementation period",
-                              contrast == "omega_ctrl_t4" ~ "Placebo vs. Krill oil: Combined period"),
-         contrast = factor(contrast, levels = c("Placebo vs. Krill oil: Supplementation period",
-                                                "Placebo vs. Krill oil: Combined period"))) |>
+  mutate(contrast = case_when(contrast == "omega_ctrl_t2" ~ "Krill oil vs. Placebo: Supplementation period (week 0-7)",
+                              contrast == "omega_ctrl_t4" ~ "Krill oil vs. Placebo: Combined period (week 7-20)"),
+         contrast = factor(contrast, levels = c("Krill oil vs. Placebo: Supplementation period (week 0-7)",
+                                                "Krill oil vs. Placebo: Combined period (week 7-20)"))) |>
   ggplot(aes(min_seq, m, fill = contrast)) +
   scale_x_continuous(limits = c(0, 125),
                      expand = c(0, 0),
@@ -1950,6 +2012,25 @@ cowplot::plot_grid(p_pred,
                    align = "v")
 
 ```
+
+
+We summarise the `mo4` effects as probabilities of benefit, negligible effect and harm, as for `mo3`.
+
+```{r}
+#| label: fig-mo4-bnh
+#| fig-width: !expr 18/2.54
+#| fig-height: !expr 6/2.54
+#| fig-cap: "Posterior probabilities of benefit (lower glucose with krill oil than placebo), a negligible effect and harm along the OGTT curve, model `mo4`. Effects are differences in change between krill oil and placebo, classified by the time-point-specific threshold for a negligible effect."
+
+eff_mo4 <- ogtt_effects(pred)
+bnh_curve_mo4 <- ogtt_bnh_curve(eff_mo4)
+bnh_mean_mo4 <- ogtt_bnh_mean(eff_mo4)
+
+plot_bnh_curve(bnh_curve_mo4)
+
+```
+
+Averaged across the curve, the difference in change (krill oil &minus; placebo; posterior median) was `r bnh_mean_txt(bnh_mean_mo4, "T1-T2")` during the supplementation period, `r bnh_mean_txt(bnh_mean_mo4, "T2-T4")` during the combined period and `r bnh_mean_txt(bnh_mean_mo4, "T1-T4")` from baseline to after the combined period (@fig-mo4-bnh).
 
 
 ```{r}

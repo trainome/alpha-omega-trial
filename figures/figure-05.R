@@ -2,10 +2,12 @@
 #
 # This figure combines OGTT, fasting glucose and HOMA2-IR.
 #
-# OGTT panels are extracted from 08-ogtt.qmd (model mo3, chunk fig-mo3):
+# OGTT panels are extracted from 09-ogtt.qmd (model mo4, chunk fig-mo4):
 #   Top: predicted glucose curves per time x treatment
-#   Middle: within-group changes from baseline at measured time points
-#   Bottom: between-group contrasts of changes from baseline
+#   Middle: within-group changes during each period (week 0-7 and week 7-20)
+#           at the sampling minutes
+#   Third row: between-group differences in change for the same periods
+#   Bottom: P(benefit/negligible/harm) along the curve (chunk fig-mo4-bnh)
 
 #
 
@@ -15,6 +17,7 @@ source("./R/packages.R")
 source("./R/data-prep.R")
 source("./R/helpers.R")
 source("./R/sim-fun.R")
+source("./R/negligible.R") # thresholds for negligible effects (01-data.qmd)
 
 # The spline package is needed for basis spline construction
 library(splines)
@@ -151,16 +154,19 @@ pred <- B_pred_long |>
 
 within_contrasts_raw <- pred |>
   pivot_wider(values_from = mu, names_from = time_treat) |>
-  # Calculate contrasts
+  # Change during each period, matching the between-group contrasts below:
+  # supplementation-only (week 0-7, T2 - T1) and the combined period
+  # (week 7-20, T4 - T2; primary outcome)
   mutate(
     ctrl_t2 = T2_ctrl - T1_ctrl,
-    ctrl_t4 = T4_ctrl - T1_ctrl,
+    ctrl_t4 = T4_ctrl - T2_ctrl,
     omega_t2 = T2_omega - T1_omega,
-    omega_t4 = T4_omega - T1_omega,
+    omega_t4 = T4_omega - T2_omega,
   ) |>
   select(.draw, min_seq, ctrl_t2:omega_t4) |>
   pivot_longer(cols = ctrl_t2:omega_t4) |>
-  filter(min_seq %in% c(15, 30, 45, 60, 60, 90, 120)) |>
+  # OGTT sampling minutes
+  filter(min_seq %in% c(0, 15, 30, 45, 60, 90, 120)) |>
   summarise(
     .by = c(name, min_seq),
     m = median(value),
@@ -174,12 +180,12 @@ within_contrasts <- within_contrasts_raw |>
   separate(name, into = c("treat", "time"), sep = "_") |>
   mutate(
     time = case_when(
-      time == "t2" ~ "Supplementation-only vs. Baseline",
-      time == "t4" ~ "Combined vs. Baseline"
+      time == "t2" ~ "Supplementation-only (week 0–7)",
+      time == "t4" ~ "Combined period (week 7–20)"
     ),
     time = factor(
       time,
-      levels = c("Supplementation-only vs. Baseline", "Combined vs. Baseline")
+      levels = c("Supplementation-only (week 0–7)", "Combined period (week 7–20)")
     ),
     treat = factor(
       treat,
@@ -192,10 +198,10 @@ within_contrasts <- within_contrasts_raw |>
     time_treat = factor(
       paste0(treat, ": ", time),
       levels = c(
-        "Placebo: Supplementation-only vs. Baseline",
-        "Placebo: Combined vs. Baseline",
-        "Krill oil: Supplementation-only vs. Baseline",
-        "Krill oil: Combined vs. Baseline"
+        "Placebo: Supplementation-only (week 0–7)",
+        "Placebo: Combined period (week 7–20)",
+        "Krill oil: Supplementation-only (week 0–7)",
+        "Krill oil: Combined period (week 7–20)"
       )
     )
   )
@@ -210,8 +216,8 @@ p_wcontr <- within_contrasts |>
     treat = factor(
       treat,
       labels = c(
-        "Placebo change from baseline",
-        "Krill oil change from baseline"
+        "Placebo change",
+        "Krill oil change"
       )
     )
   ) |>
@@ -310,14 +316,20 @@ p_pred <- pred |>
 
 
 # Contrasts - These are differences in delta from baseline
+
+# Threshold for a negligible effect at single time-points of the OGTT
+ogtt_delta <- load_neg() |>
+  filter(outcome == "ogtt_point") |>
+  pull(delta)
+
 delta_contrasts <- pred |>
   pivot_wider(values_from = mu, names_from = time_treat) |>
   # Calculate contrasts
   mutate(
     ctrl_t2 = T2_ctrl - T1_ctrl,
-    ctrl_t4 = T4_ctrl - T1_ctrl,
+    ctrl_t4 = T4_ctrl - T2_ctrl,
     omega_t2 = T2_omega - T1_omega,
-    omega_t4 = T4_omega - T1_omega,
+    omega_t4 = T4_omega - T2_omega,
     omega_ctrl_t2 = omega_t2 - ctrl_t2,
     omega_ctrl_t4 = omega_t4 - ctrl_t4,
   ) |>
@@ -328,7 +340,7 @@ delta_contrasts <- pred |>
   ) |>
   summarise(
     .by = c(min_seq, contrast),
-    m = mean(value),
+    m = median(value),
     lwr50 = quantile(value, 0.25),
     upr50 = quantile(value, 0.75),
     lwr95 = quantile(value, 0.025),
@@ -337,15 +349,14 @@ delta_contrasts <- pred |>
   filter(contrast %in% c("omega_ctrl_t2", "omega_ctrl_t4")) |>
   mutate(
     contrast = case_when(
-      contrast == "omega_ctrl_t2" ~
-        "Krill oil vs. Placebo: Supplementation-only period",
-      contrast == "omega_ctrl_t4" ~ "Krill oil vs. Placebo: Combined period"
+      contrast == "omega_ctrl_t2" ~ "Krill oil vs. Placebo: week 0–7",
+      contrast == "omega_ctrl_t4" ~ "Krill oil vs. Placebo: week 7–20"
     ),
     contrast = factor(
       contrast,
       levels = c(
-        "Krill oil vs. Placebo: Supplementation-only period",
-        "Krill oil vs. Placebo: Combined period"
+        "Krill oil vs. Placebo: week 0–7",
+        "Krill oil vs. Placebo: week 7–20"
       )
     )
   ) |>
@@ -356,18 +367,91 @@ delta_contrasts <- pred |>
     expand = c(0, 0),
     breaks = c(25, 50, 75, 100)
   ) +
+  # Region of negligible effects at single time-points along the curve
+  # (+/- delta, "ogtt_point" in data-derived/negligible-thresholds.RDS)
+  annotate(
+    "rect",
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = -ogtt_delta,
+    ymax = ogtt_delta,
+    fill = "gray85",
+    alpha = 0.6
+  ) +
+  geom_hline(
+    yintercept = c(-ogtt_delta, ogtt_delta),
+    linetype = "dashed",
+    linewidth = 0.3,
+    color = "gray40"
+  ) +
   geom_ribbon(aes(ymin = lwr50, ymax = upr50), alpha = 0.3) +
   geom_ribbon(aes(ymin = lwr95, ymax = upr95), alpha = 0.3) +
   geom_line() +
   facet_wrap(~contrast) +
   alpha_theme() +
   scale_fill_manual(values = colscale[c(3, 6)]) +
-  geom_hline(yintercept = 0, lty = 2, alpha = 0.5) +
-  theme(legend.position = "none") +
+  # No difference (solid, as in panel B); dashed lines mark +/- delta
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  theme(
+    legend.position = "none",
+    # The time axis is shown on the probability row below
+    axis.ticks.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.x = element_blank()
+  ) +
   labs(
     x = "Time (min)",
     y = "&Delta;Krill oil − &Delta;Placebo<br>(mmol L<sup>-1</sup>)"
   )
+
+
+# Probability of benefit, negligible effect and harm ##############
+#
+# As fig-mo4-bnh in 09-ogtt.qmd (plot_bnh_curve()): posterior probabilities
+# that the difference in change (krill oil - placebo) is beneficial (lower
+# glucose), negligible or harmful at each minute of the curve, using the
+# time-point-specific delta ("ogtt_point"). Same contrasts and columns as
+# delta_contrasts: T1-T2 (supplementation-only) and T2-T4 (combined period).
+
+bnh_curve <- ogtt_bnh_curve(ogtt_effects(pred)) |>
+  filter(contrast %in% c("T1-T2", "T2-T4"))
+
+p_bnh <- bnh_curve |>
+  pivot_longer(benefit:harm, names_to = "cat", values_to = "p") |>
+  mutate(
+    cat = factor(
+      cat,
+      levels = c("harm", "negligible", "benefit"),
+      labels = c("Harm", "Negligible", "Benefit")
+    ),
+    contrast = factor(contrast, levels = c("T1-T2", "T2-T4"))
+  ) |>
+  ggplot(aes(min_seq, 100 * p, fill = cat)) +
+  geom_area(position = "stack") +
+  facet_wrap(~contrast) +
+  scale_x_continuous(
+    limits = c(0, 125),
+    expand = c(0, 0),
+    breaks = c(25, 50, 75, 100)
+  ) +
+  scale_y_continuous(expand = c(0, 0), breaks = c(0, 50, 100)) +
+  scale_fill_manual(
+    values = c(Harm = "#E69F00", Negligible = "#BBBBBB", Benefit = "#009E73"),
+    guide = guide_legend(reverse = TRUE)
+  ) +
+  alpha_theme() +
+  theme(
+    axis.title.y = ggtext::element_markdown(),
+    legend.title = element_blank(),
+    legend.key.spacing.y = unit(0, "pt"),
+    legend.key.height = unit(10, "pt"),
+    legend.key.width = unit(10, "pt"),
+    # Columns are labelled in the contrast row above
+    strip.text = element_blank(),
+    strip.background = element_blank()
+  ) +
+  labs(x = "Time (min)", y = "Posterior<br>probability (%)")
 
 
 # Combine the full figure #########################################
@@ -376,9 +460,13 @@ ogtt <- cowplot::plot_grid(
   p_pred,
   p_wcontr,
   delta_contrasts,
+  p_bnh,
   ncol = 1,
-  rel_heights = c(1, 1, 1.4),
-  align = "v"
+  rel_heights = c(1, 1, 1.2, 1),
+  # Align the left and right axes only; with the default (axis = "none")
+  # the legends of different widths push the panels to the right
+  align = "v",
+  axis = "lr"
 )
 
 
@@ -692,8 +780,25 @@ pred_plot <- function(dat, obs, analytes) {
 }
 
 
-contrast_plot <- function(dat, analytes) {
+# Region of negligible effects (-delta, delta) per analyte on the plotted
+# scale: natural units, or fold-difference (exp(+/- delta)) for log outcomes.
+# delta from data-derived/negligible-thresholds.RDS (01-data.qmd).
+neg_region <- function(dat, analytes, thresholds = load_neg()) {
   dat |>
+    filter(analyte %in% analytes) |>
+    distinct(analyte, strip.lab, transform) |>
+    inner_join(
+      thresholds |> select(analyte = outcome, delta),
+      by = "analyte"
+    ) |>
+    mutate(
+      lwr = if_else(transform == "log", exp(-delta), -delta),
+      upr = if_else(transform == "log", exp(delta), delta)
+    )
+}
+
+contrast_plot <- function(dat, analytes, thresholds = FALSE) {
+  p <- dat |>
     filter(analyte %in% analytes) |>
     mutate(
       time = factor(
@@ -701,7 +806,37 @@ contrast_plot <- function(dat, analytes) {
         levels = c("Supplementation-only", "Combined")
       )
     ) |>
-    ggplot(aes(contrast_out, color = time)) +
+    ggplot(aes(contrast_out, color = time))
+
+  # Shaded region of negligible effects with dashed limits; effects beyond
+  # the limits are beneficial (lower values) or harmful (higher values)
+  if (thresholds) {
+    reg <- neg_region(dat, analytes)
+    p <- p +
+      geom_rect(
+        data = reg,
+        aes(xmin = lwr, xmax = upr, ymin = -Inf, ymax = Inf),
+        inherit.aes = FALSE,
+        fill = "gray85",
+        alpha = 0.6
+      ) +
+      geom_vline(
+        data = reg,
+        aes(xintercept = lwr),
+        linetype = "dashed",
+        linewidth = 0.3,
+        color = "gray40"
+      ) +
+      geom_vline(
+        data = reg,
+        aes(xintercept = upr),
+        linetype = "dashed",
+        linewidth = 0.3,
+        color = "gray40"
+      )
+  }
+
+  p +
     geom_line(stat = "density") +
     facet_wrap(~strip.lab, scales = "free", ncol = 1) +
     alpha_theme(yaxis = FALSE, text_base_size = 7) +
@@ -727,7 +862,11 @@ glu_analytes <- c("glucose", "HOMA2IR")
 
 glu_pred <- pred_plot(pred_plot_dat, obs_means, analytes = glu_analytes)
 
-glu_contrast <- contrast_plot(contrast_dat, analytes = glu_analytes)
+glu_contrast <- contrast_plot(
+  contrast_dat,
+  analytes = glu_analytes,
+  thresholds = TRUE
+)
 
 glu_homa <- cowplot::plot_grid(glu_pred, glu_contrast, align = "h")
 
@@ -735,16 +874,27 @@ figure_05 <- cowplot::plot_grid(
   ogtt,
   glu_homa,
   ncol = 1,
-  rel_heights = c(1, 0.8)
-)
+  # Panel A has four rows; panel B keeps its height (about 6.7 cm of 18 cm)
+  rel_heights = c(1.35, 0.8)
+) +
+  annotate(
+    "text",
+    x = c(0.018, 0.018),
+    y = c(0.985, 0.335),
+    label = c("A", "B"),
+    size = 12 / .pt
+  )
 
+
+# Save figure (RDS used in _methods-results.qmd, 18 x 18 cm)
+saveRDS(figure_05, file = "figures/figure-05.RDS")
 
 ggsave(
   filename = "figures/figure-5.pdf",
   figure_05,
   device = cairo_pdf,
   width = 18,
-  height = 15,
+  height = 18,
   units = "cm"
 )
 
@@ -752,6 +902,6 @@ ggsave(
   filename = "figures/figure-5.svg",
   figure_05,
   width = 18,
-  height = 15,
+  height = 18,
   units = "cm"
 )

@@ -1,4 +1,10 @@
 /*
+NOTE (development model, not refit): the MetS diagnosis thresholds hard-coded
+in transformed data are approximate/stale relative to the current
+standardisation (and use the 1.03/1.29 HDL cut-offs). Models s13 and s18-s22
+take threshold_male/threshold_female as data from diag_thresholds() in
+R/data-prep.R; use those for reported diagnoses.
+
 Model S10:
 - Extension of S8: joint model with missing data imputation, sex predictor,
   time-specific intercepts, and a single 2K-dimensional MVN with LKJ prior

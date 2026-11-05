@@ -24,10 +24,10 @@ refit.models <- FALSE # Should fit_wrap refit models.
 
 # Effects of krill oil supplementation on indications of metabolic syndrome - Introduction {#sec-smodels-intro}
 
-Here we aim to model the components of the metabolic syndrome definition [@alberti2006], along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting metabolic syndrome definition thresholds in each group while accounting for uncertainty associated with missing observations. The strategy will be to chose a model that will allow for sharing of information between variables to enable more efficient data imputation. We use the harmonised metabolic syndrome definition, where any three of the five criteria (waist circumference, triglycerides, HDL-cholesterol, blood pressure and fasting glucose) beyond their threshold values are sufficient for a diagnosis, and central obesity is not required [@alberti2009].
+Here we aim to model the components of the metabolic syndrome definition [@alberti2006], along with related outcomes (@tbl-metsyn-scores). The goal is to build a model that imputes missing data to enable an intention-to-treat (ITT) analysis of all randomized participants. Imputation will also allow for assessing the probability of meeting metabolic syndrome definition thresholds in each group while accounting for uncertainty associated with missing observations. The strategy will be to choose a model that will allow for sharing of information between variables to enable more efficient data imputation. We use the harmonised metabolic syndrome definition, where any three of the five criteria (waist circumference, triglycerides, HDL-cholesterol, blood pressure and fasting glucose) beyond their threshold values are sufficient for a diagnosis, and central obesity is not required [@alberti2009].
 
 
-@fig-descriptive-data shows distributions of the variables selected for joint modeling, including variables used to define metabolic syndrome (waist circumference, raised triglycerisdes, reduced HDL-cholesterol, raised blood pressure, raised fasting glucose). 
+@fig-descriptive-data shows distributions of the variables selected for joint modeling, including variables used to define metabolic syndrome (waist circumference, raised triglycerides, reduced HDL-cholesterol, raised blood pressure, raised fasting glucose). 
 
 ```{r}
 #| label: fig-descriptive-data
@@ -84,8 +84,8 @@ d_full |>
            analyte == "LDL" ~ "LDL Cholesterol<br>(mmol L<sup>-1</sup>)", 
            analyte == "fat.rel" ~ "Relative fat mass<br>(%)", 
            analyte == "bmi" ~ "Body mass index<br>(kg m<sup>-2</sup>)",
-           analyte == "HOMA2IR" ~ "Insulin sensitivity<br>index", 
-           analyte == "Adiponectin" ~ "Adiponectin, &mu;g L<sup>-1</sup>", 
+           analyte == "HOMA2IR" ~ "Insulin resistance<br>index", 
+           analyte == "Adiponectin" ~ "Adiponectin, mg L<sup>-1</sup>", 
            analyte == "HbA1c" ~ "Glycated hemoglobin mmol mol<sup>-1</sup>"
            
          ), 
@@ -104,7 +104,7 @@ d_full |>
   scale_color_manual(values = colscale)
 ```
 
-Descriptive analysis of complete cases indicates variation in the proportion of participants meeting the criteria thresholds across treatment groups and post-intervention time points. @tbl-logregparticipants and  @fig-metsyndrome show the proportions of participants who have three or more diagnostic criteria for metabolic syndrome among complete cases. We will expand this analyses later when incorporating the diagnosis in modelling of subscores in a joint model.  
+Descriptive analysis of complete cases indicates variation in the proportion of participants meeting the criteria thresholds across treatment groups and post-intervention time points. @tbl-logregparticipants and  @fig-metsyndrome show the proportions of participants who have three or more diagnostic criteria for metabolic syndrome among complete cases. We will expand these analyses later when incorporating the diagnosis in modelling of subscores in a joint model.  
 
 ```{r}
 #| label: tbl-logregparticipants
@@ -250,15 +250,17 @@ d |>
 
 ```{r}
 #| label: tbl-metsyn-scores
-#| tbl-cap: "Components of the metabolic syndrome diagnostic criteria and related measurements used in modelling."
+#| tbl-cap: "Components of the metabolic syndrome diagnostic criteria (harmonised definition, thresholds as used in this analysis) and related measurements used in modelling."
 
   # Harmonised definition: at least 3 of the 5 criteria below
 
-  # HDL Cholesterol: <40 mg/dL for men, <50 mg/dL for women, or taking medication for it.
-  # Fasting Glucose: 100 mg/dL or higher, or taking medication for it.
-  # Triglycerides: 150 mg/dL or higher, or taking medication for it.
-  # Waist circumference: >40 inches (102 cm) for men, >35 inches (88 cm) for women.
-  # Blood Pressure: 130/85 mm Hg or higher, or taking medication for it.
+  # Thresholds as used in the analysis (R/data-prep.R); drug treatment is
+  # not counted as meeting a criterion.
+  # HDL Cholesterol: < 1.0 mmol/L for men, < 1.3 mmol/L for women.
+  # Fasting Glucose: >= 5.6 mmol/L.
+  # Triglycerides: >= 1.7 mmol/L.
+  # Waist circumference: >= 94 cm for men, >= 80 cm for women.
+  # Blood Pressure: systolic >= 130 and/or diastolic >= 85 mm Hg.
 
 
 data.frame(
@@ -276,12 +278,12 @@ data.frame(
                "LDL Cholesterol", 
     "HbA1c"), 
   Threshold = c(
-     "> 102 cm for men, > 88 cm for women", 
-    "< 40 mg/dL for men, < 50 mg/dL for women", 
-                "100 mg/dL or higher (or taking medication)",
-                "150 mg/dL or higher (or taking medication)", 
+     "&ge; 94 cm for men, &ge; 80 cm for women", 
+    "< 1.0 mmol/L for men, < 1.3 mmol/L for women", 
+                "&ge; 5.6 mmol/L",
+                "&ge; 1.7 mmol/L", 
                
-                "130/85 mm Hg or higher (or taking medication)", 
+                "Systolic &ge; 130 and/or diastolic &ge; 85 mm Hg", 
                 "NA", 
                 "NA", 
                 "NA", 
@@ -289,13 +291,14 @@ data.frame(
                 "NA", 
     "NA")) |> 
   gt() |> 
-  gt::tab_footnote(footnote = "Metabolic syndrome is defined as at least three of the five criteria with thresholds (harmonised definition)")
+  fmt_markdown(columns = Threshold) |> 
+  gt::tab_footnote(footnote = "Metabolic syndrome is defined as at least three of the five criteria with thresholds (harmonised definition, with the waist circumference thresholds for Europids). Drug treatment for elevated triglycerides, reduced HDL cholesterol, elevated blood pressure or elevated glucose was not counted as meeting a criterion.")
 
 
 
 ```
 
-For the joint model we also include measures related to metabolic health. Among these variables, HOMA2-IR is a derived variable based on C-peptide and fasting glucose calculated using the HOMA2 calculator. HOMA2-IR was calculated when C-peptide and glucose was available and any missing data was primarily seen in the C-peptide variable. Based on the strong correlation between C-peptide and HOMA2-IR vs. the more moderate correlation between glucose and HOMA2-IR (@fig-cpeptidehoma) we chose to use the derived variable HOMA2-IR and drop C-peptide from the joint modelling to avoid duplicationg information in the same model.   
+For the joint model we also include measures related to metabolic health. Among these variables, HOMA2-IR is a derived variable based on C-peptide and fasting glucose calculated using the HOMA2 calculator. HOMA2-IR was calculated when C-peptide and glucose was available and any missing data was primarily seen in the C-peptide variable. Based on the strong correlation between C-peptide and HOMA2-IR vs. the more moderate correlation between glucose and HOMA2-IR (@fig-cpeptidehoma) we chose to use the derived variable HOMA2-IR and drop C-peptide from the joint modelling to avoid duplicating information in the same model.   
 
 
 ```{r}
@@ -361,7 +364,7 @@ p2 <- homa_dat |>
 
 
 
-homa_dat |> 
+p3 <- homa_dat |> 
     ggplot(aes((glucose*(cpeptide/6.945))/22.5, HOMA2IR)) +
 
   
@@ -475,7 +478,7 @@ d_full |>
            analyte == "HDL" ~ "HDL Cholesterol",
            analyte == "fat.rel" ~ "Relative fat mass", 
            analyte == "bmi" ~ "Body mass index",
-           analyte == "HOMA2IR" ~ "Insulin sensitivity index", 
+           analyte == "HOMA2IR" ~ "Insulin resistance index", 
            analyte == "Adiponectin" ~ "Adiponectin", 
            analyte == "HbA1c" ~ "HbA1c"
            
@@ -491,7 +494,7 @@ d_full |>
                                      "LDL Cholesterol",
                                      "Relative fat mass", 
                                      "Body mass index", 
-                                     "Insulin sensitivity index", 
+                                     "Insulin resistance index", 
                                      "Adiponectin", 
                                      "HbA1c")),
          
@@ -636,7 +639,7 @@ fit_wrap(m1,fit = "fit.m1", DATA = d)
 
 ```
 
-In addition to measurements included in the metabolic syndrome diagnostic criteria (Fasting glucose, waist circumference, HDL, triglycerides, blood pressure), we also included relative fat mass, body mass index, age and insulin resistance index (HOMA2IR), LDL, and adiponectin. Prior predictive checks (@fig-dropout-priorpredictive) confirmed that the model expects eleven measurement types in two treatment groups and that the combined priors weakly regularize away from all/non drop-out.
+In addition to measurements included in the metabolic syndrome diagnostic criteria (Fasting glucose, waist circumference, HDL, triglycerides, blood pressure), we also included relative fat mass, body mass index, age, insulin resistance index (HOMA2IR), LDL, adiponectin and HbA1c. Prior predictive checks (@fig-dropout-priorpredictive) confirmed that the model expects thirteen predictors (age and twelve measurement types, with systolic and diastolic blood pressure as separate types) in two treatment groups and that the combined priors weakly regularize away from all/non drop-out.
 
 
 ```{r}
@@ -694,7 +697,7 @@ draws.m1 <- fit.m1p$draws(format = "df")
 #| label: fig-dropout-across
 #| fig-height: 4.7
 #| fig-width: 5.9
-#| fig-cap: "Probability of drop-out across values of baseline co-variates on per treatment group to time-point 2 (A) and 4 (B). Estimates are adjusted for sex, intervals are 90% percentile interval."
+#| fig-cap: "Probability of drop-out across values of baseline co-variates per treatment group to time-point 2 (A) and 4 (B). Estimates are adjusted for sex, intervals are 95% percentile intervals."
 
 a <- draws.m1 |> 
   filter(.chain == 1) |> 
@@ -713,9 +716,9 @@ a <- draws.m1 |>
   
 
   summarise(.by = c(A, Treatment, x), 
-            mprob = mean(prob), 
-            lwr = quantile(prob, 0.05), 
-            upr = quantile(prob, 0.95)) |> 
+            mprob = median(prob), 
+            lwr = quantile(prob, 0.025), 
+            upr = quantile(prob, 0.975)) |> 
   
   # Inner join transforming to centering
   inner_join(
@@ -778,9 +781,9 @@ b <- draws.m1 |>
   
 
   summarise(.by = c(A, Treatment, x), 
-            mprob = mean(prob), 
-            lwr = quantile(prob, 0.05), 
-            upr = quantile(prob, 0.95)) |> 
+            mprob = median(prob), 
+            lwr = quantile(prob, 0.025), 
+            upr = quantile(prob, 0.975)) |> 
   
   # Inner join transforming to centering
   inner_join(
@@ -836,7 +839,7 @@ a | b
 
 ```{r}
 #| label: tbl-dropout
-#| tbl-cap: "Change in log-odds (Slope) for drop-out for 1 SD-unit change in baseline characteristic (Outcome) and differences in slope between treatment groups (&Delta Treatment) at time T2 and time T4. Values are posterior means with 95% percentile intervals."
+#| tbl-cap: "Change in log-odds (Slope) for drop-out for 1 SD-unit change in baseline characteristic (Outcome) and differences in slope between treatment groups (&Delta; Treatment) at time T2 and time T4. Values are posterior medians with 95% percentile intervals."
 
 
 draws.m1 |> 
@@ -860,7 +863,7 @@ draws.m1 |>
   
   
   summarise(.by = c(A, name), 
-            mlo = mean(value), 
+            mlo = median(value), 
             lwr = quantile(value, 0.025), 
             upr = quantile(value, 0.975)) |> 
   
@@ -918,7 +921,7 @@ draws.m1 |>
 ```
 
 
-In conclusion, age was negatively associated with probability of drop-out at T2 without robust difference between treatment groups (@fig-dropout-across A; @tbl-dropout). Resting glucose at baseline tended to predict drop-out to T4 with no strong difference between treatment groups (@fig-dropout-across B; @tbl-dropout). Together this suggest that baseline covariates did not robustly interact with treatment in predicting drop-out. However, baseline covariates (age and fasting glucose) were associated with higher drop-out rates.
+In conclusion, age was negatively associated with probability of drop-out at T2 (younger participants were more likely to drop out) without robust difference between treatment groups (@fig-dropout-across A; @tbl-dropout). Higher resting glucose at baseline tended to predict drop-out to T2, but not to T4, with no strong difference between treatment groups (@fig-dropout-across A and B; @tbl-dropout). Lower diastolic blood pressure at baseline tended to predict drop-out to T4 (@fig-dropout-across B; @tbl-dropout). Together this suggests that baseline covariates did not robustly interact with treatment in predicting drop-out. However, baseline covariates were associated with drop-out: lower age and higher fasting glucose with drop-out to T2, and lower diastolic blood pressure with drop-out to T4.
 
 
 ```{r}
@@ -927,7 +930,7 @@ In conclusion, age was negatively associated with probability of drop-out at T2 
 #| eval: false
 #| fig-height: 7.9
 #| fig-width: 5.9
-#| fig-cap: "Effects of one SD-uniut change in baseline value on log-odds probability of droup-out per treatment group. Estimates are adjusted for sex, intervals are 90% percentile interval."
+#| fig-cap: "Effects of one SD-unit change in baseline value on log-odds probability of drop-out per treatment group. Estimates are adjusted for sex, intervals are 90% percentile interval."
 
 draws.m1 |> 
   filter(.chain == 1) |> 
@@ -1110,7 +1113,7 @@ S &= \operatorname{diag}(\sigma_{k}) \\
 $$
 Using this definition, we can control the correlations among measurement types (at baseline) and their variation. We can also make the means conditional on a set of predictors (design matrix $X$) with corresponding parameter values ($\beta_k$).
 
-[^note-on-code]: In the simulation function (`./R/sim-fun/sim-type.R`) separate variance-covariance matrices are constructed and then combined. But separate correlation matrices are the function's input. 
+[^note-on-code]: In the simulation function (`R/sim-fun.R`) separate variance-covariance matrices are constructed and then combined. But separate correlation matrices are the function's input. 
 
 The approach detailed above is convenient as we are able to define each pairwise correlation. However, this comes with two caveats. First, for 8 variables we need to set $((8 \times 8 - 8) / 2) \times 3 = 84$ correlation coefficients to capture between variable correlations at each time-point. Second, this approach does not guarantee a positive definite covariance matrix. An alternative is to use a factor loading approach[^note-on-factor]. For each variable we can specify a loading onto a factor and a residual variance for each variable (type). This approach is determined by $\lambda$, a $K \times F$ matrix where $k_i$ are variables and $f_j$ are latent factors, and $\psi$, a vector of length $K$ defining residual variation.
 
@@ -1184,7 +1187,7 @@ rowSums(Lambda^2) + psi
 
 ```
 
-Each row of the &lambda; matrix plus errors now sum to 1. Next, we can use the &lambda; matrix to construct $\Sigma$ with unit standard deviations. The full covariance matrix ($\Sigma$) is used in calling `MASS::mvnorm` to produce the multivariate normal variable. As we are using standard deviations equal to 1, the covariance matrix equals the correlation matrix.
+Each row of the &lambda; matrix plus errors now sum to 1. Next, we can use the &lambda; matrix to construct $\Sigma$ with unit standard deviations. The full covariance matrix ($\Sigma$) is used in calling `MASS::mvrnorm` to produce the multivariate normal variable. As we are using standard deviations equal to 1, the covariance matrix equals the correlation matrix.
 
 ```{r}
 #| echo: true
@@ -1239,7 +1242,7 @@ y_{\text{miss}[i]} &\sim \operatorname{Bernoulli}(p_i) \\
 \end{align}
 $$
 
-Simulating a full (K = 8) data set of synthetic data, with missing values, results in observed patterns similar to the observed data (@fig-missing-data, @fig-synth-data-example and @fig-synth-data-missing).
+Simulating a full (K = 8) data set of synthetic data, with missing values, results in observed patterns similar to the observed data (@fig-missing-data, @fig-synth-data-example and @fig-synth-data-missing). <!-- REVIEW: the chunk below first builds a K = 8 data set with sim_type() (explicit correlation matrices, age-dependent drop-out, 2%/5% missing), but the result is immediately overwritten by simout <- sim_wrap3() (defaults: K = 8, factor-based correlations, treatment-specific residual SDs via sigma_ratio, added outlier noise, dropout_int = -2, 0.5%/2% missing). The figures therefore show sim_wrap3() output, and the sim_type() parameters in the chunk are not used. Suggested: "Simulating a full (K = 8) data set of synthetic data with `sim_wrap3()` (`R/sim-fun.R`), with missing values, results in observed patterns similar to the observed data (...)." and either remove the sim_type() call or show its output instead. -->
 
 
 ```{r}
@@ -1461,8 +1464,6 @@ set.seed(123)
 
 ## Using the most expanded version
  simout <- sim_wrap3()
-
- simout$full$raw_df
 
 ```
 

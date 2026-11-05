@@ -195,7 +195,14 @@ sim_comp_wrap3 <- function(i) {
   }
 
   comp_out <- tryCatch(
-    comp_fun2(d, mods, extra_data = list(nu = 4), use_inits = TRUE),
+    # s13/s18 take the standardised MetS thresholds as data (values from
+    # diag_thresholds() for the trial data); the diagnosis generated
+    # quantities are not used in the simulation comparison.
+    comp_fun2(d, mods, extra_data = list(
+      nu = 4,
+      threshold_male = c(-1.2037, 0.9539, 0.2868, 1.8785, -0.1225, -0.4402),
+      threshold_female = c(-0.1962, 0.9539, 0.2868, 1.8785, -0.1225, -1.4842)
+    ), use_inits = TRUE),
     error = function(e) {
       message(sprintf("sim %d: comp_fun2 failed: %s", i, conditionMessage(e)))
       NULL

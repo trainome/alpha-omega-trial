@@ -1,6 +1,5 @@
 ---
 title: "Effects of krill oil supplementation on indications of metabolic syndrome - Model sensitivity"
-format: html
 execute:
   echo: false
   warning: false
@@ -12,14 +11,11 @@ editor_options:
 
 ## Are conclusions sensitive to the model structure?
 
-The residual correlations modeled in s13 allows us to account for associations between outcome variables when estimating treatment effects. Additionally, correlations between time-points within variables are captured in a set of parameters and baseline values are modeled as separate multivariate distribution. Conceptually this could affect estimates in two ways. First, adding uncertainty associated with the between- and within-variable correlations could increase uncertainty in the treatment effect. However, the correlations will help in estimating missing data, this would reduce uncertainty in estimation of single measurements which propagates into the treatment effects and the combined burden score. A univariate model (s18) is used here to show the sensitivity of the conclusion to this model structure.
-
-We first assess the effects of model structure on conclusions for each variable included in the joint models and the joint burden score. Overall, the models agree that the joint burden score is positively affected by treatment at both follow-up time-points albeit with more uncertainty in the univariate model  (89 vs. 95% and 94 vs. 95% probability of benefit at time *supplementation* and *combined*, respectively; @fig-s13-s18-contrasts). For single variables, most agree within 10-15 %-point on the benefit scale. However, triglycerides at the supplementation-only time-point and LDL at the combined time-point changed sign at the median of the posterior probability. Additionally, a somewhat large difference in magnitude between models where seen in HDL at the combined time-point.    
-
+The residual correlations modeled in s13 allow us to account for associations between outcome variables when estimating treatment effects. Additionally, correlations between time-points within variables are captured in a set of parameters and baseline values are modeled as separate multivariate distribution. Conceptually this could affect estimates in two ways. First, adding uncertainty associated with the between- and within-variable correlations could increase uncertainty in the treatment effect. However, the correlations will help in estimating missing data, this would reduce uncertainty in estimation of single measurements which propagates into the treatment effects and the combined burden score. A univariate model (s18) is used here to show the sensitivity of the conclusion to this model structure.
 
 ```{r}
 #| label: fig-s13-s18-contrasts
-#| fig-cap: "Treatment effects (krill oil - placebo) on the standardized scale (SD units) from the multivariate model (s13) and its univariate counterpart (s18). Points are posterior medians with 50% (thick) and 95% (thin) CrI. Numbers indicate P(benefit), the posterior probability of benefit for krill oil (higher values for HDL and adiponectin, lower values otherwise). The joint burden score is calculated per draw from the diagnostic criteria."
+#| fig-cap: "Treatment effects (krill oil - placebo) on the standardized scale (SD units) from the multivariate model (s13) and its univariate counterpart (s18). Points are posterior medians with 50% (thick) and 95% (thin) CrI. Numbers indicate P(benefit), the posterior probability of benefit for krill oil (higher values for HDL and adiponectin, lower values otherwise). The joint burden score (main analysis score, population SD units) is calculated per draw from the diagnostic criteria."
 #| fig-height: 6
 
 source("./R/packages.R")
@@ -37,6 +33,12 @@ type_idx <- setNames(dat$scale$type, dat$scale$analyte)
 # (joint-burden-score): (-HDL + TG + 0.5 * (dias + sys) + glucose + waist) / 5
 burden_w <- c(HDL = -1, TG = 1, dias = 0.5, sys = 0.5, glucose = 1, waist = 1) / 5
 
+# Main analysis burden score: per-criterion factors converting model-scale
+# contrasts to the re-weighted score in population SD units (R/pop-ref.R),
+# as in 07 (joint-burden-score)
+source("./R/pop-ref.R")
+burden_f <- burden_pop_factors(dat$scale, dat$part$sex)
+
 # Outcomes where higher values indicate benefit
 up_benefit <- c("HDL", "Adiponectin")
 
@@ -52,7 +54,7 @@ var_labs <- c(waist = "Waist circumference",
               Adiponectin = "Adiponectin",
               HOMA2IR = "HOMA2-IR",
               HbA1c = "HbA1c",
-              burden = "Joint burden score")
+              burden = "Joint burden score (population SD)")
 
 # Treatment contrasts per draw (krill oil - placebo, SD units) for every
 # outcome in the model, and the burden score combined per draw
@@ -62,7 +64,7 @@ model_contrasts <- function(fit, model) {
 
   bind_rows(lapply(1:2, function(t) {
     e <- sapply(type_idx, function(k) eff(t, k))
-    e <- cbind(e, burden = drop(e[, names(burden_w)] %*% burden_w))
+    e <- cbind(e, burden = drop(e[, names(burden_f)] %*% burden_f))
     data.frame(e, check.names = FALSE) |>
       mutate(time = t, .draw = row_number())
   })) |>
@@ -87,6 +89,13 @@ mod_comp <- bind_rows(model_contrasts(fit.s13.post, "s13"),
                           labels = rev(var_labs)),
          model = factor(model, levels = c("s13", "s18"),
                         labels = c("s13 (multivariate)", "s18 (univariate)")))
+
+# P(benefit) of the burden score per model and time-point, for the text
+burden_pb <- function(m, t) {
+  b <- mod_comp$benefit[mod_comp$model == m & mod_comp$time == t &
+                          mod_comp$analyte == var_labs[["burden"]]]
+  sprintf("%.0f", 100 * b)
+}
 
 # Position for the P(benefit) labels, to the right of all intervals
 lab_x <- max(mod_comp$upr95) + 0.05
@@ -113,6 +122,8 @@ mod_comp |>
   labs(x = "Contrast (Krill oil - Placebo), SD units<br>(Median, 50% and 95% CrI; P(benefit))")
 
 ```
+
+We first assess the effects of model structure on conclusions for each variable included in the joint models and the joint burden score. Overall, the models agree that the joint burden score is positively affected by treatment at both follow-up time-points albeit with more uncertainty in the univariate model (`r burden_pb("s18 (univariate)", "Supplementation")` vs. `r burden_pb("s13 (multivariate)", "Supplementation")`% and `r burden_pb("s18 (univariate)", "Combined")` vs. `r burden_pb("s13 (multivariate)", "Combined")`% probability of benefit in s18 vs. s13 at time *supplementation* and *combined*, respectively; @fig-s13-s18-contrasts). <!-- REVIEW: For the population-SD burden score the s18 95% CrI is not wider than in s13 (e.g. supplementation: s18 -0.13 to 0.02 vs. s13 -0.16 to 0.00); the lower P(benefit) in s18 reflects a smaller median effect (-0.05 vs. -0.08), not more uncertainty. Suggested: "Overall, the models agree that the joint burden score is positively affected by treatment at both follow-up time-points, albeit with smaller estimated effects and lower probability of benefit in the univariate model (...)" --> For single variables, most agree within 10-15 %-point on the benefit scale. However, triglycerides at the supplementation-only time-point and LDL at the combined time-point changed sign at the median of the posterior probability. Additionally, a somewhat large difference in magnitude between models was seen in HDL at the combined time-point.
 
 The two models differ in how residuals are related between variables and between time-points. In s13, residual correlations are estimated with a regularizing prior, while s18 assumes them to be zero. The correlations are still present in the residuals from s18. @fig-resid-cor shows the residual correlation patterns in both models with the between-timepoint within-variable shown on the diagonal, the between-variable correlations at *supplementation-only* and *combined* time-points in the lower and upper triangle, respectively. The correlation patterns are visible in both models but only the s13 model captures them to carry information forward to the posterior. The estimated correlations are weaker due to regularization in the model.
 
@@ -194,11 +205,11 @@ resid_cor |>
 
 ```
 
-About a third of participants did not attend the combined-treatment (T4) assessment, giving missing values for all variables at T4. When participants have observed data at T2, s13 uses their deviation from the expected value at T2 to impute T4 values through the correlation between time-points, while s18 imputes T4 values from the expected value only (@fig-dropout). This shows up as a correlated deviations from expected values at T2 and T4 in the s13 model but not in s18. 
+About a third of participants did not attend the combined-treatment (T4) assessment, giving missing values for all variables at T4. When participants have observed data at T2, s13 uses their deviation from the expected value at T2 to impute T4 values through the correlation between time-points, while s18 imputes T4 values from the expected value only (@fig-dropout). This shows up as correlated deviations from expected values at T2 and T4 in the s13 model but not in s18. 
 
 ```{r}
 #| label: fig-dropout
-#| fig-cap: "Imputed T4 values in participants with missing T4 but observed T2 values for LDL and HDL. The x axis shows the observed deviation from the expected value at T2 and the y axis the imputed deviation from the expected value at T4 (posterior means, SD units), per model. Large symbols show group means."
+#| fig-cap: "Imputed T4 values in participants with missing T4 but observed T2 values for LDL and HDL. The x axis shows the observed deviation from the expected value at T2 and the y axis the imputed deviation from the expected value at T4 (posterior medians, SD units), per model. Large symbols show group means."
 #| fig-height: 5
 
 dropout_analytes <- c("LDL", "HDL")
@@ -211,12 +222,12 @@ miss_t4 <- d_long |>
   pivot_wider(names_from = time, values_from = c(row, y_miss)) |>
   filter(y_miss_2 == 0, y_miss_1 == 1)
 
-# Posterior mean deviation (y - mu) per row. The expected value is y_expect
+# Posterior median deviation (y - mu) per row. The expected value is y_expect
 # in s13 and mu in s18.
 dev_rows <- function(fit, rows, mu_var) {
   y <- fit$draws(sprintf("y[%d]", rows), format = "matrix")
   mu <- fit$draws(sprintf("%s[%d]", mu_var, rows), format = "matrix")
-  colMeans(y - mu)
+  apply(y - mu, 2, median)
 }
 
 dropout <- bind_rows(
@@ -251,13 +262,13 @@ dropout |>
 
 ```
 
-Together the above indicate that the multivariate alternative take advantage of the information available in data set. However, a simpler model (uninformed) does not change the main conclusions of the analysis.  
+Together the above indicate that the multivariate alternative takes advantage of the information available in the data set. However, a simpler model (uninformed) does not change the main conclusions of the analysis.  
 
 
 
 ## Changing the scale of the burden score
 
-The burden score as calculated from the five criteria measurements for the metabolic syndrome is created using the marginal SD as the denominator for each score. This could be problematic as the marginal SD contains sex differences and variation due to potential treatment effects. First we will recalculate the score using baseline, sex-adjusted standard deviations. 
+The burden score can be calculated from the five criteria measurements for the metabolic syndrome on the model scale, i.e. using the marginal SD (pooled over time-points, treatments and sexes) as the denominator for each criterion. This model-scale (marginal SD) score is a sensitivity analysis; the main analysis uses the score re-weighted to sex-specific population SD units (see below and `R/pop-ref.R`). Scaling by the marginal SD could be problematic as the marginal SD contains sex differences and variation due to potential treatment effects. First we will recalculate the marginal SD score using baseline, sex-adjusted standard deviations.
 
 ```{r}
 #| label: burden-baseline-sd
@@ -329,7 +340,7 @@ m_z_base_recalc == m_z_base
 ```
 
 
-The burden score is recalculated per posterior draw with the same weights as in the main analysis. This gives us a sense of the sensitivity of the scaling procedure to the conclusion of the preliminary joint burden score (@tbl-burden-sensitivity). Scaling the burden score using sex-centered baseline data did not change the conclusion in a meaningful way.
+The burden score is recalculated per posterior draw with the same criterion weights as in the main analysis, scaled either by the marginal SD or by the pooled within-sex baseline SD. This gives us a sense of the sensitivity of the conclusion to the scaling procedure (@tbl-burden-sensitivity). Scaling the burden score using sex-centered baseline data did not change the conclusion in a meaningful way.
 
 
 ```{r}
@@ -377,7 +388,7 @@ burden_sens |>
 ```
 
 
-The burden score presented so far is scaled 
+The burden scores presented so far in this section are scaled by SDs from the trial sample (marginal or baseline within-sex SD). **[TODO: incomplete sentence in draft ("The burden score presented so far is scaled ..."); completed here from context, check intended content. Below, an externally weighted score and scores scaled by population reference values are considered.]**
 
 
 ## An externally weighted severity score
@@ -433,10 +444,10 @@ As a check on the back-transformation, scores calculated directly from observed 
 
 ```{r}
 #| label: fig-gurka-score
-#| fig-cap: "Posterior mean metabolic syndrome severity score [@gurka2014] per participant and time-point. Missing measurements are replaced by model-based imputations. Lines connect scores within participants."
+#| fig-cap: "Posterior median metabolic syndrome severity score [@gurka2014] per participant and time-point. Missing measurements are replaced by model-based imputations. Lines connect scores within participants."
 
 g_score |>
-  summarise(.by = c(P, sex, treat, time), score = mean(score)) |>
+  summarise(.by = c(P, sex, treat, time), score = median(score)) |>
   ggplot(aes(time, score, group = P, color = treat)) +
   geom_line(alpha = 0.3) +
   geom_point(alpha = 0.6) +
@@ -484,7 +495,7 @@ $$
 
 with MAP contributing 2/3 of the diastolic and 1/3 of the systolic contrast. Reference means cancel in the contrast, and contrasts are averaged over participants per sex and overall (`cmets_contrast()` in `R/helpers.R`).
 
-Population reference values were retrieved from the literature [@haverinen2021,@nilsen2021] and used to construct population-based scales for each outcome. The standard deviations listed in @tbl-cmets-ref formed the basis of set of SD combinations allowing for rescaling the study-specific burden score and extend the analysis to the metabolic syndrome score proposed by Guseman et al. [@guseman2018].
+Population reference values were retrieved from the literature [@haverinen2021; @nilsen2021] and used to construct population-based scales for each outcome. The standard deviations listed in @tbl-cmets-ref formed the basis of set of SD combinations allowing for rescaling the study-specific burden score and extend the analysis to the metabolic syndrome score proposed by Guseman et al. [@guseman2018]. Published fasting glucose estimates were not used, as they included participants with diabetes or were based on non-fasting samples; fasting glucose was instead scaled by the sex-specific baseline mean and SD in the trial sample. The burden score scaled by population SDs is the score used in the main analysis (shared references in `R/pop-ref.R`).
 
 
 | Study | Description | Sex | Age (y) | Analyte | n | Mean | SD |
@@ -502,7 +513,7 @@ Population reference values were retrieved from the literature [@haverinen2021,@
 | | | Women | 40--69 | Glucose (mmol/L) | | | |
 | | | Women | 40--69 | MAP (mmHg) | | | |
 | | | Women | 40--69 | Systolic BP (mmHg) |8896 |126.8 |18.3 |
-| | | Women | 40--69 | Diastolic BP (mmHg) |8896 |75.5 |10.01 |
+| | | Women | 40--69 | Diastolic BP (mmHg) |8896 |75.5 |10.01 **[TODO: check decimals against the Tromsø 7 source (10.0?); keep in sync with R/pop-ref.R, which uses 10.01]** |
 | FinHealth 2017 | Nationally representative health examination survey, Finland 2017, ages 25+, fasting plasma glucose after minimum 4 h fasting [@haverinen2021] | Men | 25--93 | Waist (cm) | 2621 | 99.1 | 12.9 |
 | | | Men | 25--93 | HDL (mmol/L) | 2621 | 1.3 | 0.3 |
 | | | Men | 25--93 | TG (mmol/L) | 2621 | 1.5 | 1.1 |
@@ -548,7 +559,7 @@ Population reference values were retrieved from the literature [@haverinen2021,@
 | | | Women | 40--79 | Diastolic BP (mmHg) | 1899 | 72.3 | 9.0 |
 | | | Women | 40--79 | MAP (mmHg)^b^ | 1899 | 91.9 | 11.6 |
 
-: Published reference values (mean, SD and n) for the components of the continuous metabolic syndrome score from Scandinavian populations. TG is summarised on the natural log scale (mmol/L); MAP, mean arterial pressure. ^a^Derived from the reported arithmetic mean ($m$) and SD ($s$) assuming a log-normal distribution: $\sigma^2 = \ln(1 + s^2/m^2)$, $\mu = \ln m - \sigma^2/2$. ^b^Derived as DBP + (SBP - DBP)/3; the SD assumes a correlation of 0.8 between SBP and DBP (SD 12.0--12.8 and 12.4--13.2 for men and women, respectively, for correlations of 0.6--0.8). ^c^Derived from the reported median ($M$) and interquartile range (IQR): glucose assuming a normal distribution (mean = $M$, SD = IQR/1.349) and TG assuming a log-normal distribution ($\mu = \ln M$, $\sigma = \text{asinh}(\text{IQR}/2M)/0.6745$). {#tbl-cmets-ref}
+: Published reference values (mean, SD and n) for the components of the continuous metabolic syndrome score from Nordic populations. TG is summarised on the natural log scale (mmol/L); MAP, mean arterial pressure. ^a^Derived from the reported arithmetic mean ($m$) and SD ($s$) assuming a log-normal distribution: $\sigma^2 = \ln(1 + s^2/m^2)$, $\mu = \ln m - \sigma^2/2$. ^b^Derived as DBP + (SBP - DBP)/3; the SD assumes a correlation of 0.8 between SBP and DBP (SD 12.0--12.8 and 12.4--13.2 for men and women, respectively, for correlations of 0.6--0.8). ^c^Derived from the reported median ($M$) and interquartile range (IQR): glucose assuming a normal distribution (mean = $M$, SD = IQR/1.349) and TG assuming a log-normal distribution ($\mu = \ln M$, $\sigma = \text{asinh}(\text{IQR}/2M)/0.6745$). {#tbl-cmets-ref}
 
 ```{r}
 #| label: map-approximation
@@ -633,77 +644,14 @@ saminor_tg <- tribble(
 
 
 
-# Population reference values from @tbl-cmets-ref (keep in sync with the
-# table). TG as ln(mmol/L). The FinHealth 2017 blood pressure sample
-# (n = 1159/1307) is drawn from the same survey as Haverinen et al. and is
-# excluded (use = FALSE) to avoid counting participants twice.
-pop_ref <- tribble(
-  ~study,              ~use,  ~sex, ~analyte,  ~n,   ~mean,  ~sd,
-  "Tromso7",           TRUE,  "m",  "HDL",     7670, 1.4,    0.4,
-  "Tromso7",           TRUE,  "m",  "sys",     7670, 130.9,  17.1,
-  "Tromso7",           TRUE,  "m",  "dias",    7670, 78.9,   9.6,
-  "Tromso7",           TRUE,  "f",  "HDL",     8896, 1.6,    0.5,
-  "Tromso7",           TRUE,  "f",  "sys",     8896, 126.8,  18.3,
-  "Tromso7",           TRUE,  "f",  "dias",    8896, 75.5,   10.01,
-  "FinHealth2017",     TRUE,  "m",  "waist",   2621, 99.1,   12.9,
-  "FinHealth2017",     TRUE,  "m",  "HDL",     2621, 1.3,    0.3,
-  "FinHealth2017",     TRUE,  "m",  "TG",      2621, 0.190,  0.656,
-  "FinHealth2017",     FALSE,  "m",  "glucose", 2621, 6.0,    1.4,
-  "FinHealth2017",     TRUE,  "m",  "sys",     2621, 135.9,  17.9,
-  "FinHealth2017",     TRUE,  "m",  "dias",    2621, 81.2,   11.2,
-  "FinHealth2017",     TRUE,  "f",  "waist",   3066, 89.6,   14.1,
-  "FinHealth2017",     TRUE,  "f",  "HDL",     3066, 1.6,    0.4,
-  "FinHealth2017",     TRUE,  "f",  "TG",      3066, 0.135,  0.505,
-  "FinHealth2017",     FALSE,  "f",  "glucose", 3066, 5.6,    1.1,
-  "FinHealth2017",     TRUE,  "f",  "sys",     3066, 132.8,  20.4,
-  "FinHealth2017",     TRUE,  "f",  "dias",    3066, 77.8,   10.6,
-  # SAMINOR 1 and 2, non-Sami participants [@michalsen2019]. Glucose and TG
-  # derived from median (IQR), see above.
-  "SAMINOR1",          FALSE,  "m",  "waist",   1864, 93.9,   10.2,
-  "SAMINOR1",          FALSE,  "m",  "HDL",     1864, 1.28,   0.34,
-  "SAMINOR1",          FALSE,  "m",  "TG",      1864, 0.457,  0.524,
-  "SAMINOR1",          FALSE,  "m",  "glucose", 1864, 5.41,   0.852,
-  "SAMINOR1",          FALSE,  "m",  "sys",     1864, 136.1,  17.6,
-  "SAMINOR1",          FALSE,  "m",  "dias",    1864, 78.2,   10.0,
-  "SAMINOR1",          FALSE,  "f",  "waist",   2176, 85.6,   12.0,
-  "SAMINOR1",          FALSE,  "f",  "HDL",     2176, 1.49,   0.40,
-  "SAMINOR1",          FALSE,  "f",  "TG",      2176, 0.300,  0.496,
-  "SAMINOR1",          FALSE,  "f",  "glucose", 2176, 5.29,   0.808,
-  "SAMINOR1",          FALSE,  "f",  "sys",     2176, 133.0,  20.1,
-  "SAMINOR1",          FALSE,  "f",  "dias",    2176, 73.0,   10.5,
-  "SAMINOR2",          TRUE,  "m",  "waist",   1571, 100.2,  10.7,
-  "SAMINOR2",          TRUE,  "m",  "HDL",     1571, 1.28,   0.38,
-  "SAMINOR2",          TRUE,  "m",  "TG",      1571, 0.405,  0.532,
-  "SAMINOR2",          TRUE,  "m",  "glucose", 1571, 5.4,    0.815,
-  "SAMINOR2",          TRUE,  "m",  "sys",     1571, 135.1,  17.2,
-  "SAMINOR2",          TRUE,  "m",  "dias",    1571, 77.8,   9.4,
-  "SAMINOR2",          TRUE,  "f",  "waist",   1899, 92.9,   12.0,
-  "SAMINOR2",          TRUE,  "f",  "HDL",     1899, 1.55,   0.45,
-  "SAMINOR2",          TRUE,  "f",  "TG",      1899, 0.336,  0.469,
-  "SAMINOR2",          TRUE,  "f",  "glucose", 1899, 5.2,    0.741,
-  "SAMINOR2",          TRUE,  "f",  "sys",     1899, 131.1,  18.6,
-  "SAMINOR2",          TRUE,  "f",  "dias",    1899, 72.3,   9.0
-) |>
-  filter(use)
-
-# MAP per study from SBP and DBP, with SBP-DBP correlation r = 0.8
-pop_map <- pop_ref |>
-  filter(analyte %in% c("sys", "dias")) |>
-  pivot_wider(id_cols = c(study, sex, n), names_from = analyte,
-              values_from = c(mean, sd)) |>
-  mutate(map_approx(mean_sys, sd_sys, mean_dias, sd_dias, r = 0.8),
-         analyte = "map") |>
-  select(study, sex, analyte, n, mean, sd)
-
-# Sex-specific reference values pooled over studies, weighted by study size:
-# mean = sum(n * mean) / sum(n), SD from the pooled within-study variance
-# sum((n - 1) * sd^2) / sum(n - 1)
-cmets_ref_pop <- bind_rows(pop_ref |> select(-use), pop_map) |>
-  summarise(.by = c(sex, analyte),
-            n_studies = n(),
-            mean = sum(n * mean) / sum(n),
-            sd = sqrt(sum((n - 1) * sd^2) / sum(n - 1)),
-            n = sum(n))
+# Population reference values (pop_ref, MAP via map_approx()) and the pooled
+# sex-specific references (cmets_ref_pop) are shared with the main analysis
+# and defined in R/pop-ref.R (keep in sync with @tbl-cmets-ref). Fasting
+# glucose uses the trial's own sex-specific baseline mean and SD, as the
+# published estimates were not comparable (participants with diabetes,
+# non-fasting samples). The FinHealth 2017 blood pressure sample is not
+# counted twice (use = FALSE rows are kept for documentation only).
+source("./R/pop-ref.R")
 
 # Reference values: sex-specific observed baseline means and SDs (placeholder
 # for population reference values)
@@ -750,7 +698,7 @@ score_contrasts <- bind_rows(
 
 ```{r}
 #| label: tbl-cmets-contrast
-#| tbl-cap: "Treatment contrast (Krill oil - Placebo) on metabolic syndrome scores. Burden score: mean of the z-scores of waist circumference, HDL (reversed sign), ln(TG), glucose and blood pressure (average of systolic and diastolic z-scores), scaled by the marginal SD (as in the main analysis), the sex-specific baseline SD in the trial sample, or sex-specific population SDs (@tbl-cmets-ref). cMetS: sum of the z-scores of the same criteria with blood pressure as mean arterial pressure [@guseman2018]. MetS severity Z-score: sex-specific equations for non-Hispanic White adults [@gurka2014]. Sex-specific contrasts differ only through sex-specific scaling or coefficients; the average is weighted by the proportion of men and women in the sample. Negative values indicate a less severe metabolic profile in the krill oil group."
+#| tbl-cap: "Treatment contrast (Krill oil - Placebo) on metabolic syndrome scores. Burden score: mean of the z-scores of waist circumference, HDL (reversed sign), ln(TG), glucose and blood pressure (average of systolic and diastolic z-scores), scaled by the marginal SD (model scale), the sex-specific baseline SD in the trial sample, or sex-specific population SDs (@tbl-cmets-ref; the main analysis score). cMetS: sum of the z-scores of the same criteria with blood pressure as mean arterial pressure [@guseman2018]. MetS severity Z-score: sex-specific equations for non-Hispanic White adults [@gurka2014]. Sex-specific contrasts differ only through sex-specific scaling or coefficients; the average is weighted by the proportion of men and women in the sample. Negative values indicate a less severe metabolic profile in the krill oil group."
 #| echo: false
 
 score_contrasts |>
@@ -777,9 +725,9 @@ score_contrasts |>
 
 ### Associations of continuous Metabolic syndrome scores to related scores
 
-DeBoer and Gurka [@deboer2017] examines the correlation between their metabolic syndrome score to HOMA and adiponectine, here we do the same across the burden score with both marginal and baseline SD, and the two continuous scores [@guseman2018,@deboer2017,@gurka2014].
+DeBoer and Gurka [@deboer2017] examined the correlation of their metabolic syndrome score with HOMA and adiponectin; here we do the same for the burden score scaled by population SD (main analysis), marginal SD and baseline SD, and the two continuous scores [@guseman2018; @deboer2017; @gurka2014].
 
-Scores, HOMA2-IR and adiponectin were retrieved per participant and time-point from the posterior, using observed values where available and imputed values otherwise. Rank (Spearman) correlations between each score and HOMA2-IR or adiponectin were calculated per posterior draw, so that the uncertainty in imputed values propagates to the correlations (@fig-assoc-cor). The intervals therefore reflect uncertainty from imputation only, not sampling variation, and imputed values follow the residual correlations estimated in the model. Associations are shown on the participant level using posterior means in @fig-assoc-homa and @fig-assoc-adipo. Together these analyses show general agreement between metabolic syndrome scores in associations with 
+Scores, HOMA2-IR and adiponectin were retrieved per participant and time-point from the posterior, using observed values where available and imputed values otherwise. Rank (Spearman) correlations between each score and HOMA2-IR or adiponectin were calculated per posterior draw, so that the uncertainty in imputed values propagates to the correlations (@fig-assoc-cor). The intervals therefore reflect uncertainty from imputation only, not sampling variation, and imputed values follow the residual correlations estimated in the model. Associations are shown on the participant level using posterior medians in @fig-assoc-homa and @fig-assoc-adipo. Together these analyses show general agreement between metabolic syndrome scores in associations with **[TODO: incomplete sentence; complete, e.g. "HOMA2-IR and adiponectin", and check against @fig-assoc-cor]** 
 
 ```{r}
 #| label: score-associations
@@ -791,6 +739,8 @@ assoc_draws <- round(seq(1, posterior::ndraws(fit.s13.post$draws("alpha")),
 
 # Per-participant scores per draw (observed or imputed values)
 assoc_scores <- bind_rows(
+  cmets_score(fit.s13.post, dat, cmets_ref_pop, w = w_burden) |>
+    mutate(score_type = "Burden score, population SD"),
   cmets_score(fit.s13.post, dat, ref_marg, w = w_burden) |>
     mutate(score_type = "Burden score, marginal SD"),
   cmets_score(fit.s13.post, dat, cmets_ref, w = w_burden) |>
@@ -820,13 +770,13 @@ assoc_cor <- assoc |>
             lwr = quantile(r, 0.025),
             upr = quantile(r, 0.975))
 
-# Participant-level posterior means. A value is flagged as imputed if the score
+# Participant-level posterior medians. A value is flagged as imputed if the score
 # or the biomarker varies over draws (i.e. includes imputed components).
 assoc_mean <- assoc |>
   summarise(.by = c(P, sex, treat, time, score_type, analyte),
             imputed = sd(score) > 1e-8 | sd(value) > 1e-8,
-            score = mean(score),
-            value = mean(value))
+            score = median(score),
+            value = median(value))
 
 # Scatter plot of score vs. biomarker, per score and time-point, with the
 # posterior median (95% CrI) correlation in each panel
@@ -850,7 +800,7 @@ assoc_plot <- function(a, ylab, log_y = FALSE) {
     scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 1),
                        labels = c(`FALSE` = "Observed", `TRUE` = "Incl. imputed")) +
     alpha_theme() +
-    labs(x = "Score (posterior mean)", y = ylab, color = "Sex", shape = "")
+    labs(x = "Score (posterior median)", y = ylab, color = "Sex", shape = "")
 
   if (log_y) p <- p + scale_y_log10()
   p
@@ -859,7 +809,7 @@ assoc_plot <- function(a, ylab, log_y = FALSE) {
 
 ```{r}
 #| label: fig-assoc-homa
-#| fig-cap: "Associations between metabolic syndrome scores and HOMA2-IR (log scale) per time-point. Points are participant-level posterior means; open symbols include imputed values. Spearman correlations (median and 95% interval over posterior draws, reflecting imputation uncertainty) are calculated per posterior draw."
+#| fig-cap: "Associations between metabolic syndrome scores and HOMA2-IR (log scale) per time-point. Points are participant-level posterior medians; open symbols include imputed values. Spearman correlations (median and 95% interval over posterior draws, reflecting imputation uncertainty) are calculated per posterior draw."
 #| fig-height: 7
 #| fig-width: 8
 
@@ -868,7 +818,7 @@ assoc_plot("HOMA2IR", "HOMA2-IR", log_y = TRUE)
 
 ```{r}
 #| label: fig-assoc-adipo
-#| fig-cap: "Associations between metabolic syndrome scores and adiponectin per time-point. Points are participant-level posterior means; open symbols include imputed values. Spearman correlations (median and 95% interval over posterior draws, reflecting imputation uncertainty) are calculated per posterior draw."
+#| fig-cap: "Associations between metabolic syndrome scores and adiponectin per time-point. Points are participant-level posterior medians; open symbols include imputed values. Spearman correlations (median and 95% interval over posterior draws, reflecting imputation uncertainty) are calculated per posterior draw."
 #| fig-height: 7
 #| fig-width: 8
 
@@ -901,6 +851,7 @@ assoc_cor |>
 #| fig-width: 10
 
 score_labels <- c(
+  "Burden score, population SD" = "Burden (pop. SD)",
   "Burden score, marginal SD" = "Burden (marg. SD)",
   "Burden score, trial baseline SD" = "Burden (baseline SD)",
   "cMetS, population SD" = "cMetS (pop. SD)",

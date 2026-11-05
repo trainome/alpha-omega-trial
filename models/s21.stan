@@ -67,6 +67,12 @@ data {
 
   int<lower=1, upper=30> nu;                  // nu parameter for the mvt-dist
 
+  // Standardised MetS diagnostic thresholds in diag_idx order
+  // {HDL, TG, dias, glucose, sys, waist}; computed in R by diag_thresholds()
+  // (R/data-prep.R) from the harmonised cut-offs and the standardisation scale.
+  vector[6] threshold_male;
+  vector[6] threshold_female;
+
   int<lower=1, upper=K> mod_type;            // Type index of the moderator
 
 }
@@ -76,18 +82,14 @@ transformed data {
 
   // Diagnostic criteria data
   array[6] int diag_idx = {2, 6, 8, 10, 11, 12};
-// set the right index for subscores
-//
-// analyte  type std_threshold_male std_threshold_female
-// HDL         2            -1.10                -0.233
-// TG          6             0.947                0.947
-// dias        8            -0.0200              -0.0200
-// glucose     10             1.88                 1.88
-// sys         11             0.0638               0.0638
-// waist       12            -0.432               -1.48
-
-  vector[6] threshold_male   = [-1.1,   0.947, -0.02, 1.88, 0.0638, -0.432]';
-  vector[6] threshold_female = [-0.233, 0.947, -0.02, 1.88, 0.0638, -1.48]';
+  // analyte  type  cut-off (men / women)
+  // HDL         2   < 1.0 / < 1.3 mmol/L      (above = 0: below is abnormal)
+  // TG          6   >= 1.7 mmol/L (log scale)
+  // dias        8   >= 85 mmHg   } BP criterion: dias OR sys
+  // glucose    10   >= 5.6 mmol/L
+  // sys        11   >= 130 mmHg  }
+  // waist      12   >= 94 / >= 80 cm
+  // threshold_male / threshold_female are data (standardised cut-offs).
   array[6] int above = {0, 1, 1, 1, 1, 1};   // 1 = above is abnormal
 
   // Participant-level sex variable (constant per participant)

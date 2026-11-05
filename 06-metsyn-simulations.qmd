@@ -20,7 +20,7 @@ source("./R/sim-fun.R")
 
 ```
 
-To compare the multivariate Student's t models to the univariate counterpart (S13 vs. S18) we will use a more realistic simulation inducing correlations between variables and a larger data set (k = 12). Data are generated as having homoscedastic variance, including equal variance between groups (`sigma_ratio = 1` in `sim_wrap3`, see `R/sim-fun.R`), and added outlier noise. For comparisons, data included participant-level drop-out and values missing at random corresponding to about 10, 28 and 40% of the follow-up values with baseline values having about 8% missing values. Correlations were set to weak (independence between variables and time-points) and strong, about |r|=0.25 between measurement types and |r|=35 between time-points.  
+To compare the multivariate Student's t models to the univariate counterpart (S13 vs. S18) we will use a more realistic simulation inducing correlations between variables and a larger data set (k = 12). Data are generated as having homoscedastic variance, including equal variance between groups (`sigma_ratio = 1` in `sim_wrap3`, see `R/sim-fun.R`), and added outlier noise. For comparisons, data included participant-level drop-out and values missing at random corresponding to on average 15.6, 32.7 and 43.4% of the follow-up values (low, mid and high missingness, realised values across simulated data sets) with baseline values having about 8% missing values. Correlations were set to weak (realised mean |r| ≈ 0.09 between measurement types and r ≈ 0.16 between time-points) and strong (realised mean |r| ≈ 0.27 between measurement types and r ≈ 0.31 between time-points).
 
 As an example, the following synthetic data set was simulated using the simulation routine used in `R/model-comp3.R` (@fig-var-cor-synth). 
 
@@ -31,8 +31,8 @@ set.seed(2026)
 
 k <- 12 # number of measurement types
 
-# Grid cell from R/model-comp3.R: mid missingness (~28% of follow-up values,
-# as in the trial data) and strong correlation.
+# Grid cell from R/model-comp3.R: mid missingness (~33% of follow-up values
+# realised across simulations) and strong correlation.
 ml <- list(dropout_int = -1.7, miss_prop_y = 0.05)
 cl <- list(
   loadings_beta = matrix(c(2, 10, 1, 10, 1, 10), ncol = 2, byrow = TRUE),
@@ -88,7 +88,7 @@ The missing data patterns from the medium sized missingness scenario corresponds
 
 ```{r}
 #| label: fig-missing-synth
-#| fig-cap: "Missing data patterns in the exemple simulated data set."
+#| fig-cap: "Missing data patterns in the example simulated data set."
 #| eval: true
 #| fig-height: 8.5
 #| fig-width: 5.1
@@ -145,7 +145,7 @@ d$miss$raw_df |>
 
 # Some simulations have unsatisfactory chain convergence and ess statistics. 
 # We will exclude these from comparisons and treat them as special cases
-# where 500 + 750 iterations where not enough to capture the parameters.
+# where 500 + 750 iterations were not enough to capture the parameters.
 
 
 # Extract hmc metrics to get a lsit of problematic data sets
@@ -163,8 +163,8 @@ for(i in seq_along(files)) {
 p1 <- bind_rows(ls) |> 
   dplyr::select(name, m, model, variant, sim, miss, corr) |> 
   pivot_wider(names_from = name, values_from = m) |>
-  mutate(flag = if_else(rhat > 1.1, as.character(sim), ""), 
-         colflag = if_else(rhat > 1.1, "flag", ""), 
+  mutate(flag = if_else(rhat > 1.01, as.character(sim), ""),
+         colflag = if_else(rhat > 1.01, "flag", ""),
          corr = factor(corr, levels = c("weak", "strong")), 
          miss = factor(miss, levels = c("low", "mid", "high"))) |> 
   ggplot(aes(ess_bulk, rhat)) + 
@@ -183,7 +183,7 @@ p1 <- bind_rows(ls) |>
 # Excluded datasets (sim is unique over grid cells)
 excl_datasets <- bind_rows(ls)  |>
   dplyr::select(name, m, model, miss, corr, sim) |>
-  filter(name == "rhat" & m > 1.1) |>
+  filter(name == "rhat" & m > 1.01) |>
   distinct(sim) |>
   pull(sim)
 
@@ -198,11 +198,11 @@ n_excl_ds <- length(excl_datasets)
 ```
 
 
-Using `r ndatasets` simulated data sets we are comparing models S13 to s18 for modelling performance using two scenarios of correlations (strong vs. weak) and three levels of missingness (low, mid, high). @fig-chain-diag shows chain diagnostics from the fits, no simulated data sets (n = `r n_excl_ds`) were excluded from comparisons due unsatisfactory chain convergence or effective sample sizes. 
+Using `r ndatasets` simulated data sets we are comparing models S13 to s18 for modelling performance using two scenarios of correlations (strong vs. weak) and three levels of missingness (low, mid, high). @fig-chain-diag shows chain diagnostics from the fits, no simulated data sets (n = `r n_excl_ds`) were excluded from comparisons due to unsatisfactory chain convergence or effective sample sizes. 
 
 ```{r}
 #| label: fig-chain-diag
-#| fig-cap: "Chain dioagnostics under the full three by two simulated scenarios."
+#| fig-cap: "Chain diagnostics under the full three by two simulated scenarios."
 #| eval: true
 #| fig-height: 3
 #| fig-width: 5.9
@@ -219,7 +219,7 @@ p1
 ```
 
 
-For each estimate (treatment contrasts, 2 &times; 12 per data set), coverage of a 90% percentile interval was determined and averaged within each model, variant (full data and missing values) and simulation cell (missingness &times; correlation strength). With weak correlations, coverage of S13 was on avergae closer to the nominal level while S18 had slightly lower coverage. With strong correlations, both models had similar coverage, slightly below nominal at low missingness and close to nominal at mid and high missingness (@fig-sim-cred-int A). Credible intervals were wider in the missing data variant and widened with increasing proportions of missing values, while interval widths in the full data variant were similar across conditions (@fig-sim-cred-int B). With weak correlations, S13 had slightly wider intervals than S18 in both variants, consistent with its higher coverage. With strong correlations, interval widths were similar in the full data variant, but S13 tended to have narrower intervals than S18 in the missing data variant, a difference that increased with the proportion of missing values (@fig-sim-cred-int C).
+For each estimate (treatment contrasts, 2 &times; 12 per data set), coverage of a 90% percentile interval was determined and averaged within each model, variant (full data and missing values) and simulation cell (missingness &times; correlation strength). With weak correlations, coverage of S13 was on average closer to the nominal level while S18 had slightly lower coverage. With strong correlations, both models had similar coverage, slightly below nominal at low missingness and close to nominal at mid and high missingness (@fig-sim-cred-int A). Credible intervals were wider in the missing data variant and widened with increasing proportions of missing values, while interval widths in the full data variant were similar across conditions (@fig-sim-cred-int B). With weak correlations, S13 had slightly wider intervals than S18 in both variants, consistent with its higher coverage. With strong correlations, interval widths were similar in the full data variant, but S13 tended to have narrower intervals than S18 in the missing data variant, a difference that increased with the proportion of missing values (@fig-sim-cred-int C).
 
 
 
@@ -477,6 +477,7 @@ p1 / p2 / p3 + plot_layout(heights = c(1, 1.5, 1)) + plot_annotation(tag_levels 
 
 
 Finally, we compared the error associated with data imputation. Overall, the RMSE was lower in s13 compared to s18 with larger benefit of s13 in imputation of pre-values and follow-up values under stronger correlations (@fig-sim-impute).
+<!-- REVIEW: Not fully supported by the simulation output. For pre-values, the s13 benefit is similar under weak and strong correlations (RMSE about 0.72-0.74 vs about 0.82 for s18 in all cells). For follow-up values, s13 is better only under strong correlations (RMSE about 0.87-0.91 vs 0.91-0.97), while under weak correlations RMSE is equal or nearly equal (e.g. 0.902 vs 0.901 at high, 0.916 vs 0.916 at mid missingness). Suggested: "The RMSE of imputed pre-values was lower in s13 than in s18 irrespective of correlation strength (about 0.73 vs. 0.82). For imputed follow-up values, s13 had lower RMSE than s18 when correlations were strong, whereas the two models performed similarly when correlations were weak (@fig-sim-impute)." -->
 
 ```{r}
 #| label: fig-sim-impute

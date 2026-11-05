@@ -269,9 +269,9 @@ $$
 y_p &\sim \operatorname{MVNormal}(\mu_p, \Sigma) \\
 \mu_{p,\text{type}} &= \alpha_{\text{type,TX}} + \beta_{\text{type}} \times \text{pre}_{p,\text{type}} \\
 \alpha_{\text{type,TX}} &\sim \operatorname{Normal}(0,1) \\
-\beta_{\text{type}} &\sim \operatorname{Normal}(1, 0.5) \\
+\beta_{\text{type}} &\sim \operatorname{Normal}(1, 0.4) \\
 \Sigma &= \text{S} \times \text{R} \times \text{S} \\
-S &= 
+S &=
   \begin{bmatrix}
   \sigma_{\text{type}[1]} &0 & .. \\
   0 & \sigma_{\text{type}[2]} & .. \\
@@ -283,7 +283,7 @@ R &=   \begin{bmatrix}
   .. & .. & ..
   \end{bmatrix} \\
 \sigma_\text{type} &\sim \operatorname{Exponential}(1) \\
-\text{R} &\sim \operatorname{LKJcorr}(4) \\
+\text{R} &\sim \operatorname{LKJcorr}(2) \\
 \end{align}
 $$
 Where $y_p$ is a participant-level vector of outcome scores. $\Sigma$ is the covariance matrix with standard deviations $\text{S}$ and the correlation matrix $\text{R}$. The prior on $\text{R}$ is defined using the LKJ distribution which provides regularization away from extreme values (-1, 1).
@@ -318,9 +318,9 @@ y_{\text{type},p}^{\text{miss}} &\sim \operatorname{Normal}(0,2) \\
 \text{pre}_{p,\text{type}} &= y_{\text{pre},p, \text{type}}^{\text{all}} \\
 \mu_{p,\text{type}} &= \alpha_{\text{type,TX}} + \beta_{\text{type}} \times \text{pre}_{p,\text{type}} \\
 \alpha_{\text{type,TX}} &\sim \operatorname{Normal}(0,1) \\
-\beta_{\text{type}} &\sim \operatorname{Normal}(1, 0.5) \\
+\beta_{\text{type}} &\sim \operatorname{Normal}(1, 0.4) \\
 \Sigma &= \text{S} \times \text{R} \times \text{S} \\
-S &= 
+S &=
   \begin{bmatrix}
   \sigma_{\text{type}[1]} &0 & .. \\
   0 & \sigma_{\text{type}[2]} & .. \\
@@ -332,7 +332,7 @@ R &=   \begin{bmatrix}
   .. & .. & ..
   \end{bmatrix} \\
 \sigma_\text{type} &\sim \operatorname{Exponential}(1) \\
-\text{R} &\sim \operatorname{LKJcorr}(4) \\
+\text{R} &\sim \operatorname{LKJcorr}(2) \\
 \end{align}
 $$
 
@@ -364,12 +364,12 @@ R_\text{time} &=   \begin{bmatrix}
   .. & .. & ..
   \end{bmatrix} \\
 \sigma_{\text{type}\text{[time]}} &\sim \operatorname{Exponential}(1) \\
-\text{R}_\text{time} &\sim \operatorname{LKJcorr}(4) \\
+\text{R}_\text{time} &\sim \operatorname{LKJcorr}(2) \\
 \end{align}
 $$
 The total number of parameters in each &Sigma; is 36 for 8 measurement types.
 
-Model 6 includes a full covariance matrix for the multivariate normal model. The total number of parameters in the matrix is 136 for 8 measurements with &sigma; indexed 1 to 16. For $S$:
+Model S6 includes a full covariance matrix for the multivariate normal model. The total number of parameters in the matrix is 136 for 8 measurements with &sigma; indexed 1 to 16. For $S$:
 
 $$
 \begin{align}
@@ -999,9 +999,9 @@ s7 <- cmdstan_model(stan_file = "models/s7.stan",
 ```
 
 
-The prior predictive checks confirm working and comparable models. A further check of model performance is done using synthetic data. We assess if we can recover simulated effects in the model estimates, we also assess the models effects of the prior on "reversed" effects, i.e. effect of opposite direction in the two groups.
+The prior predictive checks confirm working and comparable models. A further check of model performance is done using synthetic data. We assess if we can recover simulated effects in the model estimates, we also assess the effects of the models' priors on "reversed" effects, i.e. effect of opposite direction in the two groups.
 
-Here, a simulated data set is constructed where we fix the relationship between pre- and post-intervention values ($\beta_{pre} = 0.95$), residual variation is set to 0.2 and effect sizes of treatment effects are set to -0.5 in type 1 and 7, 0.5 in type 2 and 8, and 0 in all other types. The model capture these effects and this preliminary check does not suggest preference for one treatment over the other (@fig-s1-4-postpred-synth).  
+Here, a simulated data set is constructed where we fix the relationship between pre- and post-intervention values ($\beta_{pre} = 0.95$), residual variation is set to 0.2 and effect sizes of treatment effects are set to 0.5 in type 1 and 7, -0.5 in type 2 and 8, and 0 in all other types. The models capture these effects and this preliminary check does not suggest preference for one treatment over the other (@fig-s1-4-postpred-synth).  
 
 
 ```{r}
@@ -1043,7 +1043,7 @@ draws.s7 <- fit.synth.s7$draws(format="df")
 
 ```{r}
 #| label: fig-s1-4-postpred-synth
-#| fig-cap: "Posterior predictive check of pre- to post-intervention associations in model S1-S4 on synthetic data. "
+#| fig-cap: "Posterior fits of pre- to post-intervention associations in models S1-S4 fitted to synthetic data. "
 #| fig-width: 5.6
 #| fig-height: 8.5
 
@@ -1077,7 +1077,7 @@ p1|p2|p3|p4
 
 ```{r}
 #| label: fig-s5-7-priorpred-synth
-#| fig-cap: "Prior predictive check of pre- to post-intervention associations in model S5-S7. "
+#| fig-cap: "Posterior fits of pre- to post-intervention associations in models S5-S7 fitted to synthetic data. "
 #| fig-width: 5.6
 #| fig-height: 8.5
 
@@ -1106,7 +1106,7 @@ p5|p6|p7
 
 ```{r}
 #| label: fig-s1-7-postpred-treatmeans-synth
-#| fig-cap: "Posterior predictive distributions of treatment means in models S1-S7. "
+#| fig-cap: "Posterior distributions of treatment means in models S1-S7 fitted to synthetic data. Points are posterior medians and error bars are 95% credible intervals. "
 #| fig-width: 5.6
 #| fig-height: 8.5
 
@@ -1131,20 +1131,20 @@ bind_rows(
 
   
   summarise(.by = c(model, type, time, name), 
-            m = mean(value), 
-            lwr = quantile(value, 0.05), 
-            upr = quantile(value, 0.95)) |> 
-  
-  
-  ggplot(aes(name, m, color = model)) + 
-  geom_errorbar(aes(ymin = lwr, ymax = upr), 
-                position = position_dodge(width = 0.2), 
+            m = median(value),
+            lwr = quantile(value, 0.025),
+            upr = quantile(value, 0.975)) |>
+
+
+  ggplot(aes(name, m, color = model)) +
+  geom_errorbar(aes(ymin = lwr, ymax = upr),
+                position = position_dodge(width = 0.2),
                 width = 0) +
-  geom_point(position = position_dodge(width = 0.2)) + 
-  facet_wrap(~type + time, labeller = label_both, 
+  geom_point(position = position_dodge(width = 0.2)) +
+  facet_wrap(~type + time, labeller = label_both,
              scales = "free") +
-  alpha_theme() + 
-  scale_fill_manual(values = colscale)
+  alpha_theme() +
+  scale_color_manual(values = colscale)
 
 
 
@@ -1167,9 +1167,9 @@ rm(list = c(fits, draws, plots)); invisible(gc())
 ```
 
 
-Using the synthetic data we confirm that the incrementally developed models captures the same patterns when they use the same data. In the above test, synthetic data was generated with large effects and negligible correlation structures across measurement types. We should therefore not expect large differences between models that could potentially capture different between-measurement type correlations patterns.
+Using the synthetic data we confirm that the incrementally developed models capture the same patterns when they use the same data. In the above test, synthetic data was generated with large effects and negligible correlation structures across measurement types. We should therefore not expect large differences between models that could potentially capture different between-measurement type correlations patterns.
 
-Based on these preliminary models, model S6 and S7 are kept for further development and evaluation. Model S6 is replaced by S8 that will also generate diagnostic criteria thresholds. Additionally, to allow for treatment-specific variation we including treatment-specific &sigma; by updating model S7 and S8 to S9 and S10, respectively. The relevant update in S7 to S9 is an type-, time- and treatment-specific &sigma; ($\sigma_{\text{type, time, treat}} \sim \operatorname{Exponential}(1)$. Similarly, model s10 adds type-, time- and treatment-specific &sigma; to the model by incorporating it in the multivariate-normal model.
+Based on these preliminary models, model S6 and S7 are kept for further development and evaluation. Model S6 is replaced by S8 that will also generate diagnostic criteria thresholds. Additionally, to allow for treatment-specific variation we include treatment-specific &sigma; by updating model S7 and S8 to S9 and S10, respectively. The relevant update in S7 to S9 is a type-, time- and treatment-specific &sigma; ($\sigma_{\text{type, time, treat}} \sim \operatorname{Exponential}(1)$. Similarly, model s10 adds type-, time- and treatment-specific &sigma; to the model by incorporating it in the multivariate-normal model.
 
 
 

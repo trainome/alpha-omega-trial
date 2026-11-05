@@ -119,13 +119,14 @@ criteria_dat <- bind_rows(
         select(participant, sex)
     ) |>
     filter(analyte == "HDL") |>
-    # Convert to mg/dl: 1 mmol/L = 38,6654 mg/dL
-    # Keeping on mmol/L
+    # Harmonized criteria in mmol/L (Alberti 2009): < 1.0 men, < 1.3 women,
+    # as in the manuscript and diag_thresholds() below (the earlier cut-offs,
+    # 1.03/1.29, were the mg/dL values 40/50 converted to mmol/L)
     mutate(
       hdl = if_else(
         sex == "m",
-        if_else(value < 1.03, TRUE, FALSE),
-        if_else(value < 1.29, TRUE, FALSE)
+        if_else(value < 1.0, TRUE, FALSE),
+        if_else(value < 1.3, TRUE, FALSE)
       )
     ) |>
     select(participant, time, sex, analyte, value, threshold = hdl),
@@ -158,19 +159,19 @@ criteria_dat <- bind_rows(
     ) |>
     # Convert to mg/dl: 1 mmol/L = 88.57 mg/dL
 
-    mutate(tg = if_else(value > 1.7, TRUE, FALSE)) |>
+    mutate(tg = if_else(value >= 1.7, TRUE, FALSE)) |>
     select(participant, time, sex, analyte, value, threshold = tg),
 
-  # Waist circumference: >40 inches (94 cm) for men,
-  # >35 inches (80 cm) for women.
+  # Waist circumference: >= 94 cm for men,
+  # >= 80 cm for women (harmonised criteria).
 
   AOData::waist_bp |>
     filter(measure == "waist") |>
     mutate(
       waist = if_else(
         sex == "m",
-        if_else(value > 94, TRUE, FALSE),
-        if_else(value > 80, TRUE, FALSE)
+        if_else(value >= 94, TRUE, FALSE),
+        if_else(value >= 80, TRUE, FALSE)
       )
     ) |>
     select(
@@ -198,7 +199,7 @@ criteria_dat <- bind_rows(
     ) |>
     mutate(
       threshold = if_else(
-        analyte == "sys" & value > 130 | analyte == "dias" & value > 85,
+        analyte == "sys" & value >= 130 | analyte == "dias" & value >= 85,
         TRUE,
         FALSE
       )
@@ -270,6 +271,44 @@ participant_complete_T2 <- criteria_dat |>
   filter(complete.cases(pick(T2))) |>
   distinct(participant) |>
   pull(participant)
+
+
+# Metabolic syndrome diagnostic thresholds on the standardised scale ##########
+# Harmonised criteria (Alberti et al. 2009), as stated in the manuscript:
+#   HDL     < 1.0 mmol/L (men) / < 1.3 mmol/L (women)   (below is abnormal)
+#   TG      >= 1.7 mmol/L (standardised on the log scale)
+#   dias    >= 85 mmHg  } BP criterion: sys OR dias (combined in Stan)
+#   glucose >= 5.6 mmol/L
+#   sys     >= 130 mmHg }
+#   waist   >= 94 cm (men) / >= 80 cm (women)
+# Returns two length-6 vectors in the Stan diag_idx order
+# {HDL = 2, TG = 6, dias = 8, glucose = 10, sys = 11, waist = 12}, standardised
+# with the per-type mean/sd in `scale` (scale_pars from data_load_s7s10()):
+#   std = (f(threshold) - mean) / sd, f = log for TG, identity otherwise.
+# Used as data (threshold_male, threshold_female) by models s13 and s18-s22.
+diag_thresholds <- function(scale) {
+  crit <- tibble(
+    analyte = c("HDL", "TG", "dias", "glucose", "sys", "waist"),
+    male = c(1.0, 1.7, 85, 5.6, 130, 94),
+    female = c(1.3, 1.7, 85, 5.6, 130, 80)
+  ) |>
+    inner_join(scale, by = "analyte") |>
+    mutate(
+      f_male = if_else(transform == "log", log(male), male),
+      f_female = if_else(transform == "log", log(female), female),
+      std_male = (f_male - mean) / sd,
+      std_female = (f_female - mean) / sd
+    ) |>
+    arrange(type)
+
+  # Guard the type indexing assumed by the Stan models (diag_idx)
+  stopifnot(identical(as.integer(crit$type), c(2L, 6L, 8L, 10L, 11L, 12L)))
+
+  list(
+    threshold_male = crit$std_male,
+    threshold_female = crit$std_female
+  )
+}
 
 
 # Data load function - Prepare data for models s7 -
@@ -372,6 +411,9 @@ data_load_s7s10 <- function() {
 
     arrange(P, time, type)
 
+  # Standardised diagnostic thresholds (data for models s13, s18-s22)
+  thr <- diag_thresholds(scale_pars)
+
   # Prepare a data list for models s7-s10
   d <- list(
     N = nrow(dat),
@@ -395,7 +437,11 @@ data_load_s7s10 <- function() {
     # Adding number of latent factors for models s14-s17
     D = 3,
     # Using only complete cases for log-lik (1 when all data observed)
-    cc = dat$cc
+    cc = dat$cc,
+    # Standardised MetS thresholds, diag_idx order {HDL, TG, dias, glucose,
+    # sys, waist}; see diag_thresholds(). Used by s13, s18-s22.
+    threshold_male = thr$threshold_male,
+    threshold_female = thr$threshold_female
   )
 
   # Treatment index lookup (treat_seq = dense_rank(treat)) for interpretation

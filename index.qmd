@@ -5,27 +5,117 @@ This document includes supplementary data and computational details related to t
 
 ## Project organisation
 
-This notebook is built from source code available at the github repository [trainome/alpha-omega-trial](https://github.com/trainome/alpha-omega-trial/). The data used in analyses is organized as an R data package available in a separate repository [trainome/AOData](https://github.com/trainome/AOData/).    
+This notebook is built from source code available at the github repository [trainome/alpha-omega-trial](https://github.com/trainome/alpha-omega-trial/) **[TODO: confirm repository URL; the local git origin is github.com/dhammarstrom/alpha-omega-trial]**. The data used in analyses is organized as an R data package available in a separate repository [trainome/AOData](https://github.com/trainome/AOData/).    
 
-### R scripts
+Files used to build this supplementary document, the figures and the methods and results section of the paper are listed in @tbl-project-files. Stan models are stored in `models/`; when model code is executed locally, compiled model executables are also stored here. Model fits are stored in `fits/paper1/` but are not pushed to GitHub due to their large size. Model fits are recreated by running the model scripts in `models-scripts/`.
 
-- `R/fig-opt-fun.R` - Helper functions and settings for data visualisations.
-- `R/helpers.R` - Helper functions for modelling.
-- `R/packages.R` - Loading required packages.
-- `R/data-prep.R` - Prepares data for the Metabolic syndrome analysis.
-- `R/sim-fun.R` - Functions related to simulation studies. 
+```{=typst}
+#[
+#show figure: set block(breakable: true)
+#show table: set text(size: 7pt)
+#set table(inset: (x: 4pt, y: 2pt))
+#set par(justify: false)
+```
 
+| File | Content |
+|:----------------|:----------------------------|
+| **Book chapters** | |
+| `_quarto.yml` | Book configuration: chapters, authors, execution and output settings. |
+| `index.qmd` | Introduction, project organisation and computational environment. |
+| `01-data.qmd` | Analytic approach and description of the data set and participants (figures 1 and 2). |
+| `02-fa.qmd` | Effects of krill oil supplementation on fatty acid composition (models m2 to m6). |
+| `03-metsyn-intro.qmd` | Introduction to the metabolic syndrome analysis, including the drop-out analysis (model m1). |
+| `04-metsyn-models.qmd` | Development of the metabolic syndrome models on synthetic data (models s1 to s7). |
+| `05-metsyn-postpred.qmd` | Posterior predictive checks, model expansions and model comparison with LOO (models s7 to s18). |
+| `06-metsyn-simulations.qmd` | Simulation study comparing the multivariate (s13) and univariate (s18) models. |
+| `07-metsyn-inference.qmd` | Inference on the metabolic syndrome criteria, the joint burden score, diagnosis and moderation of treatment effects (models s13, s18 to s22). |
+| `08-metsyn-sensitivity.qmd` | Sensitivity of conclusions to the model structure and to the scale of the burden score. |
+| `09-ogtt.qmd` | Analysis of the oral glucose-tolerance test (models mo1 to mo4). |
+| `10-results.qmd` | Book version of the methods and results sections of the paper. |
+| **Paper** | |
+| `_methods-results.qmd` | Shared body of the methods and results sections, included by `99-methods-results.qmd` and `10-results.qmd`. |
+| `99-methods-results.qmd` | Methods and results section of the paper (rendered to Word). |
+| **R scripts** | |
+| `R/packages.R` | Loads required packages. |
+| `R/data-prep.R` | Prepares data for all analyses, including `data_load_s7s10()` that creates the Stan data for the metabolic syndrome models. |
+| `R/helpers.R` | Helper functions for model fitting (`fit_wrap()`, `make_inits()`) and post-processing of model output. |
+| `R/fig-opt-fun.R` | Color scale, theme and other settings for data visualisations. |
+| `R/sim-fun.R` | Functions for simulating data sets used in model development and simulation studies. |
+| `R/negligible.R` | Thresholds for negligible effects (from `01-data.qmd`) and probabilities of benefit, negligible effect and harm from posterior draws. |
+| `R/pop-ref.R` | Population reference values for the metabolic syndrome criteria, burden score weights and conversion factors to the population-SD burden score. |
+| `R/model-comp.R` | Simulation study comparing models s7 to s10 on data with a shared residual SD across treatment arms (output in `data-sim/`). |
+| `R/model-comp2.R` | As `R/model-comp.R` with treatment-specific residual SDs in the simulated data (output in `data-sim2/`). |
+| `R/model-comp3.R` | Simulation study comparing s13 and s18 under different levels of missingness and correlation (output in `data-sim3/`). |
+| **Figures** | |
+| `figures/figure-01.R` | Figure 1, participant flow (CONSORT) diagram. |
+| `figures/figure-02.R` | Figure 2, study design and training data. |
+| `figures/figure-03.R` | Figures 3 and 4, omega-3 index and fatty acid composition with group contrasts. |
+| `figures/figure-05.R` | Figure 5, OGTT, fasting glucose and HOMA2-IR. |
+| `figures/figure-06.R` | Figure 6, effects of krill oil supplementation on the metabolic syndrome. |
+| **Stan models** | |
+| `models/m1.stan` | Drop-out analysis, log-odds of drop-out per treatment group predicted from baseline characteristics. |
+| `models/m2.stan` | Fatty acid composition, complete-case ANCOVA-style model. |
+| `models/m3.stan` | Fatty acid composition, all available data with imputation of missing values. |
+| `models/m4.stan` | As m3 with treatment-specific residual SD. |
+| `models/m5.stan` | As m3 with time-specific residual SD. |
+| `models/m6.stan` | As m3 with time- and treatment-specific residual SD. |
+| `models/mo1.stan` | OGTT, multilevel spline model at baseline. |
+| `models/mo2.stan` | OGTT, multilevel spline model for three time-points. |
+| `models/mo3.stan` | As mo2 with imputation of missing values. |
+| `models/mo4.stan` | As mo3 with participant-level intercepts per time-point. |
+| `models/s1.stan` | Metabolic syndrome criteria, separate models per criterion on complete cases. |
+| `models/s2.stan` | Joint multivariate normal model of the criteria. |
+| `models/s3.stan` | As s2 with imputation of missing values. |
+| `models/s4.stan` | As s3 with sex as a predictor. |
+| `models/s5.stan` | As s4 with both follow-up time-points, without correlations between time-points. |
+| `models/s6.stan` | As s5 with a single correlation structure across types and time-points. |
+| `models/s7.stan` | Univariate normal model with imputation of missing values. |
+| `models/s8.stan` | Joint multivariate normal model with correlation across types and time-points. |
+| `models/s9.stan` | As s7 with treatment-specific residual SD. |
+| `models/s10.stan` | As s8 with treatment-specific residual SD. |
+| `models/s11.stan` | As s9 with a Student-t likelihood. |
+| `models/s12.stan` | As s10 with a multivariate Student-t likelihood. |
+| `models/s13.stan` | As s12 with residual scales per time and type; the model used for inference. |
+| `models/s14.stan` | As s10 with a latent-factor correlation structure. |
+| `models/s15.stan` | As s12 with a latent-factor correlation structure. |
+| `models/s16.stan` | As s14 with residual scales per time and type. |
+| `models/s17.stan` | As s15 with residual scales per time and type. |
+| `models/s18.stan` | Univariate Student-t counterpart of s13. |
+| `models/s19.stan` | As s13 with a treatment × own-baseline interaction. |
+| `models/s20.stan` | As s13 with a treatment × baseline metabolic burden interaction. |
+| `models/s21.stan` | As s13 with a treatment × baseline relative fat mass interaction. |
+| `models/s22.stan` | As s13 with a treatment × baseline omega-3 index interaction. |
+| **Model fitting** | |
+| `models-scripts/model-<model>.R` | Fits a model to the trial data and saves the fit (and LOO) in `fits/paper1/`, e.g. `model-s13.R`. `-D6` scripts fit s14 to s17 with six latent factors. |
+| `models-scripts/refit-all.sh` | Refits all models fitted to the trial data. |
+| `models-scripts/refit-s7-s20.sh` | Refits models s7 to s20. |
+| `models-scripts/refit-s13-s22.sh` | Refits models s13, s18, s21 and s22. |
+| `models-scripts/refit-s14-s17-d6.sh` | Refits models s14 to s17 with six latent factors. |
+| `fits/paper1/` | Saved model fits and LOO objects (not on GitHub). |
+| **Derived data** | |
+| `data-derived/chain-diagnostics-s7-s10.RDS`, `data-derived/chain-diagnostics-s11-s12.RDS` | Chain diagnostics of models s7 to s12 (chapter 5). |
+| `data-derived/ch-07-diag-crit-rubin-s13.RDS`, `data-derived/ch-07-diag-crit-rubin-s18.RDS` | Analyses of metabolic syndrome diagnosis in 500 imputed data sets (posterior draws) from s13 and s18, combined with Rubin's rules (chapter 7, figure 6 and paper). |
+| `data-derived/ch-07-chain-diagnostics-s19-s22.RDS` | Chain diagnostics of the moderation models (chapter 7). |
+| `data-derived/ch-07-moderation-*.RDS` | Summaries of moderation parameters, predictions and burden score moderation (chapter 7). |
+| `data-derived/ms-s13-alpha-beta-draws.RDS`, `data-derived/ms-s19-s20-draws.RDS`, `data-derived/ogtt-mo4-pop-draws.RDS` | Cached posterior draws from models s13, s19, s20 and mo4, used in the paper (re-created when older than the fits). |
+| `data-sim3/` | Output from the simulation study in `R/model-comp3.R` (chapter 6). |
+| **Resources** | |
+| `resources/bibliography.bib` | References. |
+| `resources/typst-show.typ` | Typst template partial adding authors and affiliations to the PDF. |
+| `renv.lock` | R package versions. |
 
-### Stan models
+: Files used to build the supplementary document, figures and the methods and results section of the paper. {#tbl-project-files}
 
-All Stan model scripts are stored in `/models/`. If model code is executed locally, model executable are also stored here. Model fits are stored in `fits/` but not pushed to github due to their large size.  
+```{=typst}
+]
+```
 
 
 ## Packages and computational environment
 
 ```{r}
 #| echo: false
-#| warnings: false
+#| warning: false
 #| message: false
 
 source("./R/packages.R")

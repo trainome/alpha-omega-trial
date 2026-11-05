@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Refit models s13 and s18 (harmonised metabolic syndrome definition) and the
-# moderation models s21 (baseline relative fat mass) and s22 (baseline
-# omega-3 index), three at a time (4 chains each, 12 cores). Output from each
-# script goes to models-scripts/<model>-run.log. Run from the project root:
+# moderation models s19 (own baseline value), s20 (baseline burden score),
+# s21 (baseline relative fat mass) and s22 (baseline omega-3 index), three at
+# a time (4 chains each, 12 cores). Diagnosis thresholds are passed as data
+# (diag_thresholds() in R/data-prep.R). Output from each script goes to
+# models-scripts/<model>-run.log. Run from the project root:
 #
 #   bash models-scripts/refit-s13-s22.sh
 
@@ -10,7 +12,7 @@ set -u
 cd "$(dirname "$0")/.."
 
 lanes=${LANES:-3}
-models=(s21 s22 s13)
+models=(s13 s18 s19 s20 s21 s22)
 
 run_one() {
   m=$1

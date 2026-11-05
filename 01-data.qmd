@@ -1,5 +1,5 @@
 ---
-title: Analytic approach and data description
+title: Analytic approach, data description and study design
 execute:
   echo: false
   warning: false
@@ -7,37 +7,6 @@ execute:
 editor_options: 
   chunk_output_type: console
 ---
-
-## Data analysis
-
-For inferential statistics, Bayesian models were constructed using the Stan probabilistic programming language [@stanpaper] and fitted using the `cmdstanr` interface [@cmdstanr] in R [@R]. The choice of a Bayesian modeling framework allow us to naturally handle missing data in a wide class of models. This was important as it enabled us to model data from the project as *intention-to-treat* with the uncertainty associated with missing values incorporated into the posterior estimates.
-
-A general workflow was adopted where models were incrementally built and tested for validity through simulations [@gelman2026]. First, implications of prior distributions were evaluated using prior-predictive simulations. Priors were selected to constrain model predictions and parameter values to *a priori* plausible ranges. This approach encourages the use of weakly informative priors on model parameters, which regularize models and shrink estimates and predictions without distorting the influence of the data on inference [@lemoine2019;@mcelreath2020;@gelman2014]. In relevant cases, synthetic data were used to confirm that model inferences were not biased by model misspecification. Samples from the joint posterior distribution were used to create posterior predictive checks, in which model implications are simulated and compared with characteristics of the observed data [@gelman2014, p. 141]. Selected models were also assessed for inferential capabilities using synthetic data simulations where parameter values are known. The sensitivity of model specifications to inference was assessed by comparing predictions across different models.
-
-All sampling from prior and posterior distributions were done using the Hamiltonian Monte Carlo (HMC) no-U-turn sampler ([Stan Reference Manual: MCMC sampling](https://mc-stan.org/docs/reference-manual/mcmc.html)). Performance of the HMC algorithm was assessed through chain convergence statistics (R-hat) and visually inspecting converging and stationary sampling across multiple HMC chains.
-
-Descriptive data are presented as mean and standard deviation (SD). Inferential statistics are presented as full posterior densities, and percentile intervals (PI), or probability statements derived from full posterior distributions. 
- 
-
-## Description of the data set and participants
-
-The overall objective of the present analysis is to determine the effect of krill oil supplementation in combination with resistance training on glucose metabolism and indicators of metabolic health. Outcome variables in the analysis are:
-
-- Whole blood fatty acid composition, including omega-3 and omega-6 fatty acids and the omega-3 index
-- Blood glucose in response to a oral glucose tolerance-test
-- Metabolic syndrome (derived from sub-scores)
-   * Triglycerides
-   * Waist circumference
-   * Blood pressure 
-   * HDL Cholesterol
-   * Fasting glucose
-- Body mass index
-- Relative fat mass
-- HOMA2-IR
-- Adiponectin
-- LDL Cholesterol
-- HbA1c
-
 
 ```{r}
 
@@ -53,13 +22,479 @@ refit.models <- FALSE
 ```
 
 
+## Data analysis
+
+For inferential statistics, Bayesian models were constructed using the Stan probabilistic programming language [@stanpaper] and fitted using the `cmdstanr` interface [@cmdstanr] in R [@R]. The choice of a Bayesian modeling framework allows us to naturally handle missing data in a wide class of models. This was important as it enabled us to model data from the project with the uncertainty associated with missing values incorporated into the posterior estimates.
+
+A general workflow was adopted where models were incrementally built and tested for validity through simulations [@gelman2026]. First, implications of prior distributions were evaluated using prior-predictive simulations. Priors were selected to constrain model predictions and parameter values to *a priori* plausible ranges. This approach encourages the use of weakly informative priors on model parameters, which regularize models and shrink estimates and predictions without distorting the influence of the data on inference [@lemoine2019;@mcelreath2020;@gelman2014]. In relevant cases, synthetic data were used to confirm that model inferences were not biased by model misspecification or coding errors [@gelman2026]. Samples from the joint posterior distribution were used to create posterior predictive checks, in which model implications are simulated and compared with characteristics of the observed data [@gelman2014, p. 141;@gelman2026]. Selected models were also assessed for inferential capabilities using synthetic data simulations where parameter values are known. The sensitivity of model specifications to inference was assessed by comparing predictions across different models.
+
+All sampling from prior and posterior distributions were done using the Hamiltonian Monte Carlo (HMC) no-U-turn sampler ([Stan Reference Manual: MCMC sampling](https://mc-stan.org/docs/reference-manual/mcmc.html)). Performance of the HMC algorithm was assessed through chain convergence statistics (R-hat) and visually inspecting converging and stationary sampling across multiple HMC chains.
+
+### Presenting data and inference
+
+Descriptive data are typically presented as mean and standard deviation (SD), unless otherwise noted. When presenting inferential statistics we aim to present results using the full posterior distributions or corresponding median point estimates with percentile intervals (50 and 95 % PI), and probability statements derived from full posterior distributions. Probability statements used in the text will be based on probability of benefit or harm (|effect| > &delta;) and probability of a negligible effect (|effect| &leq; &delta;), where &delta; is the threshold for a negligible effect. We define &delta; as 0.1 &times; SD where SD is the between individuals standard deviation at baseline or, when available, a corresponding population-based estimate (see below). Additionally we will report probability of *any* benefit as the probability mass > 0 in the direction of a favorable effect in the krill oil group.   
+
+The approach described above outlines how we describe the posterior distribution, but does not contain a decisions rule about how to interpret the estimates in light of a null-hypothesis of no effect of treatment. We will therefore also present estimates in relation to a region of practical equivalence (ROPE) [@kruschke2018], defined as 0 &pm; &delta;. The ROPE procedure suggests that we *accept* the null hypothesis if the whole 95% highest density interval[^hdi] (HDI) lies inside the ROPE, *reject* the null hypothesis if the whole 95% HDI lies outside the ROPE, and otherwise remain undecided (@fig-rope-example).
+
+```{r}
+#| label: fig-rope-example
+#| fig-cap: "Example of ROPE decisions. Accepting the null-hypothesis is based on a 95% HDI inside the ROPE region (vertical lines), rejecting is done after observing the full 95% HDI outside the ROPE region, and an undecided result comes from a 95% HDI overlapping with any of the ROPE boundaries."
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-height: 2
+
+# Doing a figure 
+
+data.frame(x = c(0,0.3,0), y = rep(0,3), 
+           Decision = c("Accept", 
+                        "Reject", 
+                        "Undecided"), 
+           h = c(0.08, 0.1, 0.15)) |> 
+  ggplot(aes(x,y)) +
+  geom_point() + 
+  geom_segment(aes(x = x-h, xend = x+h, y = y, yend = y)) +
+  
+  annotate("segment", x = c(-0.1, 0.1), 
+           xend = c(-0.1, 0.1), 
+           y = 0, yend = 0.2, 
+           lty = 2) +
+  scale_y_continuous(breaks = NULL) +
+  facet_wrap(~ Decision) + 
+  labs(y = "", 
+       x = "Effect (contrast btw. groups)") + 
+  alpha_theme()
+
+
+
+```
+
+[^hdi]: "The narrowest interval containing the specified probability mass" [@mcelreath2020, p. 56].
+
+Given our sample size (148 participants), and a set of plausible baseline to follow-up correlations, accepting the null-hypothesis will in many cases be difficult because the sample size will likely be too small to achieve a precision high enough to show a full 95% HDI inside the pre-specified ROPE (@fig-rope-precision). We acknowledge this and accept that this decision rule, in many cases, will yield an undecided result.
+
+
+```{r}
+#| label: fig-rope-precision
+#| fig-cap: "The probability of accepting the null-hypothesis using the ROPE procedure when the true effect is 0. Curves show the probability that the 95% interval of the baseline-adjusted difference between two groups lies entirely inside the ROPE (&pm;&delta;, &delta; = 0.1 SD; effects in SD units) as a function of the number of participants per group, for different baseline to follow-up correlations. The dashed vertical line marks the number of participants randomized per group (n = 74)."
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-height: 3
+#| fig-width: 4
+
+
+# Probability of accepting the null (95% interval inside
+#  +/- delta) when the
+# true effect is 0, for a two-group comparison adjusted 
+# for baseline.
+# Effects in SD units; SE = sqrt(2 / n_group) * sqrt(1 -
+#  rho^2)
+
+delta <- 0.1
+z <- qnorm(0.975)
+
+expand_grid(n_group = seq(20, 1000, by = 5),
+              rho = c(0, 0.5, 0.7, 0.8, 0.9, 0.95, 0.99)) |>
+    mutate(se = sqrt(2 / n_group) * sqrt(1 - rho^2),      
+           h = z * se,
+           p_accept = if_else(h < delta, 2 * pnorm((delta - h) / se) - 1, 0)) |>
+    ggplot(aes(n_group, p_accept, colour = factor(rho))) +
+    geom_line() +
+    geom_vline(xintercept = c(74), lty = 2) +  
+  #  completers / randomised per group
+    labs(x = "Participants per group", y = "P(accept null | true effect = 0)",
+         colour = "Baseline-follow-up\ncorrelation")  + 
+  scale_color_manual(values = colscale) +
+  alpha_theme()
+  
+
+
+
+
+
+
+```
+
+
+## Description of the data set and participants
+
+The overall objective of the present analysis is to determine the effect of krill oil supplementation in combination with resistance training on glucose metabolism and indicators of metabolic health. Outcome variables in the analysis are:
+
+- Whole blood fatty acid composition, including omega-3 and omega-6 fatty acids and the omega-3 index
+- Blood glucose in response to an oral glucose tolerance-test (main outcome)
+- Metabolic syndrome (derived from sub-scores)
+   * Triglycerides
+   * Waist circumference
+   * Blood pressure 
+   * HDL Cholesterol
+   * Fasting glucose
+- Body mass index
+- Relative fat mass
+- HOMA2-IR
+- Adiponectin
+- LDL Cholesterol
+- HbA1c
+
+### Determining thresholds for negligible effects
+
+```{r}
+
+ogtt_dat <- ogtt_glucose()
+
+ogtt_sd <- ogtt_dat |> 
+  filter(time == "T1", 
+         !is.na(glucose)) |>
+  
+  summarise(.by = min, 
+            s = sd(glucose), 
+            n = n()) |> 
+  summarise(s = sqrt(sum((n - 1) * s^2) / sum(n - 1))) |> 
+  pull(s)
+  
+# Comparing to Holmkvist 2009 using
+# incremental AUC
+
+# Incremental AUC (trapezoidal, above fasting glucose; mmol/L x min)
+iauc_fun <- function(min, glucose) {
+  o <- order(min)
+  x <- min[o]
+  y <- glucose[o] - glucose[o][x == 0]
+  sum(diff(x) * (head(y, -1) + tail(y, -1)) / 2)
+}
+
+ogtt_t1 <- ogtt_dat |>
+  filter(time == "T1",
+         !is.na(glucose))
+
+# All seven samples (0-120 min)
+iauc_full <- ogtt_t1 |>
+  filter(n() == 7, .by = participant) |>
+  summarise(.by = participant,
+            iauc = iauc_fun(min, glucose))
+
+# Inter99 sampling scheme (0, 30, 120 min)
+iauc_sub <- ogtt_t1 |>
+  filter(min %in% c(0, 30, 120)) |>
+  filter(n() == 3, .by = participant) |>
+  summarise(.by = participant,
+            iauc = iauc_fun(min, glucose))
+
+# Inter99 (Holmkvist 2009, Table 2, all treatment-naive participants),
+# genotype groups combined (n-weighted means, pooled SDs)
+inter99 <- tibble(n = c(1933, 2721, 943),
+                  m = c(219, 220, 228),
+                  s = c(134, 135, 136)) |>
+  summarise(m = sum(n * m) / sum(n),
+            s = sqrt(sum((n - 1) * s^2) / sum(n - 1)),
+            n = sum(n))
+
+iauc_comp <- bind_rows(
+  iauc_full |> summarise(m = mean(iauc), s = sd(iauc), n = n()) |>
+    mutate(sample = "Present study, 0-120 min (7 samples)"),
+  iauc_sub |> summarise(m = mean(iauc), s = sd(iauc), n = n()) |>
+    mutate(sample = "Present study, 0, 30, 120 min"),
+  inter99 |> mutate(sample = "Inter99, 0, 30, 120 min")
+)
+
+# Proportion of participants with peak glucose after 30 min
+peak_after_30 <- ogtt_t1 |>
+  slice_max(glucose, n = 1, with_ties = FALSE, by = participant) |>
+  summarise(p = 100 * mean(min > 30)) |>
+  pull(p)
+
+```
+
+For the main outcome, the oral glucose tolerance test (OGTT; registered at ClinicalTrials.gov, [NCT04279951](https://clinicaltrials.gov/study/NCT04279951)), we will use our observed baseline SD, pooled within OGTT sampling time-point (0 to 120 min), for the full OGTT as the scale for &delta; (SD = `r round(ogtt_sd, 2)` mmol/L, &delta; = `r round(0.1 * ogtt_sd, 2)` mmol/L). As population-based estimates of the full glucose curve are, to our knowledge, not available, we compared the variability in our sample to the Danish population-based cohort using the incremental area under the curve (iAUC) [@holmkvist2009]. The Danish study (Inter99) sampled glucose at 0, 30 and 120 min only. When our data were restricted to the same sampling scheme, the between-individual SD of the iAUC was comparable to Inter99 (`r round(iauc_comp$s[2])` vs. `r round(iauc_comp$s[3])` mmol/L &times; min). Using all seven samples, the iAUC was larger and more variable (`r round(iauc_comp$m[1])` &plusmn; `r round(iauc_comp$s[1])` mmol/L &times; min). This was because `r round(peak_after_30)`% of our participants reached peak glucose after 30 min, and a 0, 30 and 120 min scheme does not capture this peak (@tbl-iauc-comp). Population-based estimates from sparsely sampled OGTTs would therefore underestimate the between-individual variability in the full glucose curve. This supports using our own baseline data as the scale for &delta;.
+
+```{r}
+#| label: tbl-iauc-comp
+#| tbl-cap: "Incremental area under the glucose curve (iAUC, mmol/L &times; min, mean and SD) at baseline in the present study, using all samples or the Inter99 sampling scheme, and in the Inter99 cohort (Table 2 in @holmkvist2009, genotype groups combined)."
+
+iauc_comp |>
+  select(sample, n, m, s) |>
+  mutate(m = round(m), s = round(s)) |>
+  gt::gt() |>
+  gt::cols_label(sample = "", n = "n", m = "Mean", s = "SD")
+
+```
+
+
+```{r}
+#| label: metsyn-sd
+
+# Present study, baseline (T1). TG on the log scale (as in the models)
+ms_own <- criteria_dat |>
+  filter(time == "T1",
+         analyte %in% c("waist", "sys", "dias", "HDL", "TG", "glucose")) |>
+  mutate(value = if_else(analyte == "TG", log(value), value)) |>
+  summarise(.by = analyte, n = n(), s = sd(value))
+
+# Population-based estimates.
+# Overall SD from sub-groups: within- and between-group variance
+pool_groups <- function(n, m, s) {
+  M <- sum(n * m) / sum(n)
+  sqrt((sum((n - 1) * s^2) + sum(n * (m - M)^2)) / (sum(n) - 1))
+}
+# log-scale SD from mean and SD (log-normal approximation)
+sdlog_ms <- function(m, s) sqrt(log(1 + (s / m)^2))
+# log-scale SD from median and IQR width (log-normal approximation)
+sdlog_iqr <- function(med, iqr) asinh(iqr / (2 * med)) / qnorm(0.75)
+
+# SAMINOR 2 (Michalsen 2019, Table 1): women Sami, women non-Sami,
+# men Sami, men non-Sami
+saminor <- tibble(
+  analyte = rep(c("waist", "sys", "dias", "HDL"), each = 4),
+  n = rep(c(1283, 1899, 1113, 1571), 4),
+  m = c(93.6, 92.9, 98.6, 100.2,
+        130.0, 131.1, 134.6, 135.1,
+        71.7, 72.3, 77.0, 77.8,
+        1.45, 1.55, 1.23, 1.28),
+  s = c(12.1, 12.0, 10.6, 10.7,
+        19.3, 18.6, 18.0, 17.2,
+        9.2, 9.0, 9.9, 9.4,
+        0.41, 0.45, 0.38, 0.38)) |>
+  summarise(.by = analyte, s = pool_groups(n, m, s), n = sum(n)) |>
+  # TG given as median (IQR), within-group log SDs pooled
+  bind_rows(tibble(n = c(1283, 1899, 1113, 1571),
+                   med = c(1.40, 1.40, 1.70, 1.50),
+                   iqr = c(0.90, 0.90, 1.20, 1.10)) |>
+              summarise(s = sqrt(sum((n - 1) * sdlog_iqr(med, iqr)^2) / sum(n - 1)),
+                        n = sum(n)) |>
+              mutate(analyte = "TG")) |>
+  mutate(study = "SAMINOR 2")
+
+ms_pop <- bind_rows(
+  # Tromsø 2015-2016 (Nilsen 2021, Table 1), overall
+  tibble(study = "Tromsø 7", n = 16566,
+         analyte = c("sys", "dias", "HDL"),
+         s = c(18.3, 10.1, 0.5)),
+  # FinHealth 2017 (Haverinen 2021, Table 2), total
+  tibble(study = "FinHealth 2017", n = 5687,
+         analyte = c("waist", "sys", "dias", "HDL", "TG", "glucose"),
+         s = c(14.4, 19.4, 11.0, 0.4, sdlog_ms(1.4, 0.9), 1.3)),
+  saminor
+)
+
+ms_pop_comb <- ms_pop |>
+  summarise(.by = analyte, s_pop = sqrt(sum((n - 1) * s^2) / sum(n - 1)))
+
+ms_delta <- ms_own |>
+  select(analyte, s_own = s) |>
+  left_join(ms_pop |> select(analyte, study, s) |>
+              pivot_wider(names_from = study, values_from = s), by = "analyte") |>
+  left_join(ms_pop_comb, by = "analyte") |>
+  mutate(s_delta = if_else(analyte == "glucose", s_own, s_pop),
+         delta = 0.1 * s_delta)
+
+```
+
+
+
+For the metabolic syndrome criteria, we used population-based estimates of the between-individual SD from three Nordic cohorts: the seventh survey of the Tromsø Study (2015--2016) [@nilsen2021], the FinHealth 2017 survey [@haverinen2021] and the SAMINOR 2 Clinical Survey (2012--2014) [@michalsen2019]. When a study reported only sex- or ethnicity-specific estimates, we combined the groups into one overall SD that includes both within- and between-group variance. Triglycerides were modeled on the log scale, so the corresponding SDs were approximated on the log scale under a log-normal distribution, from the mean and SD (FinHealth) or the median and IQR (SAMINOR 2). Available population estimates were pooled across studies, weighted by sample size (@tbl-metsyn-sd).
+
+Population-based and present-study SDs were similar for waist circumference and diastolic blood pressure. The population SDs were about 20% larger for systolic blood pressure and triglycerides, and about 50% larger for HDL cholesterol (@tbl-metsyn-sd). This is consistent with our participants being a more homogeneous sample than the general population, for example with fewer users of antihypertensive or lipid-lowering medication. Fasting glucose was the exception: the FinHealth SD (`r round(ms_delta$"FinHealth 2017"[ms_delta$analyte == "glucose"], 1)` mmol/L) was more than twice ours (`r round(ms_delta$s_own[ms_delta$analyte == "glucose"], 2)` mmol/L). FinHealth included participants with diabetes and required only 4 h of fasting, and SAMINOR 2 used non-fasting samples. We therefore judged that no comparable population estimate was available for fasting glucose and used our own baseline SD. For all other criteria, &delta; was set to 0.1 &times; the pooled population SD.
+
+
+```{r}
+#| label: tbl-metsyn-sd
+#| tbl-cap: "Between-individual SDs for the metabolic syndrome criteria at baseline in the present study and in population-based cohorts, and the resulting thresholds for negligible effects (&delta; = 0.1 &times; SD). Triglyceride SDs and &delta; are on the log scale. Population SDs were pooled across studies, weighted by sample size. For fasting glucose, &delta; is based on the present-study SD (see text)."
+
+ms_delta |> 
+  mutate(analyte = factor(analyte, 
+                          levels = c("waist", "sys", "dias", "HDL", "TG", "glucose"), 
+                          labels = c("Waist circumference (cm)", 
+                                     "Systolic blood pressure (mm Hg)", 
+                                     "Diastolic blood pressure (mm Hg)", 
+                                     "HDL cholesterol (mmol/L)", 
+                                     "Triglycerides (log mmol/L)", 
+                                     "Fasting glucose (mmol/L)"))) |> 
+  arrange(analyte) |> 
+  select(analyte, s_own, `Tromsø 7`, `FinHealth 2017`, `SAMINOR 2`, s_pop, delta) |> 
+  gt::gt() |> 
+  gt::fmt(columns = -analyte, 
+          fns = function(x) vapply(x, function(v) if (is.na(v)) NA_character_ else format(signif(v, 2)), "")) |> 
+  gt::sub_missing(missing_text = "-") |> 
+  gt::tab_spanner(label = "Population-based SD", 
+                  columns = c(`Tromsø 7`, `FinHealth 2017`, `SAMINOR 2`, s_pop)) |> 
+  gt::cols_label(analyte = "", 
+                 s_own = "Present study SD", 
+                 `Tromsø 7` = "Tromsø 7", 
+                 `FinHealth 2017` = "FinHealth 2017", 
+                 `SAMINOR 2` = "SAMINOR 2", 
+                 s_pop = "Pooled", 
+                 delta = "δ")
+
+```
+
+For the related outcomes (body mass index, relative fat mass, HOMA2-IR, adiponectin, LDL cholesterol and HbA1c), the same cohorts provided population-based estimates for body mass index (FinHealth 2017 and Inter99) [@haverinen2021;@holmkvist2009], LDL cholesterol and HbA1c (Tromsø 7) [@nilsen2021] (@tbl-related-sd). HbA1c was reported in % (DCCT units) in the Tromsø Study and was converted to mmol/mol (IFCC units, mmol/mol = 10.929 &times; (% &minus; 2.15)) before calculating a log-scale SD, as HbA1c was modelled on the log scale. The population SDs were similar to ours for body mass index and LDL cholesterol. For HbA1c the population SD was larger, likely because the Tromsø sample included participants with diabetes (3.6%) [@nilsen2021]. Inter99 reported HOMA-IR based on the original HOMA model [@holmkvist2009], which is not directly comparable to HOMA2-IR. No population-based estimates were available for relative fat mass or adiponectin. For these outcomes, &delta; was based on our baseline SD. For the remaining outcomes, &delta; was set to 0.1 &times; the pooled population SD.
+
+```{r}
+#| label: related-sd
+
+# Present study, baseline (T1). HOMA2-IR and HbA1c on the log scale
+# (as in the models)
+rel_own <- criteria_dat |>
+  filter(time == "T1",
+         analyte %in% c("bmi", "fat.rel", "HOMA2IR", "Adiponectin", "LDL", "HbA1c"), 
+         !is.na(value)) |>
+  mutate(value = if_else(analyte %in% c("HOMA2IR", "HbA1c"), log(value), value)) |>
+  summarise(.by = analyte, n = n(), s = sd(value))
+
+# HbA1c, % (DCCT) to mmol/mol (IFCC)
+dcct_to_ifcc <- function(x) 10.929 * (x - 2.15)
+
+rel_pop <- bind_rows(
+  # FinHealth 2017 (Haverinen 2021, Table 2), total
+  tibble(study = "FinHealth 2017", n = 5687, analyte = "bmi", s = 5.0),
+  # Inter99 (Holmkvist 2009, Table 2), genotype groups combined
+  tibble(n = c(1933, 2721, 943), 
+         m = c(26.2, 26.2, 26.4), 
+         s = c(4.5, 4.5, 4.8)) |> 
+    summarise(s = pool_groups(n, m, s), n = sum(n)) |> 
+    mutate(study = "Inter99", analyte = "bmi"),
+  # Tromsø 2015-2016 (Nilsen 2021, Table 1), overall
+  tibble(study = "Tromsø 7", n = 16566, 
+         analyte = c("LDL", "HbA1c"), 
+         s = c(1.0, 
+               # SD in mmol/mol is 10.929 x SD in %
+               sdlog_ms(dcct_to_ifcc(5.6), 10.929 * 0.6)))
+)
+
+rel_delta <- rel_own |>
+  select(analyte, s_own = s) |>
+  left_join(rel_pop |> select(analyte, study, s) |>
+              pivot_wider(names_from = study, values_from = s), by = "analyte") |>
+  left_join(rel_pop |> 
+              summarise(.by = analyte, 
+                        s_pop = sqrt(sum((n - 1) * s^2) / sum(n - 1))), 
+            by = "analyte") |>
+  mutate(s_delta = if_else(is.na(s_pop), s_own, s_pop),
+         delta = 0.1 * s_delta)
+
+```
+
+```{r}
+#| label: tbl-related-sd
+#| tbl-cap: "Between-individual SDs for related outcomes at baseline in the present study and in population-based cohorts, and the resulting thresholds for negligible effects (&delta; = 0.1 &times; SD). HOMA2-IR and HbA1c SDs and &delta; are on the log scale. Population SDs were pooled across studies, weighted by sample size. When no population estimate was available, &delta; is based on the present-study SD."
+
+rel_delta |> 
+  mutate(analyte = factor(analyte, 
+                          levels = c("bmi", "fat.rel", "HOMA2IR", "Adiponectin", "LDL", "HbA1c"), 
+                          labels = c("Body mass index (kg/m²)", 
+                                     "Relative fat mass (%)", 
+                                     "HOMA2-IR (log)", 
+                                     "Adiponectin (mg/L)", 
+                                     "LDL cholesterol (mmol/L)", 
+                                     "HbA1c (log mmol/mol)"))) |> 
+  arrange(analyte) |> 
+  select(analyte, s_own, `FinHealth 2017`, Inter99, `Tromsø 7`, s_pop, delta) |> 
+  gt::gt() |> 
+  gt::fmt(columns = -analyte, 
+          fns = function(x) vapply(x, function(v) if (is.na(v)) NA_character_ else format(signif(v, 2)), "")) |> 
+  gt::sub_missing(missing_text = "-") |> 
+  gt::tab_spanner(label = "Population-based SD", 
+                  columns = c(`FinHealth 2017`, Inter99, `Tromsø 7`, s_pop)) |> 
+  gt::cols_label(analyte = "", 
+                 s_own = "Present study SD", 
+                 s_pop = "Pooled", 
+                 delta = "δ")
+
+```
+
+
+```{r}
+#| label: negligible-thresholds
+
+# Scale used for standardisation in the metabolic syndrome models (pooled over
+# all time-points; log scale for TG, HOMA2IR and HbA1c)
+ms_scale <- data_load_s7s10()$scale
+
+# Burden score weights (as in 07-metsyn-inference.qmd)
+burden_w <- c(HDL = -1, TG = 1, dias = 0.5, sys = 0.5, glucose = 1, waist = 1) / 5
+
+# Baseline burden score per participant (complete criteria only)
+burden_base <- criteria_dat |>
+  filter(time == "T1", analyte %in% names(burden_w), !is.na(value)) |>
+  inner_join(ms_scale |> select(analyte, transform, mean, sd), by = "analyte") |>
+  mutate(z = (if_else(transform == "log", log(value), value) - mean) / sd,
+         w = burden_w[analyte]) |>
+  filter(n() == length(burden_w), .by = participant) |>
+  summarise(.by = participant, burden = sum(w * z))
+
+burden_sd <- sd(burden_base$burden)
+
+# Re-weighted burden score (main analysis): criteria scaled by sex-specific
+# population SDs (own baseline SD for fasting glucose), see R/pop-ref.R
+source("./R/pop-ref.R")
+burden_pop_base <- burden_pop_baseline()
+burden_pop_sd <- sd(burden_pop_base$burden)
+
+# Burden score effect if each criterion changes by its own delta
+# (standardised scale) in the beneficial direction
+burden_delta_comp <- bind_rows(ms_delta, rel_delta) |>
+  filter(analyte %in% names(burden_w)) |>
+  inner_join(ms_scale |> select(analyte, sd), by = "analyte") |>
+  summarise(d = sum(abs(burden_w[analyte]) * delta / sd)) |>
+  pull(d)
+
+# The same in population SD units (re-weighted burden score, main analysis):
+# model-scale changes (delta / sd) converted with burden_pop_factors()
+burden_pop_f <- burden_pop_factors(ms_scale, burden_pop_base$sex)
+burden_delta_comp_pop <- bind_rows(ms_delta, rel_delta) |>
+  filter(analyte %in% names(burden_w)) |>
+  inner_join(ms_scale |> select(analyte, sd), by = "analyte") |>
+  summarise(d = sum(abs(burden_pop_f[analyte]) * delta / sd)) |>
+  pull(d)
+
+# Average glucose across the OGTT at baseline (trapezoidal AUC / 120 min),
+# complete curves only
+ogtt_mean_sd <- ogtt_t1 |>
+  filter(n() == 7, .by = participant) |>
+  arrange(participant, min) |>
+  summarise(.by = participant,
+            m = sum(diff(min) * (head(glucose, -1) + tail(glucose, -1)) / 2) / 120) |>
+  pull(m) |>
+  sd()
+
+# Collect thresholds. delta is on the scale of the treatment contrast: natural
+# units, log scale (TG, HOMA2IR, HbA1c) or standardised units (burden score).
+# better: direction of benefit for krill oil vs. placebo.
+neg_thresholds <- bind_rows(
+  bind_rows(ms_delta, rel_delta) |>
+    transmute(outcome = analyte,
+              sd = s_delta,
+              sd_source = if_else(s_delta == s_own, "present study", "population"),
+              delta),
+  tibble(outcome = c("ogtt_point", "ogtt_mean", "burden", "burden_pop"),
+         sd = c(ogtt_sd, ogtt_mean_sd, burden_sd, burden_pop_sd),
+         sd_source = "present study",
+         delta = 0.1 * sd)
+) |>
+  mutate(scale = case_when(outcome %in% c("TG", "HOMA2IR", "HbA1c") ~ "log",
+                           outcome %in% c("burden", "burden_pop") ~ "sd",
+                           .default = "identity"),
+         better = if_else(outcome %in% c("HDL", "Adiponectin"), "higher", "lower"))
+
+saveRDS(neg_thresholds, "data-derived/negligible-thresholds.RDS")
+
+```
+
+
+The metabolic syndrome burden score is the average of the standardized criteria (with HDL cholesterol reversed and systolic and diastolic blood pressure each given half weight). In the main analysis, each criterion was standardized using the sex-specific population-based references (fasting glucose: our own sex-specific baseline SD; see `R/pop-ref.R` and the sensitivity chapter), so that a treatment effect on the score is expressed in population SD units. The component thresholds do not carry over to the score directly. To keep the same definition as for the other outcomes, we set &delta; for the burden score to 0.1 &times; the between-individual SD of the score at baseline, calculated on the same scale (n = `r nrow(burden_pop_base)`, SD = `r round(burden_pop_sd, 2)`, &delta; = `r round(0.1 * burden_pop_sd, 3)` population SD units). For the burden score standardized by the study SDs used in the model (sensitivity analysis), the corresponding values were SD = `r round(burden_sd, 2)` and &delta; = `r round(0.1 * burden_sd, 3)` SD units. These thresholds are smaller than the effect on the score if every criterion changed by exactly its own &delta; in the same direction (`r round(burden_delta_comp_pop, 3)` population SD units and `r round(burden_delta_comp, 3)` model SD units, respectively), because the criteria are only partly correlated and their average varies less between individuals than each criterion alone.
+
+<!-- Removing old 
+For the OGTT, treatment effects are also summarised as the average difference across the whole curve (0--120 min), that is, the difference in area under the curve divided by 120 min. For this summary we set &delta; to 0.1 &times; the between-individual SD of each participant's average glucose across the curve at baseline (SD = `r round(ogtt_mean_sd, 2)` mmol/L, &delta; = `r round(0.1 * ogtt_mean_sd, 3)` mmol/L). The time-point-specific &delta; above (`r round(0.1 * ogtt_sd, 3)` mmol/L) is used for differences at single time points along the curve.
+-->
+
+## Participants
 
 ```{r}
 #| label: data-prep-participants
 
 
 part <- AOData::idkeys  
-  
+
 ## Descriptives data 
 baseline_dat <- AOData::bodycomp |>
   select(participant, time, lean.whole, BMC.whole, fat.whole)  |>
@@ -114,7 +549,7 @@ n_groups_sex <- n_total |>
 N <- sum(n_total$n)
 ```
 
-At enrollment, participants were randomized into two groups, an active treatment-group (krill-oil fatty acids, 1 mg day^-1^) and a placebo control group (Placebo; @fig-figure1, @tbl-participants).
+At enrollment, participants were randomized into two groups, an active treatment-group (krill-oil, 4 g day^-1^, providing 508 mg eicosapentaenoic acid [EPA] and 300 mg docosahexaenoic acid [DHA] per day) and a placebo control group (Placebo; @fig-figure1, @tbl-participants).
 
 ```{r}
 #| fig-cap: "Flow of participants through the trial, presented according to the CONSORT 2025 statement. All randomized participants were included in the analysis of outcomes, with missing follow-up data imputed."
@@ -137,6 +572,7 @@ figure_01
 #| tbl-cap: "Participant characteristics."
 
 
+
 baseline_dat |> 
   summarise(.by = c(treat, sex, name), 
             m = mean(value), 
@@ -149,9 +585,9 @@ baseline_dat |>
     " (", 
     sprintf("%.1f", round(s, 1)), 
     ") [",
-    sprintf("%.1f", round(min, 1)), 
+    sprintf("%.0f", round(min, 0)), 
     " - ", 
-    sprintf("%.1f", round(max, 1)), 
+    sprintf("%.0f", round(max, 0)), 
     "]"), 
     n = n) |> 
   
@@ -169,7 +605,7 @@ baseline_dat |>
            name == "age" ~ "Age (years)", 
            name == "height" ~ "Stature (cm)", 
            name == "weight" ~ "Body mass (kg)", 
-           name == "bmi" ~ "Body mass index (kg&times;m^-2^)", 
+           name == "bmi" ~ "Body mass index (kg m^-2^)", 
            TRUE ~ NA )) |> 
 
   group_by(sex) |> 
@@ -186,14 +622,14 @@ baseline_dat |>
                               n_groups_sex["ctrlf"], ")")), 
              sex = "", 
              name = "") |> 
-  tab_footnote(footnote = "Data are presnted as Mean (SD) [Min-Max]")
+  tab_footnote(footnote = "Data are presented as Mean (SD) [Min-Max]")
 
 ```
 
-Participants were given krill oil or placebo in a supplementation-only period followed by a lead-in and combined period (supplementation and resistance training; @fig-figure2)
+Participants were given krill oil or placebo in a supplementation-only period followed by a lead-in and combined period (supplementation and resistance training; @fig-figure2).
 
 ```{r}
-#| fig-cap: "Study design. After baseline testing (week 0), participants received krill oil or placebo for 7 weeks, followed by 13 weeks of supervised resistance training, comprising a 3-week familiarization period (weeks 8–10) and 10 weeks of progressive resistance training (weeks 11–20), with supplementation continued throughout. The measurements listed were taken at each of the three time points: baseline (week 0), after supplementation alone (end of week 7) and after the combined period (end of week 20). The lower panel shows the change in training volume across the 20 training sessions, relative to session 1 and summed across all upper- and lower-body exercises. Line and shaded area show the smoothed trend  with 95% confidence interval. BMI, body mass index; DXA, dual-energy X-ray absorptiometry; HDL, high-density lipoprotein cholesterol; HOMA2-IR, updated homeostasis model assessment of insulin resistance; LDL, low-density lipoprotein cholesterol; OGTT, oral glucose tolerance test; TG, triglycerides. "
+#| fig-cap: "Study design. After baseline testing (week 0), participants received krill oil or placebo for 7 weeks, followed by 13 weeks of supervised resistance training, comprising a 3-week familiarization period (weeks 8–10) and 10 weeks of progressive resistance training (weeks 11–20), with supplementation continued throughout. The measurements listed were taken at each of the three time points: baseline (week 0), after supplementation alone (end of week 7) and after the combined period (end of week 20). The lower panel shows the change in training volume across the 20 training sessions, relative to session 1 and summed across all upper- and lower-body exercises. Line and shaded area show the smoothed trend with 95% confidence interval. BMI, body mass index; DXA, dual-energy X-ray absorptiometry; HDL, high-density lipoprotein cholesterol; HOMA2-IR, updated homeostasis model assessment of insulin resistance; LDL, low-density lipoprotein cholesterol; OGTT, oral glucose tolerance test; TG, triglycerides. "
 #| label: fig-figure2
 #| fig-width: 5.9
 #| fig-height: 3.1

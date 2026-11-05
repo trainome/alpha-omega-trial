@@ -15,6 +15,8 @@ source("./R/packages.R")
 source("./R/data-prep.R")
 source("./R/helpers.R")
 source("./R/sim-fun.R")
+source("./R/negligible.R") # thresholds for negligible effects (01-data.qmd)
+source("./R/pop-ref.R") # population references, re-weighted burden score
 
 # Settings
 refit.models <- FALSE
@@ -345,7 +347,26 @@ pred_plot <- function(dat, obs, analytes) {
 }
 
 
+# Region of negligible effects (-delta, delta) per analyte on the plotted
+# scale: natural units, or fold-difference (exp(+/- delta)) for log outcomes.
+# delta from data-derived/negligible-thresholds.RDS (01-data.qmd).
+neg_region <- function(dat, analytes, thresholds = load_neg()) {
+  dat |>
+    filter(analyte %in% analytes) |>
+    distinct(analyte, strip.lab, transform) |>
+    inner_join(
+      thresholds |> select(analyte = outcome, delta),
+      by = "analyte"
+    ) |>
+    mutate(
+      lwr = if_else(transform == "log", exp(-delta), -delta),
+      upr = if_else(transform == "log", exp(delta), delta)
+    )
+}
+
 contrast_plot <- function(dat, analytes) {
+  reg <- neg_region(dat, analytes)
+
   dat |>
     filter(analyte %in% analytes) |>
     mutate(
@@ -355,6 +376,28 @@ contrast_plot <- function(dat, analytes) {
       )
     ) |>
     ggplot(aes(contrast_out, color = time)) +
+    # Shaded region of negligible effects with dashed limits
+    geom_rect(
+      data = reg,
+      aes(xmin = lwr, xmax = upr, ymin = -Inf, ymax = Inf),
+      inherit.aes = FALSE,
+      fill = "gray85",
+      alpha = 0.6
+    ) +
+    geom_vline(
+      data = reg,
+      aes(xintercept = lwr),
+      linetype = "dashed",
+      linewidth = 0.3,
+      color = "gray40"
+    ) +
+    geom_vline(
+      data = reg,
+      aes(xintercept = upr),
+      linetype = "dashed",
+      linewidth = 0.3,
+      color = "gray40"
+    ) +
     geom_line(stat = "density") +
     facet_wrap(~strip.lab, scales = "free", ncol = 1) +
     alpha_theme(yaxis = FALSE, text_base_size = 7) +
@@ -400,28 +443,31 @@ eff <- function(t, k) {
   a[[sprintf("alpha[%d,%d,2]", t, k)]] - a[[sprintf("alpha[%d,%d,1]", t, k)]]
 }
 
-# Combined posterior effect. The k indices are from the model formulation
-# (see s13.stan and ms_dat$scale):
-# Type     # Type index
-# HDL         2
-# TG          5
-# dias        7
-# glucose     9
-# sys         10
-# waist       11
-#
-# The score is
-# (0.5 * (dias + sys) + (- HDL) + TG + glucose + waist) / 5
+# Combined posterior effect. The type index of each criterion is looked up
+# by name from the model data (ms_dat$scale), not hard-coded.
+type_idx <- setNames(ms_dat$scale$type, ms_dat$scale$analyte)
+
+# The score is (0.5 * (dias + sys) + (- HDL) + TG + glucose + waist) / 5,
+# re-weighted as in the main analysis: each criterion in sex-specific
+# population SD units (own baseline SD for fasting glucose), averaged over
+# participants (burden_pop_factors() in R/pop-ref.R)
+burden_f <- burden_pop_factors(ms_dat$scale, ms_dat$part$sex)
+
 burden_eff <- sapply(1:2, function(t) {
-  (-eff(t, 2) +
-    eff(t, 5) +
-    0.5 * (eff(t, 7) + eff(t, 10)) +
-    eff(t, 9) +
-    eff(t, 11)) /
-    5
+  Reduce(
+    `+`,
+    lapply(names(burden_f), function(k) {
+      burden_f[[k]] * eff(t, type_idx[[k]])
+    })
+  )
 })
 
 colnames(burden_eff) <- c("T2", "T4")
+
+# Threshold for a negligible effect on the burden score (01-data.qmd)
+burden_delta <- load_neg() |>
+  filter(outcome == "burden_pop") |>
+  pull(delta)
 
 # Posterior summaries used for the P(benefit) labels
 burden_contrast <- burden_eff |>
@@ -429,12 +475,13 @@ burden_contrast <- burden_eff |>
   pivot_longer(everything()) |>
   summarise(
     .by = c(name),
-    # Median posterior on the standardized scale (sd units)
+    # Median posterior (population SD units)
     med = median(value),
     # Density height at the median (same defaults as stat_density)
     dens_med = with(density(value), approx(x, y, xout = med)$y),
-    # Proportion of posterior that shows benefit in treatment
-    benefit = mean(value < 0)
+    # Proportion of posterior that shows benefit beyond the threshold for a
+    # negligible effect
+    benefit = mean(value < -burden_delta)
   ) |>
   mutate(
     prob = paste("P(benefit)", fmt_prob(benefit)),
@@ -456,9 +503,26 @@ burden_fig <- burden_eff |>
     )
   ) |>
   ggplot(aes(value, color = name)) +
-  # Shade the part of each density indicating benefit (Krill oil < Placebo)
+  # Region of negligible effects (+/- delta) with dashed limits
+  annotate(
+    "rect",
+    xmin = -burden_delta,
+    xmax = burden_delta,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "gray85",
+    alpha = 0.6
+  ) +
+  geom_vline(
+    xintercept = c(-burden_delta, burden_delta),
+    linetype = "dashed",
+    linewidth = 0.3,
+    color = "gray40"
+  ) +
+  # Shade the part of each density indicating benefit beyond the threshold
+  # (Krill oil < Placebo by more than delta)
   geom_area(
-    aes(y = after_stat(ifelse(x < 0, density, 0)), fill = name),
+    aes(y = after_stat(ifelse(x < -burden_delta, density, 0)), fill = name),
     stat = "density",
     color = NA,
     alpha = 0.3,
@@ -466,7 +530,8 @@ burden_fig <- burden_eff |>
   ) +
   geom_line(stat = "density", alpha = 0.8, show.legend = FALSE) +
 
-  geom_vline(xintercept = 0, lty = 2, color = "gray50") +
+  # No difference
+  geom_vline(xintercept = 0, linewidth = 0.3) +
 
   geom_text(
     data = burden_contrast,
@@ -489,7 +554,7 @@ burden_fig <- burden_eff |>
   labs(
     color = "Treatment-period",
     fill = "Treatment-period",
-    x = "Average burden score<br>Krill oil - Placebo (SD-units)"
+    x = "Average burden score<br>Krill oil - Placebo (population SD units)"
   ) +
   scale_fill_manual(values = colscale[c(3, 6)]) +
   scale_color_manual(values = colscale[c(3, 6)])
@@ -750,6 +815,9 @@ figure_06 <- cowplot::plot_grid(
     label = c("A", "B", "C", "D"),
     size = 12 / .pt
   )
+
+
+saveRDS(figure_06, file = "figures/figure-06.RDS")
 
 
 ggsave(

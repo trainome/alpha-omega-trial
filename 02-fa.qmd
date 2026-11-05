@@ -1,5 +1,5 @@
 ---
-title: "Effects of krill oil supplementation of serum fatty acids"
+title: "Effects of krill oil supplementation on whole blood fatty acids"
 execute:
   echo: false
   warning: false
@@ -24,7 +24,7 @@ refit.models <- FALSE
 
 
 
-Fatty acids, including including EPA (C205n3) and DHA (226n3) where measured in red blood cells. We will assess the effect of krill oil supplementation on group level fatty acid profiles. As preliminary models indicated heteroscedasticity of residuals, log-transformed and standardized data was used in modelling. This allows for the same weakly regularizing priors for all fatty acids ($\text{FA}$). In addition to each fatty acid, the Omega 3 index [@harris2004] is included in these models as the EPA and DHA content relative to the total fatty acid content of red blood cells. The omega 3 index is included in models from model `m3` (see below).    
+Fatty acids, including EPA (C205n3) and DHA (C226n3), were measured as total fatty acids in frozen whole blood. We will assess the effect of krill oil supplementation on group level fatty acid profiles. As preliminary models indicated heteroscedasticity of residuals, log-transformed and standardized data was used in modelling. This allows for the same weakly regularizing priors for all fatty acids ($\text{FA}$). In addition to each fatty acid, the Omega 3 index [@harris2004] is included in these models as the EPA and DHA content relative to the total fatty acid content of whole blood. The omega 3 index is included in models from model `m3` (see below).    
 
 The models were designed to estimate differences between treatments ($\text{TX}$) at post-treatment time-points (T2 and T4) using pre-treatment ($\text{Pre}_{i[\text{FA}]}$) values as a covariate. The intercept in the model ($\alpha_{\text{[FA, TI, TX]}}$) gives us mean estimates for fatty-acid $\text{FA}$, time-point $\text{TI}$, and treatment $\text{TX}$.
 
@@ -33,7 +33,7 @@ $$
 \begin{align}
 y_{i[\text{FA}]} &\sim \operatorname{Normal}(\mu_{i[\text{FA}]}, \sigma_{\text{FA}}) \\
 \mu_{i[\text{FA}]} &= \alpha_{\text{[FA, TI, TX]}} + \beta_{\text{FA}} \times \text{Pre}_{i[\text{FA}]} \\ 
-\alpha_{\text{[FA, TX]}} &\sim \operatorname{Normal}(0, 1) \\
+\alpha_{\text{[FA, TI, TX]}} &\sim \operatorname{Normal}(0, 1) \\
 \beta_{\text{FA}} &\sim \operatorname{Normal}(1, 1) \\
 \sigma_{\text{FA}} &\sim \operatorname{Exponential}(1)\\
 \end{align}
@@ -44,7 +44,7 @@ $$
 ```{r}
 #| fig-width: 5
 #| fig-height: 8
-#| fig-cap: "Prior predictive check for target-wise models of post-treatment fatty acid concentrations conditional on pre-treatment values. The model expects log-transformed standardized values and the priors suggest no difference between treatment groups and a proportional relationship between th pre-intervention values and post-intervention measurements."
+#| fig-cap: "Prior predictive check for target-wise models of post-treatment fatty acid concentrations conditional on pre-treatment values. The model expects log-transformed standardized values and the priors suggest no difference between treatment groups and a proportional relationship between the pre-intervention values and post-intervention measurements."
 #| label: fig-m2-priorpred
 
 
@@ -309,13 +309,13 @@ draws.m2 |>
 
 ```
 
-Krill oil supplementation robustly increased whole blood fatty acid composition levels of C205n3, C225n3 and C226n3 fatty acids compared to placebo (@fig-m2-meanpred and @fig-m2-contrast). Post-treatment values were lower in the krill oil group for C181c9, C183n6, C203n6 and C204n6 with high probability at both T2 and T4 (@fig-m2-contrast). 
+Krill oil supplementation robustly increased whole blood fatty acid composition levels of C205n3, C225n3 and C226n3 fatty acids compared to placebo (@fig-m2-meanpred and @fig-m2-contrast). Post-treatment values were lower in the krill oil group for C181c9, C183n6, C203n6 and C204n6 with high probability at both T2 and T4 (@fig-m2-contrast). <!-- REVIEW: this complete-case model (m2) result says C181c9 (oleic acid) was lower at both T2 and T4, whereas the inference model m4 (Inference section) finds oleic acid lower at T2 only (T4: -2.8% [-7.3, 4.2] in the last render). Different models, so not necessarily an error, but the reader may see a contradiction; check @fig-m2-contrast for C181c9 at T4. Suggested: "Post-treatment values were lower in the krill oil group for C183n6, C203n6 and C204n6 with high probability at both T2 and T4, and for C181c9 at T2 (@fig-m2-contrast)." -->
 
 
 ```{r}
 #| fig-width: 5.9
 #| fig-height: 7.9
-#| fig-cap: "Predictions of fatty acid concentration in response to treatment. Pre-intervention values are means per treatment group, post-intervention means are predicted from the model with 99% PI."
+#| fig-cap: "Predictions of fatty acid concentration in response to treatment. Pre-intervention values are means per treatment group, post-intervention values are posterior medians predicted from the model with 95% PI."
 #| label: fig-m2-meanpred
 
 
@@ -372,9 +372,9 @@ m2_sum <- draws.m2 |>
   ungroup() |> 
   summarise(
     .by = c(FA, TI, TX), 
-    Mu  = mean(mu), 
-    lwr99 = quantile(mu, 0.005), 
-    upr99 = quantile(mu, 0.995), 
+    Mu  = median(mu),
+    lwr95 = quantile(mu, 0.025),
+    upr95 = quantile(mu, 0.975),
     lwr50 = quantile(mu, 0.25), 
     upr50 = quantile(mu, 0.75),
     
@@ -433,8 +433,8 @@ AOData::omega3  |>
 
   geom_errorbar(data = m2_sum, 
                 aes(time, Mu, 
-                    ymin = lwr99, 
-                    ymax = upr99, 
+                    ymin = lwr95, 
+                    ymax = upr95, 
                     group = treat,
                     color = NULL), 
                 width = 0.1, 
@@ -532,9 +532,9 @@ draws.m2 |>
   
         inner_join(fat_sum) |> 
 
-    mutate(contrats = omega - ctrl,
+    mutate(contrast = omega - ctrl,
            # Here we need to multiply with the standardization
-           rel_contrast = exp(s * contrats), 
+           rel_contrast = exp(s * contrast), 
            time = if_else(TI == 1, "T2", "T4")) |>
     
 
@@ -645,7 +645,7 @@ y_{i[\text{FA}]}^{\text{obs}} & \text{if observed}  \\
 y_{i[\text{FA}]}^{\text{mis}} & \text{if missing}
 \end{cases} \\
 y_{i[\text{FA}]}^{\text{mis}} &\sim \operatorname{Normal}(0,2) \\
-\alpha_{\text{[FA, TX]}} &\sim \operatorname{Normal}(0, 1) \\
+\alpha_{\text{[FA, TI, TX]}} &\sim \operatorname{Normal}(0, 1) \\
 \beta_{\text{FA}} &\sim \operatorname{Normal}(1, 1) \\
 \sigma_{\text{FA}} &\sim \operatorname{Exponential}(1)\\
 \end{align}
@@ -754,7 +754,7 @@ draws.m3 |>
              group = paste(.iteration, TX))) + 
   geom_line(alpha = 0.4) + 
   facet_grid(FA ~ TI, labeller = label_both) + 
-  labs(x = "Pre-inteverntion values", 
+  labs(x = "Pre-intervention values", 
        y = "Prior predictive distribution of post-intervention values (std.)", 
        color = "Treatment") + 
   
@@ -915,13 +915,13 @@ draws.m3 |>
 ```
 
 
-The imputation model generally agreed with the complete-case analysis on the effect of treatment of serum fatty acid profiles (@fig-m3-predictions, @fig-m3-contrast, @fig-m3m2-predictions, and @fig-m2m3-comp).
+The imputation model generally agreed with the complete-case analysis on the effect of treatment on whole blood fatty acid profiles (@fig-m3-predictions, @fig-m3-contrast, @fig-m3m2-predictions, and @fig-m2m3-comp).
 
 
 ```{r}
 #| fig-width: 5.9
 #| fig-height: 6.9
-#| fig-cap: "Model predictions. Pre-intervention values are observed means, post-treatment (T2, T4) values are model predictions conditional on pre-intervention value with 99% percentile intervals. The omega-3 index is EPA and DHA content of erythrocytes expressed as a percent of total identified fatty acids."
+#| fig-cap: "Model predictions. Pre-intervention values are observed means, post-treatment (T2, T4) values are model predictions (posterior medians) conditional on pre-intervention value with 95% percentile intervals. The omega-3 index is EPA and DHA content of whole blood expressed as a percent of total identified fatty acids."
 #| echo: false
 #| label: fig-m3-predictions
 #| message: false
@@ -983,9 +983,9 @@ m3_sum <- draws.m3 |>
   ungroup() |> 
   summarise(
     .by = c(FA, TI, TX), 
-    Mu  = mean(mu), 
-    lwr99 = quantile(mu, 0.005), 
-    upr99 = quantile(mu, 0.995), 
+    Mu  = median(mu),
+    lwr95 = quantile(mu, 0.025),
+    upr95 = quantile(mu, 0.975),
     lwr50 = quantile(mu, 0.25), 
     upr50 = quantile(mu, 0.75),
     
@@ -1046,8 +1046,8 @@ AOData::omega3  |>
 
   geom_errorbar(data = m3_sum, 
                 aes(time, Mu, 
-                    ymin = lwr99, 
-                    ymax = upr99, 
+                    ymin = lwr95, 
+                    ymax = upr95, 
                     group = treat,
                     color = NULL), 
                 width = 0.1, 
@@ -1146,9 +1146,9 @@ draws.m3 |>
      inner_join(fat_sum_compl) |> 
 
   
-    mutate(contrats = omega - ctrl, 
+    mutate(contrast = omega - ctrl, 
            # Multiplying the standardizer to get the correct contrast (fold-diff)
-           rel_contrast = exp(s * contrats), 
+           rel_contrast = exp(s * contrast), 
            time = if_else(TI == 1, "T2", "T4")) |>
     
  
@@ -1185,7 +1185,7 @@ draws.m3 |>
 ```{r}
 #| fig-width: 5.9
 #| fig-height: 5.9
-#| fig-cap: "Posterior predictions for fatty acid concentrations in complete-case analysis (model m2) and data imputation model (model m3)."
+#| fig-cap: "Posterior predictions for fatty acid concentrations in complete-case analysis (model m2) and data imputation model (model m3). Points are posterior medians with 95% percentile intervals."
 #| echo: false
 #| label: fig-m3m2-predictions
 #| message: false
@@ -1201,8 +1201,8 @@ m3_sum |>
    ## Add model predictions
 
   geom_errorbar(aes(time, Mu, 
-                    ymin = lwr99, 
-                    ymax = upr99), 
+                    ymin = lwr95, 
+                    ymax = upr95), 
                 width = 0.1, 
                 position = position_dodge(width = 0.3)) +
   
@@ -1305,8 +1305,8 @@ bind_rows(
     pivot_wider(names_from = treat, 
                 values_from = alpha) |> 
      inner_join(fat_sum_compl) |> 
-    mutate(contrats = omega - ctrl, 
-           rel_contrast = exp(s * contrats), 
+    mutate(contrast = omega - ctrl, 
+           rel_contrast = exp(s * contrast), 
            time = if_else(TI == 1, "T2", "T4")) |>
     
    
@@ -1359,8 +1359,8 @@ bind_rows(
     pivot_wider(names_from = treat, 
                 values_from = alpha) |> 
       inner_join(fat_sum) |> 
-    mutate(contrats = omega - ctrl, 
-           rel_contrast = exp(s * contrats), 
+    mutate(contrast = omega - ctrl, 
+           rel_contrast = exp(s * contrast), 
            time = if_else(TI == 1, "T2", "T4")) |>
     
   
@@ -1475,7 +1475,7 @@ draws.m4 |>
   geom_line() + 
   geom_ribbon(alpha = 0.2, aes(color = NULL)) + 
   facet_grid(FA ~ TI) + 
-  labs(x = "Pre-inteverntion values", 
+  labs(x = "Pre-intervention values", 
        y = "Prior predictive distribution of post-intervention values (std.)", 
        fill = "Treatment", 
        color = "Treatment") + 
@@ -1607,7 +1607,7 @@ p1 + plot_annotation(title = "Model m4") | p2 + plot_annotation(title = "Model m
 ```
 
 
-Comparing the models in posterior predictive simulations of condition-specific (time, treatment and fatty-acid) SD across models indicated that no model displayed extreme deviations in replicated values compared to observed variation in the data (@tbl-postpred-m4-m6). This comparison agreed with the out of sample predictive performance where models `m3` to `m5` where comparable. Model `m6`, the most heavily parameterized model showed four unreliable Pareto k values but was also slightly worse in in out of sample predictions (@tbl-loo). Together this suggest that model `m4` is the preferred model with model `m6` being the worst model. 
+Comparing the models in posterior predictive simulations of condition-specific (time, treatment and fatty-acid) SD across models indicated that no model displayed extreme deviations in replicated values compared to observed variation in the data (@tbl-postpred-m4-m6). This comparison agreed with the out of sample predictive performance where models `m3` to `m5` were comparable. Model `m6`, the most heavily parameterized model showed four unreliable Pareto k values but was also slightly worse in out of sample predictions (@tbl-loo). Together this suggests that model `m4` is the preferred model with model `m6` being the worst model. 
 
 
 ```{r}
@@ -1764,8 +1764,8 @@ fa_labels <- data.frame(
              "Stearic Acid", 
               "Oleic Acid", 
               "Linoleic Acid (n-6)", 
-             "Gamma-linolenic Acid (n-6)", 
-             "Alpha-linolenic Acid (n-3)", 
+             "Alpha-linolenic Acid (n-3)",
+             "Gamma-linolenic Acid (n-6)",
              "Dihomo-gamma-linolenic Acid (n-6)", 
              "Arachidonic Acid (n-6)", 
               "Eicosapentaenoic Acid (EPA, n-3)", 
@@ -1807,7 +1807,7 @@ fa_labels <- data.frame(
 ```{r}
 #| eval: true
 #| label: fig-fa-infer
-#| fig-cap: "Adjusted group means and treatment contrasts of fatty acids concentrations and the omega-3 index in whole blood. Error bars in treatment-group means represents 95% CrI, posterior contrasts are displayed as the full posterior distribution ratio between krill oil and placebo estimates at time-point T2 and T4 (1 indicating equivalent concentrations)."
+#| fig-cap: "Adjusted group means and treatment contrasts of fatty acids concentrations and the omega-3 index in whole blood. Points in treatment-group means are posterior medians (observed means at T1) and error bars represent 95% percentile intervals, posterior contrasts are displayed as the full posterior distribution ratio between krill oil and placebo estimates at time-point T2 and T4 (1 indicating equivalent concentrations)."
 #| fig-width: 3.3
 #| fig-height: 8.5
 
@@ -1876,10 +1876,8 @@ sumdat <- draws |>
   ungroup() |> 
   summarise(
     .by = c(FA, TI, TX), 
-    Mu  = mean(mu), 
-    lwr99 = quantile(mu, 0.005), 
-    upr99 = quantile(mu, 0.995), 
-    lwr95 = quantile(mu, 0.025), 
+    Mu  = median(mu),
+    lwr95 = quantile(mu, 0.025),
     upr95 = quantile(mu, 0.975), 
     lwr50 = quantile(mu, 0.25), 
     upr50 = quantile(mu, 0.75),
@@ -1925,8 +1923,8 @@ sumdat <- draws |>
 p1b <- sumdat |> 
   ggplot() +
   geom_errorbar(aes(time, Mu, 
-                    ymin = lwr99, 
-                    ymax = upr99, 
+                    ymin = lwr95, 
+                    ymax = upr95, 
                     group = treat,
                     color = NULL), 
                 width = 0.1, 
@@ -2017,8 +2015,8 @@ p2 <- draws|>
     pivot_wider(names_from = treat, 
                 values_from = alpha) |> 
      inner_join(fat_sum_compl) |> 
-    mutate(contrats = omega - ctrl, 
-           rel_contrast = exp(s * contrats), 
+    mutate(contrast = omega - ctrl, 
+           rel_contrast = exp(s * contrast), 
            time = if_else(TI == 1, "T2", "T4"))  |> 
   inner_join(fa_labels) |> 
   
@@ -2077,7 +2075,6 @@ fig1c
 
 contr_text <- draws|>
   
-  filter(.draw %in% 1:100) |> 
   
   select(starts_with("alpha"), .draw) |> 
   pivot_longer(cols = starts_with("alpha")) |> 
@@ -2092,7 +2089,6 @@ contr_text <- draws|>
   inner_join(
     draws |>
 
-         filter(.draw %in% 1:100) |> 
       
       select(starts_with("sigma"), .draw) |> 
       pivot_longer(cols = starts_with("sigma")) |>
@@ -2108,7 +2104,6 @@ contr_text <- draws|>
   inner_join(
    draws |>
 
-         filter(.draw %in% 1:100) |> 
      
       select(starts_with("beta"), .draw) |> 
       pivot_longer(cols = starts_with("beta")) |>
@@ -2292,7 +2287,7 @@ contr <- draws|>
 ```
 
 
-Krill oil supplementation led to robust increases in Docosahexaenoic (DHA; time-point T2 krill oil vs. placebo, `r contr_text$stat[contr_text$fa == "C226n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C226n3" & contr_text$TI == 2]`), Eicosapentaenoic (EPA; T2, `r contr_text$stat[contr_text$fa == "C205n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C205n3" & contr_text$TI == 2]`), and Docosapentaenoic acid (T2, `r contr_text$stat[contr_text$fa == "C225n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C225n3" & contr_text$TI == 2]`; @fig-fa-infer, @tbl-infer-fa). At the same time, omega-6 fatty acids were reduced in the krill oil group compared to placebo at both time-points (Alpha-linolenic acid T2, `r contr_text$stat[contr_text$fa == "C183n6" & contr_text$TI == 1]`; Alpha-linolenic acid T4, `r contr_text$stat[contr_text$fa == "C183n6" & contr_text$TI == 2]`; Arachidonic acid T2, `r contr_text$stat[contr_text$fa == "C204n6" & contr_text$TI == 1]`; Arachidonic acid T4, `r contr_text$stat[contr_text$fa == "C204n6" & contr_text$TI == 2]`; Dihomo-gamma-linolenic acid T2, `r contr_text$stat[contr_text$fa == "C203n6" & contr_text$TI == 1]`; Dihomo-gamma-linolenic acid T4, `r contr_text$stat[contr_text$fa == "C203n6" & contr_text$TI == 2]`; @fig-fa-infer, @tbl-infer-fa). While gamma-linolenic, linoleic, steraic and palmitic acids remained stable unchanged in krill oil compared to placebo (@fig-fa-infer, @tbl-infer-fa), Oleic acid was reduced in krill oil compared to placebo at T2 (`r contr_text$stat[contr_text$fa == "C181c9" & contr_text$TI == 1]`) but not at T4 (`r contr_text$stat[contr_text$fa == "C181c9" & contr_text$TI == 2]`).  
+Krill oil supplementation led to robust increases in Docosahexaenoic (DHA; time-point T2 krill oil vs. placebo, % difference `r contr_text$stat[contr_text$fa == "C226n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C226n3" & contr_text$TI == 2]`), Eicosapentaenoic (EPA; T2, `r contr_text$stat[contr_text$fa == "C205n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C205n3" & contr_text$TI == 2]`), and Docosapentaenoic acid (T2, `r contr_text$stat[contr_text$fa == "C225n3" & contr_text$TI == 1]`; T4, `r contr_text$stat[contr_text$fa == "C225n3" & contr_text$TI == 2]`; @fig-fa-infer, @tbl-infer-fa). At the same time, omega-6 fatty acids were reduced in the krill oil group compared to placebo at both time-points (% difference; Gamma-linolenic acid T2, `r contr_text$stat[contr_text$fa == "C183n6" & contr_text$TI == 1]`; Gamma-linolenic acid T4, `r contr_text$stat[contr_text$fa == "C183n6" & contr_text$TI == 2]`; Arachidonic acid T2, `r contr_text$stat[contr_text$fa == "C204n6" & contr_text$TI == 1]`; Arachidonic acid T4, `r contr_text$stat[contr_text$fa == "C204n6" & contr_text$TI == 2]`; Dihomo-gamma-linolenic acid T2, `r contr_text$stat[contr_text$fa == "C203n6" & contr_text$TI == 1]`; Dihomo-gamma-linolenic acid T4, `r contr_text$stat[contr_text$fa == "C203n6" & contr_text$TI == 2]`; @fig-fa-infer, @tbl-infer-fa). While alpha-linolenic, linoleic, stearic and palmitic acids remained unchanged in krill oil compared to placebo (@fig-fa-infer, @tbl-infer-fa), Oleic acid was reduced in krill oil compared to placebo at T2 (`r contr_text$stat[contr_text$fa == "C181c9" & contr_text$TI == 1]`) but not at T4 (`r contr_text$stat[contr_text$fa == "C181c9" & contr_text$TI == 2]`).  
 
 
 ```{=typst}
@@ -2303,7 +2298,7 @@ Krill oil supplementation led to robust increases in Docosahexaenoic (DHA; time-
 
 ```{r}
 #| label: tbl-infer-fa
-#| tbl-cap: "Descriptive data, adjusted mean estimates, prediction intervals and treatment contrasts for fatty acids measured in whole blood before the intervention (time-point T1), after supplementation-only (T2), and after supplementation and resistance training (T4). All values are reported on the measurement scale (fatty acids, &mu;g ml<sup>-1</sup>; omega-3 index, %)."
+#| tbl-cap: "Descriptive data (observed mean and SD), adjusted mean estimates (posterior medians with 95% percentile intervals) and treatment contrasts (krill oil minus placebo; posterior medians with 95% percentile intervals) for fatty acids measured in whole blood before the intervention (time-point T1), after supplementation-only (T2), and after supplementation and resistance training (T4). All values are reported on the measurement scale (fatty acids, &mu;g ml<sup>-1</sup>; omega-3 index, %)."
 
 
 # Descriptive data 
@@ -2463,10 +2458,10 @@ obs_mean |>
     fa_lab = "", 
     TI = "Time-point", 
     Placebo = md("Placebo"), 
-    n3 = md("n-3"), 
+    n3 = md("Krill oil"), 
     Mu_Placebo = "Placebo", 
-    Mu_n3 = "n-3", 
-    contrast = "n-3 vs. placebo"
+    Mu_n3 = "Krill oil", 
+    contrast = "Krill oil vs. placebo"
   ) |> 
   tab_spanner(
     label = md("Observed $\\bar{x}\\text{ }(\\text{SD})$"), 

@@ -75,7 +75,7 @@ book:
     - 07-metsyn-inference.qmd
     - 08-metsyn-sensitivity.qmd
     - 09-ogtt.qmd
-  #  - 09-results.qmd
+    - 10-results.qmd
 
 # Re-run a chapter's code only when its .qmd has changed; results are stored
 # in _freeze/. Changes to sourced scripts or data are not detected.
