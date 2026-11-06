@@ -52,6 +52,8 @@ Files used to build this supplementary document, the figures and the methods and
 | `figures/figure-03.R` | Figures 3 and 4, omega-3 index and fatty acid composition with group contrasts. |
 | `figures/figure-05.R` | Figure 5, OGTT, fasting glucose and HOMA2-IR. |
 | `figures/figure-06.R` | Figure 6, effects of krill oil supplementation on the metabolic syndrome. |
+| `figures/figure-0<n>.RDS` | Saved figure objects, read by `_methods-results.qmd` (figures 3 to 6) and created by the figure scripts. |
+| `figures/figure-<n>.pdf`, `figures/figure-<n>.svg` | Figures 1 to 6 for submission, created by the figure scripts. |
 | **Stan models** | |
 | `models/m1.stan` | Drop-out analysis, log-odds of drop-out per treatment group predicted from baseline characteristics. |
 | `models/m2.stan` | Fatty acid composition, complete-case ANCOVA-style model. |
@@ -91,6 +93,7 @@ Files used to build this supplementary document, the figures and the methods and
 | `models-scripts/refit-s7-s20.sh` | Refits models s7 to s20. |
 | `models-scripts/refit-s13-s22.sh` | Refits models s13, s18, s21 and s22. |
 | `models-scripts/refit-s14-s17-d6.sh` | Refits models s14 to s17 with six latent factors. |
+| `models-scripts/<model>-run.log` | Console output of the latest fit of each model, written by the refit scripts (`-D6` logs for s14 to s17 with six latent factors). |
 | `fits/paper1/` | Saved model fits and LOO objects (not on GitHub). |
 | **Derived data** | |
 | `data-derived/chain-diagnostics-s7-s10.RDS`, `data-derived/chain-diagnostics-s11-s12.RDS` | Chain diagnostics of models s7 to s12 (chapter 5). |
@@ -102,7 +105,7 @@ Files used to build this supplementary document, the figures and the methods and
 | **Resources** | |
 | `resources/bibliography.bib` | References. |
 | `resources/typst-show.typ` | Typst template partial adding authors and affiliations to the PDF. |
-| `renv.lock` | R package versions. |
+| `resources/vancouver.csl` | Vancouver citation style for the Word version of the paper (`99-methods-results.qmd`); the book uses Typst's built-in Vancouver style. |
 
 : Files used to build the supplementary document, figures and the methods and results section of the paper. {#tbl-project-files}
 

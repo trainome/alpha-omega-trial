@@ -388,7 +388,7 @@ burden_sens |>
 ```
 
 
-The burden scores presented so far in this section are scaled by SDs from the trial sample (marginal or baseline within-sex SD). **[TODO: incomplete sentence in draft ("The burden score presented so far is scaled ..."); completed here from context, check intended content. Below, an externally weighted score and scores scaled by population reference values are considered.]**
+The burden scores presented so far in this section are scaled by SDs from the trial sample (marginal or baseline within-sex SD). Next we will explore an externally weighted score and later update our reference (marginal SD) to a population-based SD.
 
 
 ## An externally weighted severity score
@@ -495,71 +495,69 @@ $$
 
 with MAP contributing 2/3 of the diastolic and 1/3 of the systolic contrast. Reference means cancel in the contrast, and contrasts are averaged over participants per sex and overall (`cmets_contrast()` in `R/helpers.R`).
 
-Population reference values were retrieved from the literature [@haverinen2021; @nilsen2021] and used to construct population-based scales for each outcome. The standard deviations listed in @tbl-cmets-ref formed the basis of set of SD combinations allowing for rescaling the study-specific burden score and extend the analysis to the metabolic syndrome score proposed by Guseman et al. [@guseman2018]. Published fasting glucose estimates were not used, as they included participants with diabetes or were based on non-fasting samples; fasting glucose was instead scaled by the sex-specific baseline mean and SD in the trial sample. The burden score scaled by population SDs is the score used in the main analysis (shared references in `R/pop-ref.R`).
+Population reference values were retrieved from the literature [@haverinen2021; @nilsen2021; @holmkvist2009;@michalsen2019] and used to construct population-based scales for each outcome. The standard deviations listed in @tbl-cmets-ref formed the basis of set of SD combinations allowing for rescaling the study-specific burden score and extend the analysis to the metabolic syndrome score proposed by Guseman et al. [@guseman2018]. Published fasting glucose estimates were not used, as they included participants with diabetes or were based on non-fasting samples; fasting glucose was instead scaled by the sex-specific baseline mean and SD in the trial sample. The burden score scaled by population SDs is the score used in the main analysis (shared references in `R/pop-ref.R`).
 
 
-| Study | Description | Sex | Age (y) | Analyte | n | Mean | SD |
-|:------|:------------|:----|:--------|:--------|--:|-----:|---:|
-| Tromsø 7 | Population-based, Tromsø (Norway) 2015--16, ages 40+, non-fasting blood samples [@nilsen2021] | Men | 40--69 | Waist (cm) | | | |
-| | | Men | 40--69 | HDL (mmol/L) |7670 |1.4 |0.4 |
-| | | Men | 40--69 | ln TG (mmol/L) | | | |
-| | | Men | 40--69 | Glucose (mmol/L) | | | |
-| | | Men | 40--69 | MAP (mmHg) | | | |
-| | | Men | 40--69 | Systolic BP (mmHg) | 7670|130.9 |17.1 |
-| | | Men | 40--69 | Diastolic BP (mmHg) | 7670|78.9 |9.6 |
-| | | Women | 40--69 | Waist (cm) | | | |
-| | | Women | 40--69 | HDL (mmol/L) |8896 |1.6 |0.5 |
-| | | Women | 40--69 | ln TG (mmol/L) | | | |
-| | | Women | 40--69 | Glucose (mmol/L) | | | |
-| | | Women | 40--69 | MAP (mmHg) | | | |
-| | | Women | 40--69 | Systolic BP (mmHg) |8896 |126.8 |18.3 |
-| | | Women | 40--69 | Diastolic BP (mmHg) |8896 |75.5 |10.01 **[TODO: check decimals against the Tromsø 7 source (10.0?); keep in sync with R/pop-ref.R, which uses 10.01]** |
-| FinHealth 2017 | Nationally representative health examination survey, Finland 2017, ages 25+, fasting plasma glucose after minimum 4 h fasting [@haverinen2021] | Men | 25--93 | Waist (cm) | 2621 | 99.1 | 12.9 |
-| | | Men | 25--93 | HDL (mmol/L) | 2621 | 1.3 | 0.3 |
-| | | Men | 25--93 | TG (mmol/L) | 2621 | 1.5 | 1.1 |
-| | | Men | 25--93 | ln TG (mmol/L)^a^ | 2621 | 0.190 | 0.656 |
-| | | Men | 25--93 | Glucose (mmol/L) | 2621 | 6.0 | 1.4 |
-| | | Men | 25--93 | Systolic BP (mmHg) | 2621 | 135.9 | 17.9 |
-| | | Men | 25--93 | Diastolic BP (mmHg) | 2621 | 81.2 | 11.2 |
-| | | Men | 25--93 | MAP (mmHg)^b^ | 2621 | 99.4 | 12.8 |
-| | | Women | 25--99 | Waist (cm) | 3066 | 89.6 | 14.1 |
-| | | Women | 25--99 | HDL (mmol/L) | 3066 | 1.6 | 0.4 |
-| | | Women | 25--99 | TG (mmol/L) | 3066 | 1.3 | 0.7 |
-| | | Women | 25--99 | ln TG (mmol/L)^a^ | 3066 | 0.135 | 0.505 |
-| | | Women | 25--99 | Glucose (mmol/L) | 3066 | 5.6 | 1.1 |
-| | | Women | 25--99 | Systolic BP (mmHg) | 3066 | 132.8 | 20.4 |
-| | | Women | 25--99 | Diastolic BP (mmHg) | 3066 | 77.8 | 10.6 |
-| | | Women | 25--99 | MAP (mmHg)^b^ | 3066 | 96.1 | 13.2 |
-| SAMINOR 1 | Population-based, rural Northern Norway 2003--04, ages 40--79, non-Sami participants, non-fasting blood samples [@michalsen2019] | Men | 40--79 | Waist (cm) | 1864 | 93.9 | 10.2 |
-| | | Men | 40--79 | HDL (mmol/L) | 1864 | 1.28 | 0.34 |
-| | | Men | 40--79 | ln TG (mmol/L)^c^ | 1864 | 0.457 | 0.524 |
-| | | Men | 40--79 | Glucose (mmol/L)^c^ | 1864 | 5.41 | 0.852 |
-| | | Men | 40--79 | Systolic BP (mmHg) | 1864 | 136.1 | 17.6 |
-| | | Men | 40--79 | Diastolic BP (mmHg) | 1864 | 78.2 | 10.0 |
-| | | Men | 40--79 | MAP (mmHg)^b^ | 1864 | 97.5 | 11.9 |
-| | | Women | 40--79 | Waist (cm) | 2176 | 85.6 | 12.0 |
-| | | Women | 40--79 | HDL (mmol/L) | 2176 | 1.49 | 0.40 |
-| | | Women | 40--79 | ln TG (mmol/L)^c^ | 2176 | 0.300 | 0.496 |
-| | | Women | 40--79 | Glucose (mmol/L)^c^ | 2176 | 5.29 | 0.808 |
-| | | Women | 40--79 | Systolic BP (mmHg) | 2176 | 133.0 | 20.1 |
-| | | Women | 40--79 | Diastolic BP (mmHg) | 2176 | 73.0 | 10.5 |
-| | | Women | 40--79 | MAP (mmHg)^b^ | 2176 | 93.0 | 13.0 |
-| SAMINOR 2 | Population-based, rural Northern Norway 2012--14, ages 40--79, non-Sami participants, non-fasting blood samples [@michalsen2019] | Men | 40--79 | Waist (cm) | 1571 | 100.2 | 10.7 |
-| | | Men | 40--79 | HDL (mmol/L) | 1571 | 1.28 | 0.38 |
-| | | Men | 40--79 | ln TG (mmol/L)^c^ | 1571 | 0.405 | 0.532 |
-| | | Men | 40--79 | Glucose (mmol/L)^c^ | 1571 | 5.40 | 0.815 |
-| | | Men | 40--79 | Systolic BP (mmHg) | 1571 | 135.1 | 17.2 |
-| | | Men | 40--79 | Diastolic BP (mmHg) | 1571 | 77.8 | 9.4 |
-| | | Men | 40--79 | MAP (mmHg)^b^ | 1571 | 96.9 | 11.4 |
-| | | Women | 40--79 | Waist (cm) | 1899 | 92.9 | 12.0 |
-| | | Women | 40--79 | HDL (mmol/L) | 1899 | 1.55 | 0.45 |
-| | | Women | 40--79 | ln TG (mmol/L)^c^ | 1899 | 0.336 | 0.469 |
-| | | Women | 40--79 | Glucose (mmol/L)^c^ | 1899 | 5.20 | 0.741 |
-| | | Women | 40--79 | Systolic BP (mmHg) | 1899 | 131.1 | 18.6 |
-| | | Women | 40--79 | Diastolic BP (mmHg) | 1899 | 72.3 | 9.0 |
-| | | Women | 40--79 | MAP (mmHg)^b^ | 1899 | 91.9 | 11.6 |
+```{r}
+#| label: tbl-cmets-ref
+#| echo: false
+#| tbl-cap: 'Published reference values (mean, SD and n) for the components of the continuous metabolic syndrome score from Nordic populations (`pop_ref` in `R/pop-ref.R`). TG is summarised on the natural log scale (mmol/L); MAP, mean arterial pressure. Pooled, whether the value entered the pooled sex-specific reference (`cmets_ref_pop`). ^a^Derived from the reported arithmetic mean ($m$) and SD ($s$; men 1.5 (1.1), women 1.3 (0.7) mmol/L) assuming a log-normal distribution: $\sigma^2 = \ln(1 + s^2/m^2)$, $\mu = \ln m - \sigma^2/2$. ^b^Derived as DBP + (SBP - DBP)/3; the SD assumes a correlation of 0.8 between SBP and DBP (FinHealth 2017: SD 12.0--12.8 and 12.4--13.2 for men and women, respectively, for correlations of 0.6--0.8). ^c^Derived from the reported median ($M$) and interquartile range (IQR): glucose assuming a normal distribution (mean = $M$, SD = IQR/1.349) and TG assuming a log-normal distribution ($\mu = \ln M$, $\sigma = \text{asinh}(\text{IQR}/2M)/0.6745$).'
 
-: Published reference values (mean, SD and n) for the components of the continuous metabolic syndrome score from Nordic populations. TG is summarised on the natural log scale (mmol/L); MAP, mean arterial pressure. ^a^Derived from the reported arithmetic mean ($m$) and SD ($s$) assuming a log-normal distribution: $\sigma^2 = \ln(1 + s^2/m^2)$, $\mu = \ln m - \sigma^2/2$. ^b^Derived as DBP + (SBP - DBP)/3; the SD assumes a correlation of 0.8 between SBP and DBP (SD 12.0--12.8 and 12.4--13.2 for men and women, respectively, for correlations of 0.6--0.8). ^c^Derived from the reported median ($M$) and interquartile range (IQR): glucose assuming a normal distribution (mean = $M$, SD = IQR/1.349) and TG assuming a log-normal distribution ($\mu = \ln M$, $\sigma = \text{asinh}(\text{IQR}/2M)/0.6745$). {#tbl-cmets-ref}
+# Study descriptions and age ranges (not part of pop_ref)
+pop_ref_studies <- tribble(
+  ~study,          ~label,           ~description,                                                                                                                      ~age_m,   ~age_f,
+  "Tromso7",       "Tromsø 7",       "Population-based, Tromsø (Norway) 2015--16, ages 40+, non-fasting blood samples [@nilsen2021]",                                  "40--69", "40--69",
+  "FinHealth2017", "FinHealth 2017", "Nationally representative health examination survey, Finland 2017, ages 25+, fasting plasma glucose after minimum 4 h fasting [@haverinen2021]", "25--93", "25--99",
+  "SAMINOR1",      "SAMINOR 1",      "Population-based, rural Northern Norway 2003--04, ages 40--79, non-Sami participants, non-fasting blood samples [@michalsen2019]", "40--79", "40--79",
+  "SAMINOR2",      "SAMINOR 2",      "Population-based, rural Northern Norway 2012--14, ages 40--79, non-Sami participants, non-fasting blood samples [@michalsen2019]", "40--79", "40--79"
+)
+
+analyte_labs <- c(waist = "Waist (cm)", HDL = "HDL (mmol/L)", TG = "ln TG (mmol/L)",
+                  glucose = "Glucose (mmol/L)", sys = "Systolic BP (mmHg)",
+                  dias = "Diastolic BP (mmHg)", map = "MAP (mmHg)")
+
+# MAP for every study (r = 0.8, as in R/pop-ref.R); pooled when both SBP and
+# DBP are
+pop_ref_map <- pop_ref |>
+  filter(analyte %in% c("sys", "dias")) |>
+  pivot_wider(id_cols = c(study, sex, n), names_from = analyte,
+              values_from = c(mean, sd, use)) |>
+  mutate(map_approx(mean_sys, sd_sys, mean_dias, sd_dias, r = 0.8),
+         analyte = "map", use = use_sys & use_dias) |>
+  select(study, use, sex, analyte, n, mean, sd)
+
+bind_rows(pop_ref, pop_ref_map) |>
+  left_join(pop_ref_studies, by = "study") |>
+  mutate(study = factor(study, levels = pop_ref_studies$study),
+         sex = factor(sex, levels = c("m", "f")),
+         analyte = factor(analyte, levels = names(analyte_labs))) |>
+  arrange(study, sex, analyte) |>
+  mutate(
+    note = case_when(
+      analyte == "map" ~ "^b^",
+      study == "FinHealth2017" & analyte == "TG" ~ "^a^",
+      study %in% c("SAMINOR1", "SAMINOR2") & analyte %in% c("TG", "glucose") ~ "^c^",
+      .default = ""
+    ),
+    age = if_else(sex == "m", age_m, age_f),
+    analyte_key = analyte,
+    analyte = paste0(analyte_labs[as.character(analyte)], note),
+    sex = if_else(sex == "m", "Men", "Women"),
+    pooled = if_else(use, "Yes", "No"),
+    # Decimals per analyte: waist and BP 1, HDL and glucose 2, ln TG 3
+    digits = case_when(analyte_key %in% c("HDL", "glucose") ~ 2L,
+                       analyte_key == "TG" ~ 3L, .default = 1L),
+    across(c(mean, sd), \(x) sprintf("%.*f", digits, x)),
+    # Study and description on the first row of each study only
+    first = !duplicated(study),
+    label = if_else(first, label, ""),
+    description = if_else(first, description, "")
+  ) |>
+  select(label, description, sex, age, analyte, n, mean, sd, pooled) |>
+  knitr::kable(col.names = c("Study", "Description", "Sex", "Age (y)", "Analyte",
+                             "n", "Mean", "SD", "Pooled"),
+               align = "lllllrrrl")
+```
 
 ```{r}
 #| label: map-approximation
@@ -646,7 +644,7 @@ saminor_tg <- tribble(
 
 # Population reference values (pop_ref, MAP via map_approx()) and the pooled
 # sex-specific references (cmets_ref_pop) are shared with the main analysis
-# and defined in R/pop-ref.R (keep in sync with @tbl-cmets-ref). Fasting
+# and defined in R/pop-ref.R (@tbl-cmets-ref is built from pop_ref). Fasting
 # glucose uses the trial's own sex-specific baseline mean and SD, as the
 # published estimates were not comparable (participants with diabetes,
 # non-fasting samples). The FinHealth 2017 blood pressure sample is not
@@ -727,7 +725,7 @@ score_contrasts |>
 
 DeBoer and Gurka [@deboer2017] examined the correlation of their metabolic syndrome score with HOMA and adiponectin; here we do the same for the burden score scaled by population SD (main analysis), marginal SD and baseline SD, and the two continuous scores [@guseman2018; @deboer2017; @gurka2014].
 
-Scores, HOMA2-IR and adiponectin were retrieved per participant and time-point from the posterior, using observed values where available and imputed values otherwise. Rank (Spearman) correlations between each score and HOMA2-IR or adiponectin were calculated per posterior draw, so that the uncertainty in imputed values propagates to the correlations (@fig-assoc-cor). The intervals therefore reflect uncertainty from imputation only, not sampling variation, and imputed values follow the residual correlations estimated in the model. Associations are shown on the participant level using posterior medians in @fig-assoc-homa and @fig-assoc-adipo. Together these analyses show general agreement between metabolic syndrome scores in associations with **[TODO: incomplete sentence; complete, e.g. "HOMA2-IR and adiponectin", and check against @fig-assoc-cor]** 
+Scores, HOMA2-IR and adiponectin were retrieved per participant and time-point from the posterior, using observed values where available and imputed values otherwise. Rank (Spearman) correlations between each score and HOMA2-IR or adiponectin were calculated per posterior draw, so that the uncertainty in imputed values propagates to the correlations (@fig-assoc-cor). The intervals therefore reflect uncertainty from imputation only, not sampling variation, and imputed values follow the residual correlations estimated in the model. Associations are shown on the participant level using posterior medians in @fig-assoc-homa and @fig-assoc-adipo. Together these analyses show general agreement between metabolic syndrome scores in associations with HOMA2-IR and adiponectin. 
 
 ```{r}
 #| label: score-associations

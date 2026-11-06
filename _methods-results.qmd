@@ -768,137 +768,6 @@ Posterior distributions are presented as posterior densities in visualizations, 
 ## Results
 
 
-```{r}
-#| label: tbl-table-03
-#| tbl-cap: "Treatment effects (krill oil − placebo) after supplementation alone (week 7) and after combined supplementation and resistance training (week 20). Estimates are posterior medians with 95 % highest density intervals (HDI). OGTT, difference in change in the mean blood glucose across the test (0–120 min) from week 0 to week 7 (week 7 column) and from week 7 to week 20 (week 20 column; primary outcome); other outcomes, differences adjusted for the week 0 value, with triglycerides, HOMA2-IR and HbA1c as % differences. P(any benefit), posterior probability of a difference in the beneficial direction (lower values, or higher values for HDL cholesterol and adiponectin), irrespective of size. ROPE, region of practical equivalence (&pm;&delta;, &delta; = 0.1 &times; SD). Decisions: Accept, the 95 % HDI is entirely inside the ROPE; Reject, the 95 % HDI is entirely outside the ROPE (direction of the effect in parentheses); Undecided, otherwise."
-#| echo: false
-#| message: false
-#| warning: false
-
-# Treatment effects and HDI + ROPE decisions (Kruschke 2018). Draws of each
-# contrast are taken on the scale of delta (natural units; log scale for TG,
-# HOMA2IR and HbA1c; SD units for the burden score):
-#   OGTT    ogtt_contr (results-ogtt), difference in change averaged over
-#           0-120 min: week 0-7 (T2 column, ogtt_txt("diff_T1_T2")) and the
-#           combined period, week 7-20 (T4 column, primary outcome,
-#           ogtt_txt("diff_T2_T4"))
-#   others  ms_contr$nat (results-ms) and burden_draws (results-metsyn)
-# The HDI and the decision are computed on the scale of delta. For log outcomes
-# the HDI limits are then back-transformed to % (monotone, so the decision is
-# unchanged), and the estimate is the posterior median % difference, as in
-# ms_txt().
-
-tab3_outcomes <- tribble(
-  ~outcome,      ~group,                              ~label,                                    ~digits,
-  "ogtt_mean",   "Oral glucose tolerance test",       "Mean blood glucose (mmol L^-1^)",         2,
-  "waist",       "Metabolic syndrome",                "Waist circumference (cm)",                1,
-  "TG",          "Metabolic syndrome",                "Triglycerides (%)",                       1,
-  "HDL",         "Metabolic syndrome",                "HDL cholesterol (mmol L^-1^)",            2,
-  "sys",         "Metabolic syndrome",                "Systolic blood pressure (mmHg)",          1,
-  "dias",        "Metabolic syndrome",                "Diastolic blood pressure (mmHg)",         1,
-  "glucose",     "Metabolic syndrome",                "Fasting glucose (mmol L^-1^)",            2,
-  "burden_pop",  "Metabolic syndrome",                "Burden score (SD units)",                 2,
-  "bmi",         "Related metabolic health markers",  "Body mass index (kg m^-2^)",              2,
-  "fat.rel",     "Related metabolic health markers",  "Relative fat mass (percentage points)",   1,
-  "HOMA2IR",     "Related metabolic health markers",  "HOMA2-IR (%)",                            1,
-  "HbA1c",       "Related metabolic health markers",  "HbA1c (%)",                               1,
-  "Adiponectin", "Related metabolic health markers",  "Adiponectin (mg L^-1^)",                  2,
-  "LDL",         "Related metabolic health markers",  "LDL cholesterol (mmol L^-1^)",            2
-)
-
-# Posterior draws per outcome and time-point (T2 = week 7, T4 = week 20)
-tab3_draws <- bind_rows(
-  ogtt_contr |>
-    # Average over the curve per draw (not a posterior summary)
-    summarise(.by = .draw, T2 = mean(diff_T1_T2), T4 = mean(diff_T2_T4)) |>
-    pivot_longer(c(T2, T4), names_to = "time", values_to = "x") |>
-    mutate(outcome = "ogtt_mean"),
-  ms_contr |>
-    filter(analyte %in% tab3_outcomes$outcome) |>
-    select(.draw, time, outcome = analyte, x = nat),
-  burden_draws |>
-    transmute(.draw, time, outcome = "burden_pop", x = est)
-)
-
-# HDI + ROPE decision for draws x on the scale of delta. better = direction of
-# benefit ("lower"/"higher") for krill oil vs. placebo.
-rope_decision <- function(x, delta, better) {
-  h <- ggdist::hdci(x, .width = 0.95)
-  lwr <- h[1, 1]
-  upr <- h[1, 2]
-  decision <- if (lwr >= -delta && upr <= delta) {
-    "Accept"
-  } else if (lwr > delta || upr < -delta) {
-    benefit <- (upr < -delta) == (better == "lower")
-    if (benefit) "Reject (benefit)" else "Reject (harm)"
-  } else {
-    "Undecided"
-  }
-  tibble(lwr = lwr, upr = upr, decision = decision)
-}
-
-tab3 <- tab3_draws |>
-  inner_join(neg, by = "outcome") |>
-  summarise(.by = c(outcome, time, scale, delta, better),
-            est = if (scale[1] == "log") median(100 * (exp(x) - 1)) else median(x),
-            # Probability of any benefit: a difference in the beneficial
-            # direction (< 0 when lower is better, > 0 when higher is better)
-            p_benefit = mean(if (better[1] == "lower") x < 0 else x > 0),
-            rope_decision(x, delta[1], better[1])) |>
-  # Back-transform log-scale limits (HDI and ROPE) to % differences
-  mutate(across(c(lwr, upr),
-                ~ if_else(scale == "log", 100 * (exp(.x) - 1), .x)),
-         rope_lwr = if_else(scale == "log", 100 * (exp(-delta) - 1), -delta),
-         rope_upr = if_else(scale == "log", 100 * (exp(delta) - 1), delta)) |>
-  inner_join(tab3_outcomes, by = "outcome")
-
-# Formatting with a proper minus sign
-fmt_num <- function(x, digits) {
-  sub("^-", "−", sprintf(paste0("%.", digits, "f"), round(x, digits) + 0))
-}
-
-tab3_wide <- tab3 |>
-  mutate(est_txt = sprintf("%s (%s, %s)", fmt_num(est, digits),
-                           fmt_num(lwr, digits), fmt_num(upr, digits)),
-         # Symmetric ROPE shown as ±delta; log outcomes as % limits
-         rope_txt = if_else(scale == "log",
-                            sprintf("%s, %s", fmt_num(rope_lwr, digits + 1),
-                                    fmt_num(rope_upr, digits + 1)),
-                            sprintf("±%s", fmt_num(rope_upr, digits + 1))),
-         # "<1", "62", ">99" (fmt_pct_bnh() from R/negligible.R)
-         p_txt = fmt_pct_bnh(p_benefit)) |>
-  select(group, label, outcome, rope_txt, time, est_txt, p_txt, decision) |>
-  pivot_wider(names_from = time, values_from = c(est_txt, p_txt, decision)) |>
-  mutate(outcome = factor(outcome, levels = tab3_outcomes$outcome)) |>
-  arrange(outcome)
-
-# Group header rows (bold), followed by the outcomes in each group
-tab3_out <- tab3_wide |>
-  group_by(group = factor(group, levels = unique(tab3_outcomes$group))) |>
-  group_modify(~ bind_rows(
-    tibble(label = paste0("**", .y$group, "**"), rope_txt = "",
-           est_txt_T2 = "", p_txt_T2 = "", decision_T2 = "",
-           est_txt_T4 = "", p_txt_T4 = "", decision_T4 = ""),
-    .x |> select(label, rope_txt,
-                 est_txt_T2, p_txt_T2, decision_T2,
-                 est_txt_T4, p_txt_T4, decision_T4)
-  )) |>
-  ungroup() |>
-  select(-group)
-
-# Markdown table, rendered as a native Word table by pandoc
-tab3_out |>
-  knitr::kable(
-    col.names = c("", "ROPE",
-                  "Week 7, estimate (95 % HDI)", "Week 7, P(any benefit) (%)",
-                  "Week 7, decision",
-                  "Week 20, estimate (95 % HDI)", "Week 20, P(any benefit) (%)",
-                  "Week 20, decision"),
-    align = "lccccccc"
-  )
-```
-
-
 
 ### Participant flow and baseline characteristics
 
@@ -1049,7 +918,7 @@ metsyn_n    <- sum(!is.na(base_bin$metsyn))
 ```
 
 
-Of the `r total_n` randomized participants (placebo, n = `r n_part_ls$ctrl`; krill oil, n = `r n_part_ls$omega`), `r sum(unlist(completers_ls))` completed the intervention (placebo, n = `r completers_ls$ctrl`; krill oil, n = `r completers_ls$omega`). Discontinuation was mainly related to the COVID-19 pandemic (**[TODO: n discontinued due to COVID-19; the text said 45 of 56]** of `r total_n - sum(unlist(completers_ls))` participants), and all randomized participants were included in the analyses (Fig. 1). At baseline, participant characteristics were similar between arms (Table 1). At baseline, 35 % of participants used medication regularly or as needed (placebo, 28 %; krill oil, 42 %), the most common being analgesics, respiratory and cardiovascular medication (Supplementary Table S1; **[TODO: n, draft 7]** used antihypertensive, **[TODO: n, draft 5]** used lipid-lowering and **[TODO: n, draft 2]** used glucose-lowering medication). BMI ranged from `r sprintf("%.1f", bmi_range$min)` to `r sprintf("%.1f", bmi_range$max)` kg m^-2^, and `r obesity_pct$total` % of participants had obesity (BMI ≥ 30 kg m^-2^; placebo, `r obesity_pct$ctrl` %; krill oil, `r obesity_pct$omega` %). Of `r metsyn_n` participants with all diagnostic criteria measured at baseline, `r metsyn_pct$total` % met the harmonized criteria for the metabolic syndrome (placebo, `r metsyn_pct$ctrl` %; krill oil, `r metsyn_pct$omega` %). Energy and macronutrient intakes were similar between arms and did not change meaningfully during the intervention (Table 2). 
+Of the `r total_n` randomized participants (placebo, n = `r n_part_ls$ctrl`; krill oil, n = `r n_part_ls$omega`), `r sum(unlist(completers_ls))` completed the intervention (placebo, n = `r completers_ls$ctrl`; krill oil, n = `r completers_ls$omega`). Discontinuation was mainly related to the COVID-19 pandemic (NN participants), and all randomized participants were included in the analyses (Fig. 1). At baseline, participant characteristics were similar between arms (Table 1). At baseline, 35 % of participants used medication regularly or as needed (placebo, 28 %; krill oil, 42 %), the most common being analgesics, respiratory and cardiovascular medication (Supplementary Table S1; **[TODO: n, draft 7]** used antihypertensive, **[TODO: n, draft 5]** used lipid-lowering and **[TODO: n, draft 2]** used glucose-lowering medication). BMI ranged from `r sprintf("%.1f", bmi_range$min)` to `r sprintf("%.1f", bmi_range$max)` kg m^-2^, and `r obesity_pct$total` % of participants had obesity (BMI ≥ 30 kg m^-2^; placebo, `r obesity_pct$ctrl` %; krill oil, `r obesity_pct$omega` %). Of `r metsyn_n` participants with all diagnostic criteria measured at baseline, `r metsyn_pct$total` % met the harmonized criteria for the metabolic syndrome (placebo, `r metsyn_pct$ctrl` %; krill oil, `r metsyn_pct$omega` %). Energy and macronutrient intakes were similar between arms and did not change meaningfully during the intervention (Table 2). 
 
 
 
@@ -1096,7 +965,144 @@ figure_04
 
 ### Glucose regulation
 
-Krill oil did not improve the primary outcome, the change in glucose tolerance during the combined period (from week 7 to week 20; Fig. 5A), compared with placebo. Instead, blood glucose during the OGTT tended to decrease more with placebo than with krill oil from week 7 to week 20 (average difference in change across the OGTT, `r ogtt_txt("diff_T2_T4", bnh = TRUE)`; Fig. 5A, right panels; HDI+ROPE decision: undecided; Table 3), most clearly in the later part of the curve (from 80 to 110 min, `r ogtt_txt("diff_T2_T4", 80, 110, bnh = TRUE)`). During supplementation alone (week 0 to week 7), glucose tolerance probably improved with krill oil, mainly during 25 to 100 min (Fig. 5A, left panels; across the OGTT, `r ogtt_txt("diff_T1_T2", bnh = TRUE)`; Table 3). Over the whole intervention (week 0 to week 20), blood glucose during the OGTT decreased in both groups (average change across the OGTT; placebo, `r ogtt_txt("ctrl_T1_T4")`; krill oil, `r ogtt_txt("omega_T1_T4")`), and the difference between groups was most likely negligible (`r ogtt_txt("diff_T1_T4", bnh = TRUE)`), although the HDI+ROPE decision was undecided. <!-- REVIEW: "most likely negligible" rests on P(negligible) of about 50 % (40/50/10 %), which is no more likely than not. Also, Table 3 now shows the week 7-20 primary outcome for the OGTT, so the week 0-20 decision is no longer in the table. Suggested: "and the difference between groups was small and uncertain (...; HDI+ROPE decision: undecided)" -->
+Krill oil did not improve the primary outcome, the change in glucose tolerance during the combined period (from week 7 to week 20; Fig. 5A), compared with placebo. Instead, blood glucose during the OGTT tended to decrease more with placebo than with krill oil from week 7 to week 20 (average difference in change across the OGTT, `r ogtt_txt("diff_T2_T4", bnh = TRUE)`; Fig. 5A, right panels; HDI+ROPE decision: undecided; Table 3), most clearly in the later part of the curve (from 80 to 110 min, `r ogtt_txt("diff_T2_T4", 80, 110, bnh = TRUE)`). During supplementation alone (week 0 to week 7), glucose tolerance probably improved with krill oil, mainly during 25 to 100 min (Fig. 5A, left panels; across the OGTT, `r ogtt_txt("diff_T1_T2", bnh = TRUE)`; Table 3). Over the whole intervention (week 0 to week 20), blood glucose during the OGTT decreased in both groups (average change across the OGTT; placebo, `r ogtt_txt("ctrl_T1_T4")`; krill oil, `r ogtt_txt("omega_T1_T4")`), and the difference between groups was most small and uncertain (`r ogtt_txt("diff_T1_T4", bnh = TRUE)`; HDI+ROPE decision: undecided, Table 3).
+
+
+
+```{r}
+#| label: tbl-table-03
+#| tbl-cap: "Treatment effects (krill oil − placebo) after supplementation alone (week 7) and after combined supplementation and resistance training (week 20). Estimates are posterior medians with 95 % highest density intervals (HDI). OGTT, difference in change in the mean blood glucose across the test (0–120 min) from week 0 to week 7 (week 7 column) and from week 7 to week 20 (week 20 column; primary outcome); other outcomes, differences adjusted for the week 0 value, with triglycerides, HOMA2-IR and HbA1c as % differences. P(any benefit), posterior probability of a difference in the beneficial direction (lower values, or higher values for HDL cholesterol and adiponectin), irrespective of size. ROPE, region of practical equivalence (&pm;&delta;, &delta; = 0.1 &times; SD). Decisions: Accept, the 95 % HDI is entirely inside the ROPE; Reject, the 95 % HDI is entirely outside the ROPE (direction of the effect in parentheses); Undecided, otherwise."
+#| echo: false
+#| message: false
+#| warning: false
+
+# Treatment effects and HDI + ROPE decisions (Kruschke 2018). Draws of each
+# contrast are taken on the scale of delta (natural units; log scale for TG,
+# HOMA2IR and HbA1c; SD units for the burden score):
+#   OGTT    ogtt_contr (results-ogtt), difference in change averaged over
+#           0-120 min: week 0-7 (T2 column, ogtt_txt("diff_T1_T2")) and the
+#           combined period, week 7-20 (T4 column, primary outcome,
+#           ogtt_txt("diff_T2_T4"))
+#   others  ms_contr$nat (results-ms) and burden_draws (results-metsyn)
+# The HDI and the decision are computed on the scale of delta. For log outcomes
+# the HDI limits are then back-transformed to % (monotone, so the decision is
+# unchanged), and the estimate is the posterior median % difference, as in
+# ms_txt().
+
+tab3_outcomes <- tribble(
+  ~outcome,      ~group,                              ~label,                                    ~digits,
+  "ogtt_mean",   "Oral glucose tolerance test",       "Mean blood glucose (mmol L^-1^)",         2,
+  "waist",       "Metabolic syndrome",                "Waist circumference (cm)",                1,
+  "TG",          "Metabolic syndrome",                "Triglycerides (%)",                       1,
+  "HDL",         "Metabolic syndrome",                "HDL cholesterol (mmol L^-1^)",            2,
+  "sys",         "Metabolic syndrome",                "Systolic blood pressure (mmHg)",          1,
+  "dias",        "Metabolic syndrome",                "Diastolic blood pressure (mmHg)",         1,
+  "glucose",     "Metabolic syndrome",                "Fasting glucose (mmol L^-1^)",            2,
+  "burden_pop",  "Metabolic syndrome",                "Burden score (SD units)",                 2,
+  "bmi",         "Related metabolic health markers",  "Body mass index (kg m^-2^)",              2,
+  "fat.rel",     "Related metabolic health markers",  "Relative fat mass (percentage points)",   1,
+  "HOMA2IR",     "Related metabolic health markers",  "HOMA2-IR (%)",                            1,
+  "HbA1c",       "Related metabolic health markers",  "HbA1c (%)",                               1,
+  "Adiponectin", "Related metabolic health markers",  "Adiponectin (mg L^-1^)",                  2,
+  "LDL",         "Related metabolic health markers",  "LDL cholesterol (mmol L^-1^)",            2
+)
+
+# Posterior draws per outcome and time-point (T2 = week 7, T4 = week 20)
+tab3_draws <- bind_rows(
+  ogtt_contr |>
+    # Average over the curve per draw (not a posterior summary)
+    summarise(.by = .draw, T2 = mean(diff_T1_T2), T4 = mean(diff_T2_T4)) |>
+    pivot_longer(c(T2, T4), names_to = "time", values_to = "x") |>
+    mutate(outcome = "ogtt_mean"),
+  ms_contr |>
+    filter(analyte %in% tab3_outcomes$outcome) |>
+    select(.draw, time, outcome = analyte, x = nat),
+  burden_draws |>
+    transmute(.draw, time, outcome = "burden_pop", x = est)
+)
+
+# HDI + ROPE decision for draws x on the scale of delta. better = direction of
+# benefit ("lower"/"higher") for krill oil vs. placebo.
+rope_decision <- function(x, delta, better) {
+  h <- ggdist::hdci(x, .width = 0.95)
+  lwr <- h[1, 1]
+  upr <- h[1, 2]
+  decision <- if (lwr >= -delta && upr <= delta) {
+    "Accept"
+  } else if (lwr > delta || upr < -delta) {
+    benefit <- (upr < -delta) == (better == "lower")
+    if (benefit) "Reject (benefit)" else "Reject (harm)"
+  } else {
+    "Undecided"
+  }
+  tibble(lwr = lwr, upr = upr, decision = decision)
+}
+
+tab3 <- tab3_draws |>
+  inner_join(neg, by = "outcome") |>
+  summarise(.by = c(outcome, time, scale, delta, better),
+            est = if (scale[1] == "log") median(100 * (exp(x) - 1)) else median(x),
+            # Probability of any benefit: a difference in the beneficial
+            # direction (< 0 when lower is better, > 0 when higher is better)
+            p_benefit = mean(if (better[1] == "lower") x < 0 else x > 0),
+            rope_decision(x, delta[1], better[1])) |>
+  # Back-transform log-scale limits (HDI and ROPE) to % differences
+  mutate(across(c(lwr, upr),
+                ~ if_else(scale == "log", 100 * (exp(.x) - 1), .x)),
+         rope_lwr = if_else(scale == "log", 100 * (exp(-delta) - 1), -delta),
+         rope_upr = if_else(scale == "log", 100 * (exp(delta) - 1), delta)) |>
+  inner_join(tab3_outcomes, by = "outcome")
+
+# Formatting with a proper minus sign
+fmt_num <- function(x, digits) {
+  sub("^-", "−", sprintf(paste0("%.", digits, "f"), round(x, digits) + 0))
+}
+
+tab3_wide <- tab3 |>
+  mutate(est_txt = sprintf("%s (%s, %s)", fmt_num(est, digits),
+                           fmt_num(lwr, digits), fmt_num(upr, digits)),
+         # Symmetric ROPE shown as ±delta; log outcomes as % limits
+         rope_txt = if_else(scale == "log",
+                            sprintf("%s, %s", fmt_num(rope_lwr, digits + 1),
+                                    fmt_num(rope_upr, digits + 1)),
+                            sprintf("±%s", fmt_num(rope_upr, digits + 1))),
+         # "<1", "62", ">99" (fmt_pct_bnh() from R/negligible.R)
+         p_txt = fmt_pct_bnh(p_benefit)) |>
+  select(group, label, outcome, rope_txt, time, est_txt, p_txt, decision) |>
+  pivot_wider(names_from = time, values_from = c(est_txt, p_txt, decision)) |>
+  mutate(outcome = factor(outcome, levels = tab3_outcomes$outcome)) |>
+  arrange(outcome)
+
+# Group header rows (bold), followed by the outcomes in each group
+tab3_out <- tab3_wide |>
+  group_by(group = factor(group, levels = unique(tab3_outcomes$group))) |>
+  group_modify(~ bind_rows(
+    tibble(label = paste0("**", .y$group, "**"), rope_txt = "",
+           est_txt_T2 = "", p_txt_T2 = "", decision_T2 = "",
+           est_txt_T4 = "", p_txt_T4 = "", decision_T4 = ""),
+    .x |> select(label, rope_txt,
+                 est_txt_T2, p_txt_T2, decision_T2,
+                 est_txt_T4, p_txt_T4, decision_T4)
+  )) |>
+  ungroup() |>
+  select(-group)
+
+# Markdown table, rendered as a native Word table by pandoc
+tab3_out |>
+  knitr::kable(
+    col.names = c("", "ROPE",
+                  "Week 7, estimate (95 % HDI)", "Week 7, P(any benefit) (%)",
+                  "Week 7, decision",
+                  "Week 20, estimate (95 % HDI)", "Week 20, P(any benefit) (%)",
+                  "Week 20, decision"),
+    align = "lccccccc"
+  )
+```
+
+
+
+
+
 
 ```{r}
 #| label: fig-figure-05
