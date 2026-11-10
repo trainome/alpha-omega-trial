@@ -42,11 +42,13 @@ The approach described above outlines how we describe the posterior distribution
 #| echo: false
 #| message: false
 #| warning: false
-#| fig-height: 2
+#| fig-height: 1
+#| fig-width: 4
+#| dev: "svglite"
 
 # Doing a figure 
 
-data.frame(x = c(0,0.3,0), y = rep(0,3), 
+data.frame(x = c(0,0.3,0), y = rep(0.1,3), 
            Decision = c("Accept", 
                         "Reject", 
                         "Undecided"), 
@@ -59,7 +61,7 @@ data.frame(x = c(0,0.3,0), y = rep(0,3),
            xend = c(-0.1, 0.1), 
            y = 0, yend = 0.2, 
            lty = 2) +
-  scale_y_continuous(breaks = NULL) +
+  scale_y_continuous(breaks = NULL, limits = c(0,0.2)) +
   facet_wrap(~ Decision) + 
   labs(y = "", 
        x = "Effect (contrast btw. groups)") + 
@@ -80,8 +82,9 @@ Given our sample size (148 participants), and a set of plausible baseline to fol
 #| echo: false
 #| message: false
 #| warning: false
-#| fig-height: 3
+#| fig-height: 2.5
 #| fig-width: 4
+#| dev: "svglite"
 
 
 # Probability of accepting the null (95% interval inside
@@ -117,7 +120,7 @@ expand_grid(n_group = seq(20, 1000, by = 5),
 ```
 
 
-## Description of the data set and participants
+## Description of the data set
 
 The overall objective of the present analysis is to determine the effect of krill oil supplementation in combination with resistance training on glucose metabolism and indicators of metabolic health. Outcome variables in the analysis are:
 
@@ -205,7 +208,7 @@ peak_after_30 <- ogtt_t1 |>
 
 ```
 
-For the main outcome, the oral glucose tolerance test (OGTT; registered at ClinicalTrials.gov, [NCT04279951](https://clinicaltrials.gov/study/NCT04279951)), we will use our observed baseline SD, pooled within OGTT sampling time-point (0 to 120 min), for the full OGTT as the scale for &delta; (SD = `r round(ogtt_sd, 2)` mmol/L, &delta; = `r round(0.1 * ogtt_sd, 2)` mmol/L). As population-based estimates of the full glucose curve are, to our knowledge, not available, we compared the variability in our sample to the Danish population-based cohort using the incremental area under the curve (iAUC) [@holmkvist2009]. The Danish study (Inter99) sampled glucose at 0, 30 and 120 min only. When our data were restricted to the same sampling scheme, the between-individual SD of the iAUC was comparable to Inter99 (`r round(iauc_comp$s[2])` vs. `r round(iauc_comp$s[3])` mmol/L &times; min). Using all seven samples, the iAUC was larger and more variable (`r round(iauc_comp$m[1])` &plusmn; `r round(iauc_comp$s[1])` mmol/L &times; min). This was because `r round(peak_after_30)`% of our participants reached peak glucose after 30 min, and a 0, 30 and 120 min scheme does not capture this peak (@tbl-iauc-comp). Population-based estimates from sparsely sampled OGTTs would therefore underestimate the between-individual variability in the full glucose curve. This supports using our own baseline data as the scale for &delta;.
+For the main outcome, the oral glucose tolerance test (OGTT; registered at ClinicalTrials.gov, [NCT04279951](https://clinicaltrials.gov/study/NCT04279951)), we will use our observed baseline SD, pooled within OGTT sampling time-point (0 to 120 min), as the scale for &delta; for treatment effects at single time points of the OGTT (SD = `r round(ogtt_sd, 2)` mmol/L, &delta; = `r round(0.1 * ogtt_sd, 2)` mmol/L). As population-based estimates of the full glucose curve are, to our knowledge, not available, we compared the variability in our sample to the Danish population-based cohort using the incremental area under the curve (iAUC) [@holmkvist2009]. The Danish study (Inter99) sampled glucose at 0, 30 and 120 min only. When our data were restricted to the same sampling scheme, the between-individual SD of the iAUC was comparable to Inter99 (`r round(iauc_comp$s[2])` vs. `r round(iauc_comp$s[3])` mmol/L &times; min). Using all seven samples, the iAUC was larger and more variable (`r round(iauc_comp$m[1])` &plusmn; `r round(iauc_comp$s[1])` mmol/L &times; min). This was because `r round(peak_after_30)`% of our participants reached peak glucose after 30 min, and a 0, 30 and 120 min scheme does not capture this peak (@tbl-iauc-comp). Population-based estimates from sparsely sampled OGTTs would therefore underestimate the between-individual variability in the full glucose curve. This supports using our own baseline data as the scale for &delta;.
 
 ```{r}
 #| label: tbl-iauc-comp
@@ -483,9 +486,7 @@ saveRDS(neg_thresholds, "data-derived/negligible-thresholds.RDS")
 
 The metabolic syndrome burden score is the average of the standardized criteria (with HDL cholesterol reversed and systolic and diastolic blood pressure each given half weight). In the main analysis, each criterion was standardized using the sex-specific population-based references (fasting glucose: our own sex-specific baseline SD; see `R/pop-ref.R` and the sensitivity chapter), so that a treatment effect on the score is expressed in population SD units. The component thresholds do not carry over to the score directly. To keep the same definition as for the other outcomes, we set &delta; for the burden score to 0.1 &times; the between-individual SD of the score at baseline, calculated on the same scale (n = `r nrow(burden_pop_base)`, SD = `r round(burden_pop_sd, 2)`, &delta; = `r round(0.1 * burden_pop_sd, 3)` population SD units). For the burden score standardized by the study SDs used in the model (sensitivity analysis), the corresponding values were SD = `r round(burden_sd, 2)` and &delta; = `r round(0.1 * burden_sd, 3)` SD units. These thresholds are smaller than the effect on the score if every criterion changed by exactly its own &delta; in the same direction (`r round(burden_delta_comp_pop, 3)` population SD units and `r round(burden_delta_comp, 3)` model SD units, respectively), because the criteria are only partly correlated and their average varies less between individuals than each criterion alone.
 
-<!-- Removing old 
-For the OGTT, treatment effects are also summarised as the average difference across the whole curve (0--120 min), that is, the difference in area under the curve divided by 120 min. For this summary we set &delta; to 0.1 &times; the between-individual SD of each participant's average glucose across the curve at baseline (SD = `r round(ogtt_mean_sd, 2)` mmol/L, &delta; = `r round(0.1 * ogtt_mean_sd, 3)` mmol/L). The time-point-specific &delta; above (`r round(0.1 * ogtt_sd, 3)` mmol/L) is used for differences at single time points along the curve.
--->
+For the OGTT, treatment effects are also summarised as the average difference across the whole curve (0--120 min), that is, the difference in area under the curve divided by 120 min. For this summary we set &delta; to 0.1 &times; the between-individual SD of each participant's average glucose across the curve at baseline (SD = `r round(ogtt_mean_sd, 2)` mmol/L, &delta; = `r round(0.1 * ogtt_mean_sd, 2)` mmol/L). The time-point-specific &delta; above (`r round(0.1 * ogtt_sd, 2)` mmol/L) is used for differences at single time points along the curve. The average glucose varies less between individuals than glucose at single time points, giving a smaller &delta; for the average.
 
 ## Participants
 
@@ -556,7 +557,7 @@ At enrollment, participants were randomized into two groups, an active treatment
 #| label: fig-figure1
 #| fig-width: 5.9
 #| fig-height: 5.6
-
+#| dev: "svglite"
 
 figure_01 <- readRDS("figures/figure-01.RDS")
 
@@ -633,7 +634,7 @@ Participants were given krill oil or placebo in a supplementation-only period fo
 #| label: fig-figure2
 #| fig-width: !expr 180 / 25.4
 #| fig-height: !expr 95 / 25.4
-
+#| dev: "svglite"
 
 figure_02 <- readRDS("figures/figure-02.RDS")
 

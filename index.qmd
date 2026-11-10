@@ -1,6 +1,6 @@
 # Introduction
 
-This document includes supplementary data and computational details related to the paper "Krill oil supplementation with and without resistance training lowers the burden of the metabolic syndrome but does not affect glucose tolerance in sedentary adults: a randomized controlled trial". 
+This document includes supplementary data and computational details related to the paper "Krill oil does not improve glucose tolerance during resistance training but slightly lowers metabolic syndrome burden in sedentary adults: a double-blind, randomized controlled trial". 
 
 
 ## Project organisation

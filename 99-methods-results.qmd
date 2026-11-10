@@ -5,6 +5,7 @@ fig-dpi: 300
 bibliography: resources/bibliography.bib
 editor_options: 
   chunk_output_type: console
+toc: false
 ---
 
 <!-- Content lives in _methods-results.qmd, which is also included in the

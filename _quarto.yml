@@ -95,7 +95,7 @@ format:
     # Raster figures: the default (svg) embeds every drawn element, and
     # posterior predictive plots with many draws reach 15-35 MB each.
     fig-format: png
-    fig-dpi: 300
+    fig-dpi: 200
     # Text width of the orange-book template (A4, 3 cm side margins) is
     # 15 cm = 5.9 in. Wider figures are scaled down, shrinking their text.
     fig-width: 5.9
@@ -103,3 +103,6 @@ format:
     # Adds authors and affiliations on the page after the cover
     template-partials:
       - resources/typst-show.typ
+    include-before-body:
+      - text: |
+          #show table: set text(font: "Libertinus Serif", size: 8pt)

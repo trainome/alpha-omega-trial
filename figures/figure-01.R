@@ -109,11 +109,11 @@ n$n3_imputed <- n$n3_analysed - n$n3_observed
 reasons <- list(
   pla_alloc = c(character(0)),
   pla_t2 = c(
-    "Reasons not related to the study (n=3)",
+    "Reasons not related to the study (n=2)",
     "Fear of COVID-19 (n=6)"
   ),
   pla_t4 = c(
-    "Lockdown (n=9)",
+    "Lockdown due to COVID-19 (n=9)",
     "Fear of COVID-19 (n=11)",
     "Low training adherence (n=2)"
   ),
@@ -121,12 +121,12 @@ reasons <- list(
 
   n3_alloc = c(character(0)),
   n3_t2 = c(
-    "Reasons not related to the study (n=3)",
+    "Death, unrelated to the study (n=1)",
     "Fear of COVID-19 (n=7)",
     "Not enough time (n=2)"
   ),
   n3_t4 = c(
-    "Lockdown (n=7)",
+    "Lockdown due to COVID-19 (n=7)",
     "Fear of COVID-19 (n=5)",
     "Low training adherence (n=1)"
   ),
@@ -327,8 +327,10 @@ stage_h <- line_h + pad # same height as a single-line box
 w_stage <- 14
 
 # Top of the highest box in a step across both arms
-step_top <- function(step) max(sapply(paste0(c("pla", "n3"), step), b, col = "ymax"))
-step_bot <- function(step) min(sapply(paste0(c("pla", "n3"), step), b, col = "ymin"))
+step_top <- function(step)
+  max(sapply(paste0(c("pla", "n3"), step), b, col = "ymax"))
+step_bot <- function(step)
+  min(sapply(paste0(c("pla", "n3"), step), b, col = "ymin"))
 
 stages <- tibble(
   stage = c("Enrollment", "Allocation", "Follow-up", "Analysis"),

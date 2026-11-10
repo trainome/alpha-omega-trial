@@ -2264,9 +2264,10 @@ contr <- draws|>
   mutate(FA = as.integer(FA)) |> 
     # Compute contrasts
     mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
-    select(.draw:TI, treat, alpha) |> 
+    select(.draw:TI, treat, alpha, beta) |> 
+    inner_join(pre_int_means) |> 
     inner_join(fat_sum_compl) |> 
-  mutate(mu = exp(alpha * s + m)) |> 
+  mutate(mu = exp((alpha + beta * pre) * s + m)) |> 
   dplyr::select(.draw, fa, TI, treat, mu) |> 
     pivot_wider(names_from = treat, 
                 values_from = mu) |> 
@@ -2422,9 +2423,10 @@ contr <- draws|>
   mutate(FA = as.integer(FA)) |> 
     # Compute contrasts
     mutate(treat = if_else(TX == 1, "ctrl", "omega")) |> 
-    select(.draw:TI, treat, alpha) |> 
+    select(.draw:TI, treat, alpha, beta) |> 
+    inner_join(pre_int_means) |> 
     inner_join(fat_sum_compl) |> 
-  mutate(mu = exp(alpha * s + m)) |> 
+  mutate(mu = exp((alpha + beta * pre) * s + m)) |> 
   dplyr::select(.draw, fa, TI, treat, mu) |> 
     pivot_wider(names_from = treat, 
                 values_from = mu) |> 
@@ -2464,7 +2466,7 @@ obs_mean |>
 
   cols_label(
     fa_lab = "", 
-    TI = "Time-point", 
+    TI = "Time",
     Placebo = md("Placebo"), 
     n3 = md("Krill oil"), 
     Mu_Placebo = "Placebo", 
@@ -2481,12 +2483,20 @@ obs_mean |>
   ) |> 
 
     tab_spanner(
-    label = md("Contrast $[95\\%]$"), 
+    label = md("Contrast $[95\\%]$"),
     columns = c(7)
-  ) |> 
+  ) |>
+  # Without explicit widths, Typst output gets seven equal columns
+  cols_width(
+    1 ~ pct(17),
+    TI ~ pct(5),
+    c(Placebo, n3) ~ pct(11.5),
+    c(Mu_Placebo, Mu_n3) ~ pct(17),
+    contrast ~ pct(21)
+  ) |>
     tab_options(
     table.font.size = px(6)
-  ) 
+  )
   
 
 

@@ -2,8 +2,8 @@
 #
 # Shared by 01-data.qmd (thresholds for negligible effects),
 # 07-metsyn-inference.qmd and _methods-results.qmd (main burden score) and
-# 08-metsyn-sensitivity.qmd (cMetS and alternative scalings). @tbl-cmets-ref in
-# 08-metsyn-sensitivity.qmd is built from pop_ref.
+# 08-metsyn-sensitivity.qmd (cMetS and alternative scalings). @tbl-cmets-ref-tromso to -saminor2 in
+# 08-metsyn-sensitivity.qmd are built from pop_ref.
 #
 # Requires criteria_dat (R/data-prep.R) for the glucose reference.
 #

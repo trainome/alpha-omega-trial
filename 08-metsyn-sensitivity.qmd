@@ -123,7 +123,7 @@ mod_comp |>
 
 ```
 
-We first assess the effects of model structure on conclusions for each variable included in the joint models and the joint burden score. Overall, the models agree that the joint burden score is positively affected by treatment at both follow-up time-points albeit with more uncertainty in the univariate model (`r burden_pb("s18 (univariate)", "Supplementation")` vs. `r burden_pb("s13 (multivariate)", "Supplementation")`% and `r burden_pb("s18 (univariate)", "Combined")` vs. `r burden_pb("s13 (multivariate)", "Combined")`% probability of benefit in s18 vs. s13 at time *supplementation* and *combined*, respectively; @fig-s13-s18-contrasts). <!-- REVIEW: For the population-SD burden score the s18 95% CrI is not wider than in s13 (e.g. supplementation: s18 -0.13 to 0.02 vs. s13 -0.16 to 0.00); the lower P(benefit) in s18 reflects a smaller median effect (-0.05 vs. -0.08), not more uncertainty. Suggested: "Overall, the models agree that the joint burden score is positively affected by treatment at both follow-up time-points, albeit with smaller estimated effects and lower probability of benefit in the univariate model (...)" --> For single variables, most agree within 10-15 %-point on the benefit scale. However, triglycerides at the supplementation-only time-point and LDL at the combined time-point changed sign at the median of the posterior probability. Additionally, a somewhat large difference in magnitude between models was seen in HDL at the combined time-point.
+We first assess the effects of model structure on conclusions for each variable included in the joint models and the joint burden score. Overall, the models agree that the joint burden score is positively affected by treatment at both follow-up time-points albeit with smaller estimated effects in the univariate model (`r burden_pb("s18 (univariate)", "Supplementation")` vs. `r burden_pb("s13 (multivariate)", "Supplementation")`% and `r burden_pb("s18 (univariate)", "Combined")` vs. `r burden_pb("s13 (multivariate)", "Combined")`% probability of benefit in s18 vs. s13 at time *supplementation* and *combined*, respectively; @fig-s13-s18-contrasts). For single variables, most agree within 10-15 %-point on the benefit scale. However, triglycerides at the supplementation-only time-point and LDL at the combined time-point changed sign at the median of the posterior probability. Additionally, a somewhat large difference in magnitude between models was seen in HDL at the combined time-point.
 
 The two models differ in how residuals are related between variables and between time-points. In s13, residual correlations are estimated with a regularizing prior, while s18 assumes them to be zero. The correlations are still present in the residuals from s18. @fig-resid-cor shows the residual correlation patterns in both models with the between-timepoint within-variable shown on the diagonal, the between-variable correlations at *supplementation-only* and *combined* time-points in the lower and upper triangle, respectively. The correlation patterns are visible in both models but only the s13 model captures them to carry information forward to the posterior. The estimated correlations are weaker due to regularization in the model.
 
@@ -495,22 +495,24 @@ $$
 
 with MAP contributing 2/3 of the diastolic and 1/3 of the systolic contrast. Reference means cancel in the contrast, and contrasts are averaged over participants per sex and overall (`cmets_contrast()` in `R/helpers.R`).
 
-Population reference values were retrieved from the literature [@haverinen2021; @nilsen2021; @holmkvist2009;@michalsen2019] and used to construct population-based scales for each outcome. The standard deviations listed in @tbl-cmets-ref formed the basis of set of SD combinations allowing for rescaling the study-specific burden score and extend the analysis to the metabolic syndrome score proposed by Guseman et al. [@guseman2018]. Published fasting glucose estimates were not used, as they included participants with diabetes or were based on non-fasting samples; fasting glucose was instead scaled by the sex-specific baseline mean and SD in the trial sample. The burden score scaled by population SDs is the score used in the main analysis (shared references in `R/pop-ref.R`).
+Population reference values were retrieved from the literature [@haverinen2021; @nilsen2021; @holmkvist2009;@michalsen2019] and used to construct population-based scales for each outcome. The standard deviations listed in @tbl-cmets-ref-tromso, @tbl-cmets-ref-finhealth, @tbl-cmets-ref-saminor1 and @tbl-cmets-ref-saminor2 formed the basis of set of SD combinations allowing for rescaling the study-specific burden score and extend the analysis to the metabolic syndrome score proposed by Guseman et al. [@guseman2018]. Published fasting glucose estimates were not used, as they included participants with diabetes or were based on non-fasting samples; fasting glucose was instead scaled by the sex-specific baseline mean and SD in the trial sample. The burden score scaled by population SDs is the score used in the main analysis (shared references in `R/pop-ref.R`).
 
 
 ```{r}
-#| label: tbl-cmets-ref
+#| label: cmets-ref-data
 #| echo: false
-#| tbl-colwidths: [11, 31, 7, 8, 15, 6, 7, 7, 8]
-#| tbl-cap: 'Published reference values (mean, SD and n) for the components of the continuous metabolic syndrome score from Nordic populations (`pop_ref` in `R/pop-ref.R`). TG is summarised on the natural log scale (mmol/L); MAP, mean arterial pressure. Pooled, whether the value entered the pooled sex-specific reference (`cmets_ref_pop`). ^a^Derived from the reported arithmetic mean ($m$) and SD ($s$; men 1.5 (1.1), women 1.3 (0.7) mmol/L) assuming a log-normal distribution: $\sigma^2 = \ln(1 + s^2/m^2)$, $\mu = \ln m - \sigma^2/2$. ^b^Derived as DBP + (SBP - DBP)/3; the SD assumes a correlation of 0.8 between SBP and DBP (FinHealth 2017: SD 12.0--12.8 and 12.4--13.2 for men and women, respectively, for correlations of 0.6--0.8). ^c^Derived from the reported median ($M$) and interquartile range (IQR): glucose assuming a normal distribution (mean = $M$, SD = IQR/1.349) and TG assuming a log-normal distribution ($\mu = \ln M$, $\sigma = \text{asinh}(\text{IQR}/2M)/0.6745$).'
 
-# Study descriptions and age ranges (not part of pop_ref)
+# Published reference values, shown as one table per study
+# (@tbl-cmets-ref-tromso to @tbl-cmets-ref-saminor2). Study descriptions are
+# given in the table captions.
+
+# Age ranges (not part of pop_ref)
 pop_ref_studies <- tribble(
-  ~study,          ~label,           ~description,                                                                                                                      ~age_m,   ~age_f,
-  "Tromso7",       "Tromsø 7",       "Population-based, Tromsø (Norway) 2015--16, ages 40+, non-fasting blood samples [@nilsen2021]",                                  "40--69", "40--69",
-  "FinHealth2017", "FinHealth 2017", "Nationally representative health examination survey, Finland 2017, ages 25+, fasting plasma glucose after minimum 4 h fasting [@haverinen2021]", "25--93", "25--99",
-  "SAMINOR1",      "SAMINOR 1",      "Population-based, rural Northern Norway 2003--04, ages 40--79, non-Sami participants, non-fasting blood samples [@michalsen2019]", "40--79", "40--79",
-  "SAMINOR2",      "SAMINOR 2",      "Population-based, rural Northern Norway 2012--14, ages 40--79, non-Sami participants, non-fasting blood samples [@michalsen2019]", "40--79", "40--79"
+  ~study,          ~age_m,   ~age_f,
+  "Tromso7",       "40--69", "40--69",
+  "FinHealth2017", "25--93", "25--99",
+  "SAMINOR1",      "40--79", "40--79",
+  "SAMINOR2",      "40--79", "40--79"
 )
 
 analyte_labs <- c(waist = "Waist (cm)", HDL = "HDL (mmol/L)", TG = "ln TG (mmol/L)",
@@ -527,17 +529,20 @@ pop_ref_map <- pop_ref |>
          analyte = "map", use = use_sys & use_dias) |>
   select(study, use, sex, analyte, n, mean, sd)
 
-bind_rows(pop_ref, pop_ref_map) |>
+cmets_ref_tab <- bind_rows(pop_ref, pop_ref_map) |>
   left_join(pop_ref_studies, by = "study") |>
-  mutate(study = factor(study, levels = pop_ref_studies$study),
-         sex = factor(sex, levels = c("m", "f")),
+  mutate(sex = factor(sex, levels = c("m", "f")),
          analyte = factor(analyte, levels = names(analyte_labs))) |>
   arrange(study, sex, analyte) |>
   mutate(
+    # Footnote markers, lettered per table (see the captions): ^a^ for
+    # derived TG (and SAMINOR glucose), MAP ^a^ in Tromsø 7 (no TG) and ^b^
+    # in the other studies
     note = case_when(
+      analyte == "map" & study == "Tromso7" ~ "^a^",
       analyte == "map" ~ "^b^",
       study == "FinHealth2017" & analyte == "TG" ~ "^a^",
-      study %in% c("SAMINOR1", "SAMINOR2") & analyte %in% c("TG", "glucose") ~ "^c^",
+      study %in% c("SAMINOR1", "SAMINOR2") & analyte %in% c("TG", "glucose") ~ "^a^",
       .default = ""
     ),
     age = if_else(sex == "m", age_m, age_f),
@@ -549,15 +554,51 @@ bind_rows(pop_ref, pop_ref_map) |>
     digits = case_when(analyte_key %in% c("HDL", "glucose") ~ 2L,
                        analyte_key == "TG" ~ 3L, .default = 1L),
     across(c(mean, sd), \(x) sprintf("%.*f", digits, x)),
-    # Study and description on the first row of each study only
-    first = !duplicated(study),
-    label = if_else(first, label, ""),
-    description = if_else(first, description, "")
-  ) |>
-  select(label, description, sex, age, analyte, n, mean, sd, pooled) |>
-  knitr::kable(col.names = c("Study", "Description", "Sex", "Age (y)", "Analyte",
-                             "n", "Mean", "SD", "Pooled"),
-               align = "lllllrrrl")
+    # Sex and age on the first row of each sex only
+    first = !duplicated(paste(study, sex)),
+    sex = if_else(first, sex, ""),
+    age = if_else(first, age, "")
+  )
+
+cmets_ref_kable <- function(s) {
+  cmets_ref_tab |>
+    filter(study == s) |>
+    select(sex, age, analyte, n, mean, sd, pooled) |>
+    knitr::kable(col.names = c("Sex", "Age (y)", "Analyte", "n", "Mean", "SD", "Pooled"),
+                 align = "lllrrrl")
+}
+```
+
+```{r}
+#| label: tbl-cmets-ref-tromso
+#| echo: false
+#| tbl-cap: 'Published reference values (mean, SD and n) for the components of the continuous metabolic syndrome score in Tromsø 7, a population-based study in Tromsø (Norway) 2015--16, ages 40+, non-fasting blood samples [@nilsen2021] (`pop_ref` in `R/pop-ref.R`). MAP, mean arterial pressure. Pooled, whether the value entered the pooled sex-specific reference (`cmets_ref_pop`). ^a^Derived as DBP + (SBP - DBP)/3; the SD assumes a correlation of 0.8 between SBP and DBP.'
+
+cmets_ref_kable("Tromso7")
+```
+
+```{r}
+#| label: tbl-cmets-ref-finhealth
+#| echo: false
+#| tbl-cap: 'Published reference values (mean, SD and n) for the components of the continuous metabolic syndrome score in FinHealth 2017, a nationally representative health examination survey, Finland 2017, ages 25+, fasting plasma glucose after a minimum 4 h fast [@haverinen2021] (`pop_ref` in `R/pop-ref.R`). TG is summarised on the natural log scale (mmol/L); MAP, mean arterial pressure. Pooled, whether the value entered the pooled sex-specific reference (`cmets_ref_pop`). ^a^Derived from the reported arithmetic mean ($m$) and SD ($s$; men 1.5 (1.1), women 1.3 (0.7) mmol/L) assuming a log-normal distribution: $\sigma^2 = \ln(1 + s^2/m^2)$, $\mu = \ln m - \sigma^2/2$. ^b^Derived as DBP + (SBP - DBP)/3; the SD assumes a correlation of 0.8 between SBP and DBP (SD 12.0--12.8 and 12.4--13.2 for men and women, respectively, for correlations of 0.6--0.8).'
+
+cmets_ref_kable("FinHealth2017")
+```
+
+```{r}
+#| label: tbl-cmets-ref-saminor1
+#| echo: false
+#| tbl-cap: 'Published reference values (mean, SD and n) for the components of the continuous metabolic syndrome score in SAMINOR 1, a population-based study in rural Northern Norway 2003--04, ages 40--79, non-Sami participants, non-fasting blood samples [@michalsen2019] (`pop_ref` in `R/pop-ref.R`). TG is summarised on the natural log scale (mmol/L); MAP, mean arterial pressure. Pooled, whether the value entered the pooled sex-specific reference (`cmets_ref_pop`). ^a^Derived from the reported median ($M$) and interquartile range (IQR): glucose assuming a normal distribution (mean = $M$, SD = IQR/1.349) and TG assuming a log-normal distribution ($\mu = \ln M$, $\sigma = \text{asinh}(\text{IQR}/2M)/0.6745$). ^b^Derived as DBP + (SBP - DBP)/3; the SD assumes a correlation of 0.8 between SBP and DBP.'
+
+cmets_ref_kable("SAMINOR1")
+```
+
+```{r}
+#| label: tbl-cmets-ref-saminor2
+#| echo: false
+#| tbl-cap: 'Published reference values (mean, SD and n) for the components of the continuous metabolic syndrome score in SAMINOR 2, a population-based study in rural Northern Norway 2012--14, ages 40--79, non-Sami participants, non-fasting blood samples [@michalsen2019] (`pop_ref` in `R/pop-ref.R`). Abbreviations, Pooled and footnotes as in @tbl-cmets-ref-saminor1.'
+
+cmets_ref_kable("SAMINOR2")
 ```
 
 ```{r}
@@ -645,7 +686,7 @@ saminor_tg <- tribble(
 
 # Population reference values (pop_ref, MAP via map_approx()) and the pooled
 # sex-specific references (cmets_ref_pop) are shared with the main analysis
-# and defined in R/pop-ref.R (@tbl-cmets-ref is built from pop_ref). Fasting
+# and defined in R/pop-ref.R (@tbl-cmets-ref-tromso to @tbl-cmets-ref-saminor2 are built from pop_ref). Fasting
 # glucose uses the trial's own sex-specific baseline mean and SD, as the
 # published estimates were not comparable (participants with diabetes,
 # non-fasting samples). The FinHealth 2017 blood pressure sample is not
@@ -697,7 +738,7 @@ score_contrasts <- bind_rows(
 
 ```{r}
 #| label: tbl-cmets-contrast
-#| tbl-cap: "Treatment contrast (Krill oil - Placebo) on metabolic syndrome scores. Burden score: mean of the z-scores of waist circumference, HDL (reversed sign), ln(TG), glucose and blood pressure (average of systolic and diastolic z-scores), scaled by the marginal SD (model scale), the sex-specific baseline SD in the trial sample, or sex-specific population SDs (@tbl-cmets-ref; the main analysis score). cMetS: sum of the z-scores of the same criteria with blood pressure as mean arterial pressure [@guseman2018]. MetS severity Z-score: sex-specific equations for non-Hispanic White adults [@gurka2014]. Sex-specific contrasts differ only through sex-specific scaling or coefficients; the average is weighted by the proportion of men and women in the sample. Negative values indicate a less severe metabolic profile in the krill oil group."
+#| tbl-cap: "Treatment contrast (Krill oil - Placebo) on metabolic syndrome scores average over Sex. Burden score: mean of the z-scores of waist circumference, HDL (reversed sign), ln(TG), glucose and blood pressure (average of systolic and diastolic z-scores), scaled by the marginal SD (model scale), the sex-specific baseline SD in the trial sample, or sex-specific population SDs (@tbl-cmets-ref-tromso to @tbl-cmets-ref-saminor2; the main analysis score). cMetS: sum of the z-scores of the same criteria with blood pressure as mean arterial pressure [@guseman2018]. MetS severity Z-score: sex-specific equations for non-Hispanic White adults [@gurka2014]. Sex-specific contrasts differ only through sex-specific scaling or coefficients; the average is weighted by the proportion of men and women in the sample. Negative values indicate a less severe metabolic profile in the krill oil group."
 #| echo: false
 
 score_contrasts |>
@@ -710,6 +751,7 @@ score_contrasts |>
          sex = factor(recode(sex, m = "Men", f = "Women", average = "Average"),
                       levels = c("Average", "Men", "Women")),
          score = factor(score, levels = unique(score_contrasts$score))) |>
+  filter(sex == "Average") |> 
   arrange(score, desc(time), sex) |>
   gt(groupname_col = "score") |>
   fmt_auto() |>
@@ -720,6 +762,37 @@ score_contrasts |>
              upr = "PI 97.5%",
              p_benefit = "P(Benefit)")
 ```
+
+
+```{r}
+#| label: tbl-cmets-contrast-sex
+#| tbl-cap: "Treatment contrast (Krill oil - Placebo) on metabolic syndrome scores in male and females. Burden score: mean of the z-scores of waist circumference, HDL (reversed sign), ln(TG), glucose and blood pressure (average of systolic and diastolic z-scores), scaled by the marginal SD (model scale), the sex-specific baseline SD in the trial sample, or sex-specific population SDs (@tbl-cmets-ref-tromso to @tbl-cmets-ref-saminor2; the main analysis score). cMetS: sum of the z-scores of the same criteria with blood pressure as mean arterial pressure [@guseman2018]. MetS severity Z-score: sex-specific equations for non-Hispanic White adults [@gurka2014]. Sex-specific contrasts differ only through sex-specific scaling or coefficients; the average is weighted by the proportion of men and women in the sample. Negative values indicate a less severe metabolic profile in the krill oil group."
+#| echo: false
+
+score_contrasts |>
+  summarise(.by = c(score, sex, time),
+            med = median(contrast),
+            lwr = quantile(contrast, 0.025),
+            upr = quantile(contrast, 0.975),
+            p_benefit = mean(contrast < 0)) |>
+  mutate(time = if_else(time == "T2", "Supplementation-only", "Combined"),
+         sex = factor(recode(sex, m = "Men", f = "Women", average = "Average"),
+                      levels = c("Average", "Men", "Women")),
+         score = factor(score, levels = unique(score_contrasts$score))) |>
+  filter(sex != "Average") |> 
+  arrange(score, desc(time), sex) |>
+  gt(groupname_col = "score") |>
+  fmt_auto() |>
+  cols_label(sex = "Sex",
+             time = "Follow-up",
+             med = "Median",
+             lwr = "PI 2.5%",
+             upr = "PI 97.5%",
+             p_benefit = "P(Benefit)")
+```
+
+
+
 
 
 ### Associations of continuous Metabolic syndrome scores to related scores

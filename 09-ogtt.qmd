@@ -641,7 +641,6 @@ Model `mo3` (`models/mo3.stan`) use the same mechanism for data imputation as us
 $$
 \begin{align}
 y_i^\text{all} &\sim \operatorname{Normal}(\mu_i, \sigma) \\
-
 y_i^{\text{all}} &=
 \begin{cases} 
 y_i^{\text{obs}} & \text{if observed}  \\

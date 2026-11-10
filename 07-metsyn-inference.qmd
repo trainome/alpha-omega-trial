@@ -1643,39 +1643,78 @@ mod_burden |>
 ```
 
 
-The moderation parameters of all outcomes and the burden score are summarised in @tbl-moderation-coef.
+The moderation parameters of all outcomes and the burden score are summarised in @tbl-moderation-coef-s19, @tbl-moderation-coef-s20, @tbl-moderation-coef-s21, and @tbl-moderation-coef-s22.
 
 
 ```{r}
-#| label: tbl-moderation-coef
-#| tbl-cap: "Moderation parameters, the change in the treatment effect (krill oil - placebo) per SD of the moderator, in models s19 (each outcome's own baseline value, $\\delta_{k,t}$), s20 (baseline metabolic burden score, $\\gamma_{k,t}$), s21 (baseline relative fat mass, $\\gamma_{k,t}$) and s22 (baseline omega-3 index, $\\gamma_{k,t}$), after the supplementation and combined periods. The burden score parameter is combined per posterior draw from the parameters of the diagnostic criteria using the same population SD re-weighting as the main burden score (population SD units). Values are posterior medians with 50% and 95% CrI on the standardised scale (outcome SD units; population SD units for the burden score). P(benefit) is the posterior probability that the treatment effect at +1 SD of the moderator is more beneficial than at the moderator mean (higher values for HDL and adiponectin, lower values otherwise)."
+#| label: moderation-coef-tab
+#| echo: false
 
+# Moderation parameters, one table per pair of models
+# (@tbl-moderation-coef-s19-s20 and @tbl-moderation-coef-s21-s22)
 score_levels <- c(labels$label[match(levels(pred_plot_dat$analyte), labels$analyte)],
                   "Metabolic burden score")
 
-mod_coef |>
-  left_join(labels, by = "type") |>
-  mutate(
-    label = factor(replace_na(label, "Metabolic burden score"), levels = score_levels),
-    model = factor(model,
-                   levels = c("s19", "s20", "s21", "s22"),
-                   labels = c("s19: Own baseline", "s20: Metabolic burden",
-                              "s21: Relative fat mass", "s22: Omega-3 index")),
-    est = sprintf("%.2f", med),
-    ci50 = sprintf("%.2f, %.2f", lwr50, upr50),
-    ci95 = sprintf("%.2f, %.2f", lwr95, upr95),
-    prob = fmt_prob(benefit)) |>
-  select(model, label, time, est, ci50, ci95, prob) |>
-  pivot_wider(names_from = time, values_from = c(est, ci50, ci95, prob)) |>
-  arrange(model, label) |>
-  select(model, label, est_1, ci50_1, ci95_1, prob_1, est_2, ci50_2, ci95_2, prob_2) |>
-  group_by(model) |>
-  gt() |>
-  tab_spanner(label = "Supplementation", columns = c(est_1, ci50_1, ci95_1, prob_1)) |>
-  tab_spanner(label = "Combined", columns = c(est_2, ci50_2, ci95_2, prob_2)) |>
-  cols_label(
-    label = "",
-    est_1 = "Median", ci50_1 = "50% CrI", ci95_1 = "95% CrI", prob_1 = "P(benefit)",
-    est_2 = "Median", ci50_2 = "50% CrI", ci95_2 = "95% CrI", prob_2 = "P(benefit)")
+mod_coef_gt <- function(models) {
+  mod_coef |>
+    filter(model %in% models) |>
+    left_join(labels, by = "type") |>
+    mutate(
+      label = factor(replace_na(label, "Metabolic burden score"), levels = score_levels),
+      model = factor(model,
+                     levels = c("s19", "s20", "s21", "s22"),
+                     labels = c("s19: Own baseline", "s20: Metabolic burden",
+                                "s21: Relative fat mass", "s22: Omega-3 index")),
+      est = sprintf("%.2f", med),
+      ci50 = sprintf("%.2f, %.2f", lwr50, upr50),
+      ci95 = sprintf("%.2f, %.2f", lwr95, upr95),
+      prob = fmt_prob(benefit)) |>
+    select(model, label, time, est, ci50, ci95, prob) |>
+    pivot_wider(names_from = time, values_from = c(est, ci50, ci95, prob)) |>
+    arrange(model, label) |>
+    select(model, label, est_1, ci50_1, ci95_1, prob_1, est_2, ci50_2, ci95_2, prob_2) |>
+    group_by(model) |>
+    gt() |>
+    tab_spanner(label = "Supplementation", columns = c(est_1, ci50_1, ci95_1, prob_1)) |>
+    tab_spanner(label = "Combined", columns = c(est_2, ci50_2, ci95_2, prob_2)) |>
+    cols_label(
+      label = "",
+      est_1 = "Median", ci50_1 = "50% CrI", ci95_1 = "95% CrI", prob_1 = "P(benefit)",
+      est_2 = "Median", ci50_2 = "50% CrI", ci95_2 = "95% CrI", prob_2 = "P(benefit)")
+}
+```
+
+
+```{r}
+#| label: tbl-moderation-coef-s19
+#| tbl-cap: "Moderation parameters, the change in the treatment effect (krill oil - placebo) per SD of the moderator, in model s19 (each outcome's own baseline value, $\\delta_{k,t}$), after the supplementation and combined periods. The burden score parameter is combined per posterior draw from the parameters of the diagnostic criteria using the same population SD re-weighting as the main burden score (population SD units). Values are posterior medians with 50% and 95% CrI on the standardised scale (outcome SD units; population SD units for the burden score). P(benefit) is the posterior probability that the treatment effect at +1 SD of the moderator is more beneficial than at the moderator mean (higher values for HDL and adiponectin, lower values otherwise)."
+
+mod_coef_gt(c("s19"))
+```
+
+```{r}
+#| label: tbl-moderation-coef-s20
+#| tbl-cap: "Moderation parameters, the change in the treatment effect (krill oil - placebo) per SD of the moderator, in model s20 (baseline metabolic burden score, $\\gamma_{k,t}$), after the supplementation and combined periods. Values, the burden score parameter and P(benefit) as in @tbl-moderation-coef-s19."
+
+mod_coef_gt(c("s20"))
+```
+
+
+
+```{r}
+#| label: tbl-moderation-coef-s21
+#| tbl-cap: "Moderation parameters, the change in the treatment effect (krill oil - placebo) per SD of the moderator, in model s21 (baseline relative fat mass, $\\gamma_{k,t}$), after the supplementation and combined periods. Values, the burden score parameter and P(benefit) as in @tbl-moderation-coef-s19."
+
+mod_coef_gt(c("s21"))
+```
+
+
+
+
+```{r}
+#| label: tbl-moderation-coef-s22
+#| tbl-cap: "Moderation parameters, the change in the treatment effect (krill oil - placebo) per SD of the moderator, in model s22 (baseline omega-3 index, $\\gamma_{k,t}$), after the supplementation and combined periods. Values, the burden score parameter and P(benefit) as in @tbl-moderation-coef-s19."
+
+mod_coef_gt(c("s22"))
 ```
 

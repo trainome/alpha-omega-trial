@@ -16,6 +16,8 @@
 #let cover-stripe-color = rgb("#b5cfb6")
 // Accent colour for headings, the table of contents and links
 #let accent-color = rgb("#056731")
+// Figure and table captions: a darker shade of the accent colour
+#let caption-color = rgb("#033d1d")
 
 #show: doc => {
 $if(by-author)$
@@ -96,6 +98,8 @@ $if(margin-geometry)$
 $endif$
   )(doc)
 }
+
+#show figure.caption: set text(fill: caption-color)
 
 $if(margin-geometry)$
 // Configure marginalia page geometry for book context

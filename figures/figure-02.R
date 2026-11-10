@@ -25,7 +25,7 @@ training_volume_fig <- traindat |>
     s = sd(rel_training)
   ) |>
   ggplot(aes(session, m)) +
-  geom_smooth(color = colscale[1]) +
+  geom_smooth(color = colscale[10]) +
   alpha_theme() +
   labs(x = "Session", y = "Change in training volume<br>(% from session 1)") +
   scale_y_continuous(limits = c(-5, 50), expand = c(0, 0)) +
