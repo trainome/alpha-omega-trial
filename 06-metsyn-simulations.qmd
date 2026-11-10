@@ -64,7 +64,7 @@ Simulating the full data set leads to synthetic data patterns presented in @fig-
 #| label: fig-var-cor-synth
 #| fig-cap: "Residual variation and correlation pattern within and between variables in the synthetic data example."
 #| eval: true
-#| fig-height: 4.5
+#| fig-height: 6
 #| fig-width: 5.9
 
 # d, a data set with participant, treat, sex, 

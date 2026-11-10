@@ -105,7 +105,7 @@ Files used to build this supplementary document, the figures and the methods and
 | **Resources** | |
 | `resources/bibliography.bib` | References. |
 | `resources/typst-show.typ` | Typst template partial adding authors and affiliations to the PDF. |
-| `resources/vancouver.csl` | Vancouver citation style for the Word version of the paper (`99-methods-results.qmd`); the book uses Typst's built-in Vancouver style. |
+| `resources/vancouver.csl` | Vancouver citation style for the book and the Word version of the paper. |
 
 : Files used to build the supplementary document, figures and the methods and results section of the paper. {#tbl-project-files}
 

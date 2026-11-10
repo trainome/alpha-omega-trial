@@ -597,12 +597,19 @@ cor_plot <- function(d) {
     ggplot(aes(xterm, term)) +
 
     geom_tile(aes(fill = c)) +
-    geom_text(aes(label = cor.label), size = 3) +
+    # Tiles are too small for printed values at text width; fill shows the
+    # correlation
     scale_fill_gradient2(low = colscale[1], mid = "white", high = colscale[2]) +
 
     facet_wrap(~time, ncol = 3) +
     alpha_theme() +
-    theme(axis.title = element_blank()) +
+    theme(
+      # alpha_theme() sets axis.title.x/y, which override axis.title
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text = element_text(size = 6),
+      axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+    ) +
     labs(
       fill = "Correlation (residual)",
       subtitle = "Correlation (residuals) between analytes"

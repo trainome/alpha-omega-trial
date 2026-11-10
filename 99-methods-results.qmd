@@ -3,7 +3,6 @@ title: "Methods and Results"
 format: docx
 fig-dpi: 300
 bibliography: resources/bibliography.bib
-csl: resources/vancouver.csl
 editor_options: 
   chunk_output_type: console
 ---

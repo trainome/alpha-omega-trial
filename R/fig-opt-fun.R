@@ -1,5 +1,10 @@
 ## Plotting functions and settings #######################
 
+# cowplot measures text on a separate null device. With the default device,
+# ggtext labels lose spaces when figures are drawn with ragg (as in the book);
+# measure with ragg as well.
+cowplot::set_null_device("agg")
+
 # Color scale
 colscale <- c(
   "#F0E442",

@@ -543,6 +543,7 @@ draws.m2 |>
                fill = time)) + 
     geom_density(alpha = 0.2) +
     facet_wrap(~ fa, scales = "free") +
+    scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
     
     labs(x = "Fold-difference (Krill oil vs. Placebo)", 
          y = "Posterior density", 
@@ -1157,6 +1158,7 @@ draws.m3 |>
                fill = time)) + 
     geom_density(alpha = 0.2) +
     facet_wrap(~ fa, scales = "free") +
+    scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
     
     labs(x = "Fold-difference (Krill oil vs. Placebo)", 
          y = "Posterior density", 
@@ -1373,6 +1375,7 @@ bind_rows(
     geom_line(alpha = 0.8, 
               stat = "density") +
     facet_wrap(~ fa + time, scales = "free") +
+    scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
     
   scale_linetype_manual(values = c(2, 1)) +
   
@@ -1523,7 +1526,7 @@ sum.m6 <- fit.m6p$summary(.cores = 12)
 
 
 # Plot (most) problematic parameters
-sum_plot <- function(sum, fit) {
+sum_plot <- function(sum, fit, title) {
   
   vars <- sum |> 
     filter(grepl(paste(
@@ -1551,18 +1554,19 @@ sum_plot <- function(sum, fit) {
                 color = NULL, 
                
                 size = NULL), 
-                show.legend = FALSE) +
+                size = 2.2, show.legend = FALSE) +
   
   labs(x = "(Bulk) effective sample size", 
        y = "R-hat", 
        color = "Parameter type", 
        size = "(Tail) effective sample size") +
+  scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
   scale_color_manual(values = colscale) +
-  labs(title = "A") +
+  labs(title = title) +
     alpha_theme() +
     theme(legend.position = "bottom") +
     guides(color=guide_legend(nrow=4, byrow=TRUE), 
-           size = guide_legend(nrow=4, byrow=TRUE))
+           size = "none") # size scales differ between models and would not merge
 
 
 
@@ -1594,13 +1598,15 @@ sum_plot <- function(sum, fit) {
 }
 
 
-p1 <- sum_plot(sum.m4, fit.m4p)
-p2 <- sum_plot(sum.m5, fit.m5p)
-p3 <- sum_plot(sum.m6, fit.m6p)
+p1 <- sum_plot(sum.m4, fit.m4p, "Model m4")
+p2 <- sum_plot(sum.m5, fit.m5p, "Model m5")
+p3 <- sum_plot(sum.m6, fit.m6p, "Model m6")
 
-
-p1 + plot_annotation(title = "Model m4") | p2 + plot_annotation(title = "Model m5") |
-  p3 + plot_annotation(title = "Model m6")
+# One shared set of legends below the three models (side-by-side legends
+# overflowed the page width)
+(p1 | p2 | p3) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 
 
 
@@ -1808,7 +1814,7 @@ fa_labels <- data.frame(
 #| eval: true
 #| label: fig-fa-infer
 #| fig-cap: "Adjusted group means and treatment contrasts of fatty acids concentrations and the omega-3 index in whole blood. Points in treatment-group means are posterior medians (observed means at T1) and error bars represent 95% percentile intervals, posterior contrasts are displayed as the full posterior distribution ratio between krill oil and placebo estimates at time-point T2 and T4 (1 indicating equivalent concentrations)."
-#| fig-width: 3.3
+#| fig-width: 5.9
 #| fig-height: 8.5
 
 
@@ -1947,7 +1953,8 @@ p1b <- sumdat |>
   scale_fill_manual(values = colscale) +
   
    facet_wrap(~ fa_lab_unit, ncol = 1, scales = "free_y") +
-  
+   scale_y_continuous(breaks = scales::breaks_pretty(n = 3)) +
+
   labs(subtitle = "Fatty acid concentration<br>and omega-3 index", 
        x = "Time point", 
        fill = "Treatment", 
@@ -2027,7 +2034,8 @@ p2 <- draws|>
               linewidth = 1.1,
               aes(lty = time)) +
     facet_wrap(~ fa_lab_unit, scales = "free", ncol = 1) +
-    
+    scale_x_continuous(breaks = scales::breaks_pretty(n = 4)) +
+
   scale_linetype_manual(values = c(6, 1)) +
   
     labs(x = "Fold-difference<br>(Krill oil vs. Placebo)", 

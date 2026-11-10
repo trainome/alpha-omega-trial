@@ -625,7 +625,8 @@ ggplot(aes(min_seq2, m, color = treat, fill = treat, group = paste(time, treat))
   alpha_theme() +
   labs(x = "Minute", y = "Blood glucose (mmol L<sup>-1</sup>)",
        color = "Treatment", fill = "Treatment") +
-        facet_wrap(~ time) + 
+        facet_wrap(~ time) +
+        scale_x_continuous(breaks = c(0, 60, 120)) +
   scale_color_manual(values = colscale[c(2, 4)]) + 
   theme(axis.title.y = ggtext::element_markdown())
 
@@ -826,6 +827,7 @@ ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
             alpha = 0.25, linewidth = 0.3) +
   geom_line(linewidth = 1) +
   facet_wrap(~ time) +
+  scale_x_continuous(breaks = c(0, 60, 120)) +
   alpha_theme() +
   scale_color_manual(values = colscale) +
   scale_fill_manual(values = colscale) +
@@ -949,6 +951,7 @@ p1 <- ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
               alpha = 0.2, color = NA) +
   geom_line(linewidth = 1) +
   facet_wrap(~ time) +
+  scale_x_continuous(breaks = c(0, 60, 120)) +
   alpha_theme() +
   scale_color_manual(values = colscale[c(2, 4)]) +
   scale_fill_manual(values = colscale[c(2, 4)]) +
@@ -973,6 +976,7 @@ p2 <- ggplot(filter(pop_curve, treat %in% unique(filter(part_key, p %in% ex_p)$t
              aes(min, glucose, color = as.factor(P)),
              size = 2) +
   facet_wrap(~ time) +
+  scale_x_continuous(breaks = c(0, 60, 120)) +
   alpha_theme() +
   labs(x = "Minute",
        y = "Blood Glucose (mmol L<sup>-1</sup>)",
@@ -1432,6 +1436,7 @@ ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.2, color = NA) +
   geom_line(linewidth = 1) +
   facet_wrap(~ time) +
+  scale_x_continuous(breaks = c(0, 60, 120)) +
   alpha_theme() +
   scale_color_manual(values = colscale) +
   scale_fill_manual(values = colscale) +
@@ -1584,6 +1589,7 @@ ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
             alpha = 0.25, linewidth = 0.3) +
   geom_line(linewidth = 1) +
   facet_wrap(~ time) +
+  scale_x_continuous(breaks = c(0, 60, 120)) +
   alpha_theme() +
   scale_color_manual(values = colscale) +
   scale_fill_manual(values = colscale) +
@@ -1703,6 +1709,7 @@ p1 <- ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
               alpha = 0.2, color = NA) +
   geom_line(linewidth = 1) +
   facet_wrap(~ time) +
+  scale_x_continuous(breaks = c(0, 60, 120)) +
   alpha_theme() +
   scale_color_manual(values = colscale[c(2, 4)]) +
   scale_fill_manual(values = colscale[c(2, 4)]) +
@@ -1727,6 +1734,7 @@ p2 <- ggplot(filter(pop_curve, treat %in% unique(filter(part_key, p %in% ex_p)$t
              aes(min, glucose, color = as.factor(P)),
              size = 2) +
   facet_wrap(~ time) +
+  scale_x_continuous(breaks = c(0, 60, 120)) +
   alpha_theme() +
   labs(x = "Minute",
        y = "Blood Glucose (mmol L<sup>-1</sup>)",
@@ -2049,6 +2057,7 @@ ggplot(pop_curve, aes(min_seq, m, color = treat, fill = treat)) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.2, color = NA) +
   geom_line(linewidth = 1) +
   facet_wrap(~ time) +
+  scale_x_continuous(breaks = c(0, 60, 120)) +
   alpha_theme() +
   scale_color_manual(values = colscale) +
   scale_fill_manual(values = colscale) +

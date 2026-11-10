@@ -5,8 +5,8 @@ project:
     - "!archive/"
 
 book:
-  output-file: "supplementary-data"
-  title: "Krill oil supplementation with and without resistance training lowers the burden of the metabolic syndrome but does not affect glucose tolerance in sedentary adults: a randomized controlled trial"
+  output-file: "Supplementary-file-S1"
+  title: "Krill oil does not improve glucose tolerance during resistance training but slightly lowers metabolic syndrome burden in sedentary adults: a double-blind, randomized controlled trial"
   # Each affiliation is defined (with an `id`) the first time it is used and
   # referred to with `ref` for later authors. Affiliations are numbered in
   # order of first appearance.
@@ -89,7 +89,7 @@ knitr:
     dev: ragg_png
 
 bibliography: resources/bibliography.bib
-csl: vancouver
+csl: resources/vancouver.csl
 format:
   typst:
     # Raster figures: the default (svg) embeds every drawn element, and

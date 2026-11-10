@@ -949,7 +949,7 @@ diag_criteria_fig <- est_13 |>
 ```{r}
 #| label: fig-metsyn-inference
 #| fig-cap: "A, Observed group means (open symbols, all available observations; geometric means for triglycerides) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CrI) for each outcome in the metabolic syndrome score on its natural scale. Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (krill oil - placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively. B, posterior distribution of the burden score contrast (krill oil - placebo, population SD units) at post-supplementation and after the combined period. P(benefit) indicates the percentage of the posterior associated with any benefit for krill oil. C, the percentage of participants meeting the diagnostic criteria in each group; error bars represent the uncertainty associated with missing-value imputation (95th and 50th percentile intervals). D, treatment contrast for the occurrence of metabolic syndrome diagnosis, baseline-adjusted differences between groups (log odds ratio with 95% confidence interval pooled over imputations using Rubin's rules) at post-supplementation and after the combined treatment period."
-#| fig-width: 3.55
+#| fig-width: 5.9
 #| fig-height: 7.1
 
 
@@ -987,7 +987,7 @@ ggsave(
 ```{r}
 #| label: fig-metsyn-related
 #| fig-cap: "Observed group means (open symbols, all available observations; geometric means for HOMA2-IR and HbA1c) and model-based adjusted group means (filled symbols, posterior median with 50% and 95% CrI) for each outcome on its natural scale. Adjusted means after supplementation and combined periods are model predictions conditional on the overall mean pre-intervention value and averaged over sex. The right panels show posterior distributions of treatment effects (krill oil - placebo) for each measurement. Baseline represents pre-intervention values (observed); Supplementation and Combined show estimates and observed means after the supplementation period and after the Supplementation + resistance-training period, respectively."
-#| fig-width: 3.55
+#| fig-width: 5.9
 #| fig-height: 6.14
 
 

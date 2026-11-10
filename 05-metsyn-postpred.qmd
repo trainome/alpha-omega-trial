@@ -342,6 +342,9 @@ ppcheck_dist <- function(yreps, obsdata, label = FALSE) {
   facet_grid(time + treat ~ type, 
              labeller = label_both, 
              scales = "free") +
+  # Narrow columns: few breaks, drop labels that would overlap
+  scale_x_continuous(breaks = scales::breaks_pretty(n = 3),
+                     guide = guide_axis(check.overlap = TRUE)) +
   
   geom_line(data = obsdata, 
             aes(y, group = NULL, color = sex), 
@@ -416,14 +419,17 @@ ppcheck_stat <- function(yreps, obsdata,
     ggplot(aes(s, color = as.factor(.data[[fill_color]]))) +
 
        geom_line(stat = "density") +
-    facet_grid(type ~ time, labeller = label_both, scales = "free") +
+    facet_grid(type ~ time, scales = "free",
+               labeller = labeller(type = label_value, time = label_both)) +
+    scale_x_continuous(breaks = scales::breaks_pretty(n = 3),
+                       guide = guide_axis(check.overlap = TRUE)) +
     alpha_theme(yaxis = FALSE) +
     geom_vline(data = sumstat,
                aes(xintercept = s, color = as.factor(.data[[fill_color]]))) +
     scale_color_manual(values = colscale) +
     scale_fill_manual(values = colscale) +
     labs(x = "Test statistic",
-         color = as.factor(fill_color), fill = as.factor(fill_color),
+         color = fill_color, fill = fill_color,
          subtitle = "Estimates (T(y^rep^) and T(y^obs^))",
          caption = caption) +
     theme(axis.title.y = element_blank(),
@@ -435,11 +441,14 @@ ppcheck_stat <- function(yreps, obsdata,
     mutate(t_diff = srep - s) |>
     ggplot(aes(t_diff, color = as.factor(.data[[fill_color]]))) +
     geom_line(stat = "density") +
-    facet_grid(type ~ time, labeller = label_both, scales = "free") +
+    facet_grid(type ~ time, scales = "free",
+               labeller = labeller(type = label_value, time = label_both)) +
+    scale_x_continuous(breaks = scales::breaks_pretty(n = 3),
+                       guide = guide_axis(check.overlap = TRUE)) +
     alpha_theme(yaxis = FALSE) +
     scale_color_manual(values = colscale) +
     scale_fill_manual(values = colscale) +
-    labs(x = "Contrast", fill = fill_color,
+    labs(x = "Contrast", color = fill_color, fill = fill_color,
          subtitle = "Contrast (T(y^rep^) - T(y^obs^))",
          caption = caption) +
     theme(axis.title.y = element_blank(),
@@ -623,9 +632,12 @@ bind_rows(
   mutate(model = factor(model, levels = c("s7", "s9", "s8", "s10"))) |> 
   ggplot(aes(pval, model, shape = direction, color = as.factor(type))) + geom_point(size = 4) +
   alpha_theme() + scale_color_manual(values = colscale) + 
-  labs(x = "p-value", y = "Model", 
-       color = "Type", 
-       shape = "Direction")
+  labs(x = "p-value", y = "Model",
+       color = "Type",
+       shape = "Direction") +
+  # Legends below the panel; stacked at the side they overflow the figure
+  theme(legend.position = "bottom", legend.box = "vertical") +
+  guides(color = guide_legend(nrow = 2))
   
 
 
@@ -855,7 +867,8 @@ yrep.s12 <- fit.s12.post$draws("y_rep", format = "df")
 #| fig-width: 5.9
 
 ppcheck_dist(yrep.s11, dobs) + labs(subtitle = "Model s11") + 
-  coord_cartesian(xlim = c(-5,5))
+  coord_cartesian(xlim = c(-5,5)) +
+  scale_x_continuous(breaks = c(-4, 0, 4))
 ```
 
 
@@ -867,7 +880,8 @@ ppcheck_dist(yrep.s11, dobs) + labs(subtitle = "Model s11") +
 #| fig-width: 5.9
 
 ppcheck_dist(yrep.s12, dobs) + labs(subtitle = "Model s12") + 
-  coord_cartesian(xlim = c(-5,5))
+  coord_cartesian(xlim = c(-5,5)) +
+  scale_x_continuous(breaks = c(-4, 0, 4))
 ```
 
 
@@ -1057,7 +1071,8 @@ yrep.s13 <- fit.s13.post$draws("y_rep", format = "df")
 
 
 ppcheck_dist(yrep.s13, dobs) + labs(subtitle = "Model s13") + 
-  coord_cartesian(xlim = c(-5,5))
+  coord_cartesian(xlim = c(-5,5)) +
+  scale_x_continuous(breaks = c(-4, 0, 4))
 
 
 ```
@@ -1098,7 +1113,8 @@ yrep.s18 <- fit.s18.post$draws("y_rep", format = "df")
 
 
 ppcheck_dist(yrep.s18, dobs) + labs(subtitle = "Model s18") + 
-  coord_cartesian(xlim = c(-5,5))
+  coord_cartesian(xlim = c(-5,5)) +
+  scale_x_continuous(breaks = c(-4, 0, 4))
 
 
 ```

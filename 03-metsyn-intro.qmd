@@ -85,8 +85,8 @@ d_full |>
            analyte == "fat.rel" ~ "Relative fat mass<br>(%)", 
            analyte == "bmi" ~ "Body mass index<br>(kg m<sup>-2</sup>)",
            analyte == "HOMA2IR" ~ "Insulin resistance<br>index", 
-           analyte == "Adiponectin" ~ "Adiponectin, mg L<sup>-1</sup>", 
-           analyte == "HbA1c" ~ "Glycated hemoglobin mmol mol<sup>-1</sup>"
+           analyte == "Adiponectin" ~ "Adiponectin<br>(mg L<sup>-1</sup>)", 
+           analyte == "HbA1c" ~ "Glycated hemoglobin<br>(mmol mol<sup>-1</sup>)"
            
          ), 
          sex = if_else(sex == "f", "Female", "Male")) |> 
@@ -95,8 +95,9 @@ d_full |>
   ggplot(aes(x = value, color = time)) + 
   geom_line(stat = "density") + 
   facet_wrap(~analyte + sex,  scales = "free")  + 
+  scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
   alpha_theme(yaxis = FALSE) + 
-  theme(strip.text = element_markdown(), 
+  theme(strip.text = element_markdown(size = 6), 
         axis.title.y = element_blank(),
         axis.title.x = element_blank(),
         legend.position = "bottom") +
@@ -391,7 +392,7 @@ Variables in the observed data are correlated within time points within variable
 #| label: fig-var-cor
 #| fig-cap: "Residual variation and correlation pattern within and between variables in the observed data."
 #| eval: true
-#| fig-height: 4.5
+#| fig-height: 6
 #| fig-width: 5.9
 
 
@@ -695,7 +696,7 @@ draws.m1 <- fit.m1p$draws(format = "df")
 
 ```{r}
 #| label: fig-dropout-across
-#| fig-height: 4.7
+#| fig-height: 8.5
 #| fig-width: 5.9
 #| fig-cap: "Probability of drop-out across values of baseline co-variates per treatment group to time-point 2 (A) and 4 (B). Estimates are adjusted for sex, intervals are 95% percentile intervals."
 
@@ -754,8 +755,9 @@ a <- draws.m1 |>
              ymin = lwr, ymax = upr)) +
   geom_ribbon(alpha = 0.2) + 
   facet_wrap(~ Outcome, scales = "free_x") + 
+  scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
   alpha_theme() +
-  theme(strip.text = element_markdown(), 
+  theme(strip.text = element_markdown(size = 6), 
         legend.position = c(0.9, 0.05), 
         legend.title = element_blank()) + 
   labs(x = "", 
@@ -819,15 +821,16 @@ b <- draws.m1 |>
              ymin = lwr, ymax = upr)) +
   geom_ribbon(alpha = 0.2) + 
   facet_wrap(~ Outcome, scales = "free_x") + 
+  scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
     alpha_theme() +
-  theme(strip.text = element_markdown(), 
+  theme(strip.text = element_markdown(size = 6), 
         legend.position = "none") + 
   labs(x = "", 
        y = "Probability of drop-out", 
        title = "B")
 
 
-a | b
+a / b
 
 ```
 

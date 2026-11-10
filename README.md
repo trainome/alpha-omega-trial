@@ -1,7 +1,6 @@
 # README: Alpha Omega Trial
 
 This repository includes supplementary data and computational details related to the paper "Krill oil does not improve glucose tolerance during resistance training but slightly lowers metabolic syndrome burden in sedentary adults: a double-blind, randomized controlled trial". The supplementary material for the paper can be re-rendered by running `quarto render` from the terminal. A full render will require considerable time due to inclusion of simulations and multiple models that will refit.
-
 Contact:
 
 - Corresponding author: Stian Ellefsen (stian.ellefsen@inn.no)
